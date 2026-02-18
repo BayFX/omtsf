@@ -4,7 +4,8 @@
 **Status:** Draft
 **Date:** 2026-02-18
 **Revision:** 1
-**License:** This specification is licensed under [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/). Code artifacts in this repository are licensed under Apache 2.0.
+**License:** [MIT](../LICENSE)
+**Addresses:** R1-C1, R1-C2, R1-P0-1
 
 ---
 

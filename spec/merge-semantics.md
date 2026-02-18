@@ -4,7 +4,8 @@
 **Status:** Draft
 **Date:** 2026-02-18
 **Revision:** 1
-**License:** This specification is licensed under [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/). Code artifacts in this repository are licensed under Apache 2.0.
+**License:** [MIT](../LICENSE)
+**Addresses:** R1-C3, R1-C4, R1-C8, R1-P0-3, R1-P0-7; R2-C1 (partial, with OMTSF-SPEC-001)
 
 ---
 
@@ -110,8 +111,10 @@ The `same_as` edge type declares that two nodes in the same file are believed to
 
 The `same_as` edge type is **advisory**: merge engines MAY use it to combine nodes but are not required to. Specifically:
 
-- When `confidence` is `definite`: merge engines SHOULD treat the two nodes as merge candidates.
+- When `confidence` is `definite`: merge engines SHOULD treat the two nodes as merge candidates and include them in the union-find computation (Section 4, step 3).
 - When `confidence` is `probable` or `possible`: merge engines MAY treat the two nodes as merge candidates, depending on their confidence threshold configuration.
+
+When a merge engine honors `same_as` edges, it MUST apply transitive closure: if A `same_as` B and B `same_as` C, then A, B, and C are all merged into a single node.
 
 ### 7.3 When to Use
 
@@ -173,4 +176,4 @@ These rules require external data or cross-file context and are intended for enr
 
 1. **Edge merge strategy.** Should edge identity for cross-file merge use independent edge identifiers (requiring explicit IDs on edges), or a composite key of (resolved source, resolved target, type, properties hash)? The current spec supports both but does not mandate edge identifiers for merge.
 
-2. **`same_as` edge transitivity.** Should `same_as` edges be transitive? If node A `same_as` node B and node B `same_as` node C, does that imply A `same_as` C? This has implications for merge engines that consume intra-file equivalence declarations.
+2. ~~**`same_as` edge transitivity.**~~ **Resolved.** `same_as` edges are transitive: if node A `same_as` node B and node B `same_as` node C, then A, B, and C form an equivalence class. Merge engines that honor `same_as` edges MUST compute transitive closure over them (using the same union-find approach as cross-file merge in Section 4, step 3). This ensures that equivalence declarations compose predictably regardless of which pairs the producer explicitly linked.

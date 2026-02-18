@@ -4,7 +4,8 @@
 **Status:** Draft
 **Date:** 2026-02-18
 **Revision:** 1
-**License:** This specification is licensed under [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/). Code artifacts in this repository are licensed under Apache 2.0.
+**License:** [MIT](../LICENSE)
+**Addresses:** R1-C5, R1-C6, R1-C7, R1-P0-4, R1-P0-5, R1-P0-6; R2-C1 (partial, with OMTSF-SPEC-003)
 
 ---
 
@@ -356,7 +357,7 @@ These rules MUST pass for a file to be considered structurally valid.
 | L1-GDM-01 | Every node MUST have an `id` field containing a non-empty string unique within the file |
 | L1-GDM-02 | Every edge MUST have an `id` field containing a non-empty string unique within the file |
 | L1-GDM-03 | Every edge `source` and `target` MUST reference an existing node `id` in the same file |
-| L1-GDM-04 | Edge `type` MUST be a recognized edge type from Sections 5, 6, or 7, or an extension type using reverse-domain notation |
+| L1-GDM-04 | Edge `type` MUST be a recognized edge type from this specification (Sections 5, 6, 7), `same_as` (defined in OMTSF-SPEC-003, Section 7), or an extension type using reverse-domain notation |
 
 ### 9.2 Level 2 -- Completeness
 

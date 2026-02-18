@@ -4,8 +4,8 @@
 **Status:** Draft
 **Date:** 2026-02-18
 **Revision:** 3 (decomposed from monolithic spec)
-**License:** This specification is licensed under [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/). Code artifacts in this repository are licensed under Apache 2.0.
-**Addresses:** C1, C8, M3, M5, P0-1, P1-20
+**License:** [MIT](../LICENSE)
+**Addresses:** R1-M3, R1-M5, R1-P0-2, R1-P0-10, R1-P0-11, R1-P0-13, R1-P0-14, R1-P1-20
 
 ---
 
@@ -229,7 +229,7 @@ The identifier scheme vocabulary is a controlled registry that requires governan
 **Adding a new core scheme** requires:
 1. A written proposal submitted as a pull request to the OMTSF repository, including: scheme code, issuing authority, format specification, validation rules, coverage estimate, data availability assessment, and at least one production deployment demonstrating use.
 2. A 30-day public review period.
-3. Approval by the OMTSF Technical Steering Committee (TSC) via lazy consensus (no objection within the review period) or explicit majority vote if objections are raised.
+3. Approval by the OMTSF Technical Steering Committee (TSC) via lazy consensus (no objection within the review period) or explicit majority vote if objections are raised. See the [TSC Charter](../docs/governance/tsc-charter.md) for decision-making procedures.
 
 **Criteria for core scheme inclusion:**
 - The scheme MUST have a publicly available specification.

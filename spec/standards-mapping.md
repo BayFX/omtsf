@@ -4,8 +4,8 @@
 **Status:** Draft
 **Date:** 2026-02-18
 **Revision:** 1
-**License:** This specification is licensed under [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/). Code artifacts in this repository are licensed under Apache 2.0.
-**Addresses:** P0-11
+**License:** [MIT](../LICENSE)
+**Addresses:** R1-P2-15
 
 **This document is informative, not normative.** It documents how OMTSF relates to existing standards and regulations but does not define required behavior.
 
