@@ -37,6 +37,7 @@ An `.omts` file is a JSON document with the following top-level structure:
 | `disclosure_scope` | No | enum | Intended audience: `internal`, `partner`, or `public`. See OMTSF-SPEC-004 for enforcement rules. |
 | `previous_snapshot_ref` | No | string | SHA-256 hash (hex-encoded) or URI of the prior snapshot this file supersedes. Enables temporal audit trails. |
 | `snapshot_sequence` | No | integer | Monotonically increasing sequence number. Each successive snapshot from the same producer MUST use a higher value. Enables ordering when timestamps are insufficient. |
+| `reporting_entity` | No | string | Graph-local `id` of the `organization` node whose perspective this file represents. Anchors perspective-dependent properties such as `tier`. |
 | `nodes` | Yes | array | Array of node objects |
 | `edges` | Yes | array | Array of edge objects |
 
@@ -451,6 +452,61 @@ All nodes and edges MAY carry an optional `data_quality` object (serialized at t
 
 This metadata is informational. Validators MUST NOT reject files based on `data_quality` values. Merge engines MAY use `confidence` to weight conflict resolution.
 
+### 8.4 Labels
+
+All nodes and edges MAY carry an optional `labels` array for general-purpose classification. Each entry in the array is an object with the following fields:
+
+| Field | Required | Type | Description |
+|-------|----------|------|-------------|
+| `key` | Yes | string | Classification key. Custom keys SHOULD use reverse-domain notation (e.g., `com.example.risk-tier`). |
+| `value` | No | string | Classification value. When omitted, the label acts as a boolean flag (presence = true). |
+
+**Serialization.** On nodes, `labels` is a top-level array. On edges, `labels` is nested inside the `properties` object (following the same pattern as `data_quality` in Section 8.3).
+
+**Key naming conventions:**
+
+- Keys without a dot are reserved for future OMTSF-defined vocabularies.
+- Custom keys SHOULD use reverse-domain notation to avoid collisions (e.g., `com.acme.priority`, `org.fairtrade.certified`).
+- Keys are case-sensitive. Producers SHOULD use lowercase kebab-case.
+
+**A label without a `value`** is a boolean flag — its presence asserts the classification. A label with a `value` is a key-value classification.
+
+**Labels do NOT participate in identity predicates.** They are not considered during merge candidate detection (OMTSF-SPEC-003, Section 2). During merge, labels are combined by set union of `{key, value}` pairs (OMTSF-SPEC-003, Section 4).
+
+**Examples:**
+
+A node with labels:
+```json
+{
+  "id": "org-bolt",
+  "type": "organization",
+  "name": "Bolt Supplies Ltd",
+  "labels": [
+    { "key": "com.acme.strategic-supplier" },
+    { "key": "com.acme.risk-tier", "value": "high" },
+    { "key": "org.fairtrade.certified", "value": "2026" }
+  ]
+}
+```
+
+An edge with labels (inside `properties`):
+```json
+{
+  "id": "edge-001",
+  "type": "supplies",
+  "source": "org-bolt",
+  "target": "org-acme",
+  "properties": {
+    "valid_from": "2023-01-15",
+    "commodity": "7318.15",
+    "labels": [
+      { "key": "com.acme.critical-path" },
+      { "key": "com.acme.sourcing-category", "value": "fasteners" }
+    ]
+  }
+}
+```
+
 ---
 
 ## 9. Validation Rules
@@ -465,6 +521,7 @@ These rules MUST pass for a file to be considered structurally valid.
 | L1-GDM-02 | Every edge MUST have an `id` field containing a non-empty string unique within the file |
 | L1-GDM-03 | Every edge `source` and `target` MUST reference an existing node `id` in the same file |
 | L1-GDM-04 | Edge `type` MUST be one of the recognized edge types defined in this specification — `ownership`, `operational_control`, `legal_parentage`, `former_identity`, `beneficial_ownership` (Section 5); `supplies`, `subcontracts`, `tolls`, `distributes`, `brokers`, `operates`, `produces`, `composed_of`, `sells_to` (Section 6); `attested_by` (Section 7) — or `same_as` (defined in OMTSF-SPEC-003, Section 7), or an extension type using reverse-domain notation |
+| L1-GDM-05 | If `reporting_entity` is present in the file header, it MUST reference an existing node `id` with `type: "organization"` |
 
 ### 9.2 Level 2 -- Completeness
 
@@ -475,6 +532,7 @@ These rules SHOULD be satisfied. Violations produce warnings, not errors.
 | L2-GDM-01 | Every `facility` node SHOULD be connected to an `organization` node via an edge or the `operator` property |
 | L2-GDM-02 | `ownership` edges SHOULD have `valid_from` set |
 | L2-GDM-03 | Every `organization` and `facility` node, and every `supplies`, `subcontracts`, and `tolls` edge, SHOULD carry a `data_quality` object (Section 8.3). Provenance metadata is essential for merge conflict resolution and regulatory audit trails. |
+| L2-GDM-04 | If any `supplies` edge carries a `tier` property, the file SHOULD declare `reporting_entity` in the file header. Without a reporting entity, `tier` values are ambiguous. |
 
 ### 9.3 Structural Constraints
 
@@ -491,6 +549,7 @@ To support parser safety and prevent denial-of-service when processing untrusted
 | Identifiers per node | 50 | Practical upper bound; most entities have < 10 |
 | String field length | 10,000 UTF-8 bytes | Prevents unbounded memory allocation |
 | `file_salt` length | Exactly 64 hex characters | MUST match `^[0-9a-f]{64}$` |
+| Labels per node/edge | 100 | Prevents unbounded classification growth |
 
 These are not hard limits. Producers MAY exceed them, but consumers SHOULD reject files that exceed these limits by more than 10x when processing untrusted input.
 
@@ -531,6 +590,7 @@ A complete minimal `.omts` file demonstrating the graph data model:
   "snapshot_date": "2026-02-17",
   "file_salt": "a1b2c3d4e5f67890a1b2c3d4e5f67890a1b2c3d4e5f67890a1b2c3d4e5f67890",
   "disclosure_scope": "partner",
+  "reporting_entity": "org-acme",
   "nodes": [
     {
       "id": "org-acme",
@@ -553,6 +613,10 @@ A complete minimal `.omts` file demonstrating the graph data model:
       "identifiers": [
         { "scheme": "nat-reg", "value": "07228507", "authority": "RA000585" },
         { "scheme": "duns", "value": "234567890" }
+      ],
+      "labels": [
+        { "key": "com.acme.strategic-supplier" },
+        { "key": "com.acme.risk-tier", "value": "low" }
       ]
     },
     {
@@ -595,7 +659,11 @@ A complete minimal `.omts` file demonstrating the graph data model:
       "properties": {
         "valid_from": "2023-01-15",
         "valid_to": null,
-        "commodity": "7318.15"
+        "commodity": "7318.15",
+        "tier": 1,
+        "labels": [
+          { "key": "com.acme.critical-path" }
+        ]
       }
     },
     {

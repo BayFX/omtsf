@@ -89,6 +89,7 @@ Given files A and B:
    - For each property present in multiple source nodes:
      - If values are equal: retain the value.
      - If values differ: the merger MUST record both values with their provenance (source file, reporting entity). Conflict resolution is a tooling concern.
+   - **Labels** (OMTSF-SPEC-001, Section 8.4): compute the set union of `{key, value}` pairs from all source nodes. After merge, sort the `labels` array by `key` (lexicographic), then by `value` (lexicographic, absent values sort before present values). Labels do not produce conflicts — they are purely additive.
    - The merged node's graph-local `id` is assigned by the merger (it is an arbitrary file-local string).
 
 **Conflict record structure.** When property values differ across source nodes, the merger SHOULD record conflicts in a `_conflicts` array on the merged node (serialized at the top level for nodes, inside `properties` for edges):
@@ -147,6 +148,7 @@ After merge completes, the merged file MUST satisfy the same structural validati
 To support post-merge auditability, the merged file SHOULD include a `merge_metadata` section in the file header recording:
 
 - Source file identifiers (file hash or filename)
+- `reporting_entity` values from each source file (if present). When source files declare different reporting entities, the merged file SHOULD omit `reporting_entity` from the file header (the merged graph is no longer from a single perspective) and record the source values here instead.
 - Merge timestamp
 - Number of nodes and edges merged
 - Number of property conflicts detected
