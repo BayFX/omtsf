@@ -5,8 +5,6 @@
 **Date:** 2026-02-18
 **Revision:** 3 (decomposed from monolithic spec)
 **License:** [CC-BY-4.0](LICENSE)
-**Addresses:** R1-M3, R1-M5, R1-P0-2, R1-P0-10, R1-P0-11, R1-P0-13, R1-P0-14, R1-P1-20
-
 ---
 
 ## Related Specifications
@@ -25,10 +23,10 @@ Entity identification is the load-bearing foundation of the OMTSF architecture. 
 
 No single global business identifier exists:
 
-- **LEI** (Legal Entity Identifier) covers ~2.7 million entities, skewed toward financial institutions. Open and free to query, but costs $50--200/year per entity to obtain. Does not cover facilities or unregistered entities.
-- **DUNS** (Dun & Bradstreet) covers ~500 million entities -- the broadest coverage -- but is proprietary. Hierarchy data is a premium product. Redistribution is restricted by license.
-- **GLN** (GS1 Global Location Number) covers locations and parties within the GS1 membership base (~2 million companies). Requires GS1 membership. No comprehensive public registry.
-- **National company registry numbers** are authoritative within their jurisdiction but use incompatible formats across ~200 countries. The US has no federal registry; Germany fragments by court. A number is only meaningful paired with its jurisdiction.
+- **LEI** (Legal Entity Identifier) is open and free to query, but has limited coverage outside financial institutions and costs money to obtain. Does not cover facilities or unregistered entities.
+- **DUNS** (Dun & Bradstreet) has the broadest single-system coverage, but is proprietary. Hierarchy data is a premium product. Redistribution is restricted by license.
+- **GLN** (GS1 Global Location Number) covers locations and parties within the GS1 membership base. Requires GS1 membership. No comprehensive public registry.
+- **National company registry numbers** are authoritative within their jurisdiction but use incompatible formats. The US has no federal registry; Germany fragments by court. A number is only meaningful paired with its jurisdiction.
 - **Tax IDs** (VAT, EIN, TIN) have high coverage but are legally confidential in most jurisdictions. Using them as primary keys in exchanged files raises GDPR and privacy concerns.
 
 The consequence: any specification that mandates a single identifier scheme excludes the majority of supply chain participants. The solution is a composite identifier model that treats all schemes as peers.
@@ -65,7 +63,7 @@ Each node (defined in OMTSF-SPEC-001) carries an optional `identifiers` array. E
 | `valid_from` | No | string (ISO 8601 date) | Date this identifier became effective for this entity |
 | `valid_to` | No | string (ISO 8601 date) | Date this identifier ceased to be valid for this entity. `null` means currently valid. |
 | `sensitivity` | No | enum | One of `public`, `restricted`, `confidential`. Default: `public`. See OMTSF-SPEC-004. |
-| `verification_status` | No | enum | One of `verified`, `reported`, `inferred`, `unverified`. `verified` = confirmed against authoritative source (e.g., GLEIF API, registry lookup). `reported` = provided by the entity (e.g., supplier questionnaire). `inferred` = derived by tooling (e.g., name matching). `unverified` = no verification attempted. Default: `reported`. |
+| `verification_status` | No | enum | One of `verified`, `reported`, `inferred`, `unverified`. Default: `reported`. |
 | `verification_date` | No | string (ISO 8601 date) | Date the identifier was last verified against an authoritative source. |
 
 **Rationale for `authority` as conditional:** Some schemes are globally unambiguous (LEI is always issued by a GLEIF-accredited LOU; DUNS is always issued by D&B). Others require disambiguation: a national registry number is meaningless without its jurisdiction, a VAT number needs its country, and an internal ID needs its issuing system.
@@ -115,8 +113,7 @@ Conformant OMTSF validators MUST recognize the following schemes and enforce the
 - **Format:** 20-character alphanumeric string. Characters 1--18 are the entity-specific part (alphanumeric). Characters 19--20 are check digits (numeric).
 - **Validation:** MUST match `^[A-Z0-9]{18}[0-9]{2}$`. MUST pass MOD 97-10 check digit verification (ISO 7064).
 - **`authority` field:** Not required. The issuing LOU can be derived from the LEI itself via the GLEIF API.
-- **Coverage:** ~2.7 million entities worldwide. Strong in financial services, growing in supply chain due to regulatory mandates (EU CSDDD, MiFID II).
-- **Data availability:** 100% open. Full database downloadable from GLEIF at no cost. Includes Level 1 (entity data) and Level 2 (corporate hierarchy via accounting consolidation relationships).
+- **Data availability:** Fully open. Full database downloadable from GLEIF at no cost. Includes Level 1 (entity data) and Level 2 (corporate hierarchy).
 
 **LEI Registration Status and Lifecycle:**
 
@@ -132,36 +129,14 @@ LEIs have a registration status maintained by GLEIF. The following statuses affe
 
 The GLEIF database provides explicit successor relationships for MERGED LEIs via the `SuccessorEntity` field. Tooling that performs Level 3 enrichment SHOULD retrieve successor LEI data and generate `former_identity` edges automatically.
 
-> **Jurisdiction-specific lapse rates.** LEI lapse rates vary dramatically by jurisdiction. As of 2025, approximately 96.9% of Chinese LEIs and 71.8% of Russian LEIs carry `LAPSED` status, compared to less than 5% in most EU and US jurisdictions. This disparity reflects local regulatory incentives (or lack thereof) for LEI renewal, not entity dissolution. Implementations SHOULD NOT treat `LAPSED` status as an entity validity signal — the entity typically continues to exist and operate. The `verification_date` field on identifier records enables freshness checks: an LEI verified against the GLEIF database within the past 12 months is a stronger signal than one last verified 5 years ago. Implementations processing supply chains with significant Asian exposure SHOULD expect a high proportion of lapsed LEIs and calibrate L2-EID-05 warning thresholds accordingly.
-
 #### `duns` -- DUNS Number
 
 - **Authority:** Dun & Bradstreet
 - **Format:** 9-digit numeric string.
 - **Validation:** MUST match `^[0-9]{9}$`.
 - **`authority` field:** Not required.
-- **Coverage:** ~500 million entities worldwide. Broadest single-system coverage. Includes branches, divisions, and sole proprietorships.
 - **Data availability:** Proprietary. Free to obtain a number; expensive to query data or hierarchy. OMTSF files MAY contain DUNS numbers (they are just strings), but enrichment/validation requires D&B data access.
-- **Note:** D&B's corporate hierarchy (Family Tree) is a premium product. OMTSF represents hierarchy via edge types (OMTSF-SPEC-001, Section 5), not via the identifier scheme.
-
-**DUNS Branch/HQ Disambiguation:**
-
-D&B assigns separate DUNS numbers to different structural levels of the same legal entity. The D&B Family Tree model defines:
-
-| D&B Level | Description | OMTSF Mapping |
-|-----------|-------------|---------------|
-| **Global Ultimate** | Topmost entity in the corporate family | `organization` node. Link to subsidiaries via `legal_parentage` or `ownership` edges. |
-| **Domestic Ultimate** | Topmost entity within a single country | `organization` node. Link to Global Ultimate via `legal_parentage` edge. |
-| **Parent** | Direct legal parent of a subsidiary | `organization` node. Link via `legal_parentage` edge. |
-| **Headquarters** | Main office of a company with branches | `organization` node. The HQ DUNS is the primary identifier for the legal entity. |
-| **Branch** | A physical location or division of an entity | `facility` node. The branch DUNS identifies the location, not a separate legal entity. |
-
-**Key guidance for producers:**
-
-- A single legal entity may hold multiple DUNS numbers (HQ + branches). The HQ DUNS identifies the entity; branch DUNS numbers identify its locations.
-- When a DUNS number identifies a branch, it SHOULD be assigned to a `facility` node, not an `organization` node.
-- Merge engines SHOULD be aware that two nodes with different DUNS numbers may represent the same legal entity (one HQ, one branch). Level 3 validation MAY flag this by querying D&B's Family Tree linkage.
-- When an ERP system stores only a single DUNS number and it is unclear whether it is an HQ or branch DUNS, producers SHOULD assign it to an `organization` node and note the ambiguity.
+- **Note:** D&B assigns separate DUNS numbers to HQ and branch levels. The HQ DUNS identifies the legal entity; branch DUNS numbers identify locations and SHOULD be assigned to `facility` nodes. When it is unclear whether a DUNS is HQ or branch, producers SHOULD assign it to an `organization` node.
 
 #### `gln` -- Global Location Number
 
@@ -170,17 +145,14 @@ D&B assigns separate DUNS numbers to different structural levels of the same leg
 - **Format:** 13-digit numeric string.
 - **Validation:** MUST match `^[0-9]{13}$`. MUST pass GS1 mod-10 check digit (last digit).
 - **`authority` field:** Not required. The GS1 Company Prefix embedded in the GLN identifies the issuing MO.
-- **Coverage:** Used by 2+ million GS1 member companies. Strong in retail, FMCG, healthcare. Weaker in mining, heavy industry.
 - **Note:** GLN can identify legal entities, functional entities, or physical locations. OMTSF disambiguates via node type (`organization` vs. `facility`), not via the identifier scheme.
 
 #### `nat-reg` -- National Company Registry
 
 - **Authority:** Government company registries (e.g., UK Companies House, German Handelsregister, French RCS)
 - **Format:** Varies by jurisdiction.
-- **Validation:** `authority` field is REQUIRED and MUST contain a valid GLEIF Registration Authority (RA) code from the OMTSF-maintained RA list snapshot (see Section 5.4). `value` format validation is authority-specific and MAY be deferred to Level 2 validation.
+- **Validation:** `authority` field is REQUIRED and MUST contain a valid GLEIF Registration Authority (RA) code from the OMTSF-maintained RA list snapshot (see Section 5.3). `value` format validation is authority-specific and MAY be deferred to Level 2 validation.
 - **`authority` field:** Required. Contains the GLEIF RA code (e.g., `RA000585` for UK Companies House, `RA000548` for German Handelsregister).
-- **Coverage:** Collectively comprehensive for all formally registered entities within their jurisdictions.
-
 **Common authority codes:**
 
 | RA Code | Registry | Jurisdiction |
@@ -229,33 +201,11 @@ Conformant validators MAY recognize additional schemes. Extension scheme codes M
 | `org.refinitiv.permid` | Refinitiv PermID | Numeric identifier |
 | `org.iso.isin` | ISIN | 12-character alphanumeric, ISO 6166 |
 | `org.gs1.gtin` | Global Trade Item Number | 8, 12, 13, or 14 digits |
-| `org.sam.uei` | US Unique Entity Identifier | 12-character alphanumeric SAM.gov identifier. Assigned to 350,000+ US government contractors and grant recipients. Replaced DUNS for US federal procurement in April 2022. Value MUST match `^[A-Z0-9]{12}$`. |
+| `org.sam.uei` | US Unique Entity Identifier | 12-character alphanumeric SAM.gov identifier. Replaced DUNS for US federal procurement. Value MUST match `^[A-Z0-9]{12}$`. |
 
 Validators encountering an unrecognized scheme code MUST NOT reject the file. Unknown schemes are passed through without format validation.
 
-### 5.3 Scheme Governance Process
-
-The identifier scheme vocabulary is a controlled registry that requires governance to evolve without fragmenting the ecosystem.
-
-**Adding a new core scheme** requires:
-1. A written proposal submitted as a pull request to the OMTSF repository, including: scheme code, issuing authority, format specification, validation rules, coverage estimate, data availability assessment, and at least one production deployment demonstrating use.
-2. A 30-day public review period.
-3. Approval by the OMTSF Technical Steering Committee (TSC) via lazy consensus (no objection within the review period) or explicit majority vote if objections are raised. See the [TSC Charter](../docs/governance/tsc-charter.md) for decision-making procedures.
-
-**Criteria for core scheme inclusion:**
-- The scheme MUST have a publicly available specification.
-- The identifier values MUST NOT be encumbered by intellectual property restrictions that prevent their inclusion in OMTSF files.
-- The scheme MUST have demonstrated coverage of a meaningful population of supply chain entities (suggested threshold: 100,000+ entities or regulatory mandate).
-- The issuing authority MUST be identifiable and operational.
-
-**Promoting an extension scheme to core** follows the same process as adding a new scheme. Regulatory mandate (e.g., a regulation effectively requiring a particular identifier) is a sufficient basis for promotion.
-
-**Deprecating a core scheme** requires:
-1. A written rationale documenting why the scheme should be deprecated (e.g., issuing authority dissolved, scheme superseded).
-2. A 90-day notice period.
-3. Deprecated schemes remain recognized by validators for at least 2 major spec versions after deprecation.
-
-### 5.4 GLEIF RA List Versioning
+### 5.3 GLEIF RA List Versioning
 
 The `nat-reg` scheme depends on the GLEIF Registration Authority code list, which is maintained by GLEIF and updated periodically. To decouple OMTSF validation from GLEIF's publication timing:
 
@@ -297,7 +247,7 @@ These rules SHOULD be satisfied. Violations produce warnings, not errors.
 |------|-------------|
 | L2-EID-01 | Every `organization` node SHOULD have at least one external identifier (scheme other than `internal`) |
 | L2-EID-02 | Temporal fields (`valid_from`, `valid_to`) SHOULD be present on all identifier records |
-| L2-EID-03 | `nat-reg` authority values SHOULD be valid GLEIF RA codes per the current snapshot (Section 5.4) |
+| L2-EID-03 | `nat-reg` authority values SHOULD be valid GLEIF RA codes per the current snapshot (Section 5.3) |
 | L2-EID-04 | `vat` authority values SHOULD be valid ISO 3166-1 alpha-2 country codes |
 | L2-EID-05 | `lei` values with LAPSED, RETIRED, or MERGED status (when detectable) SHOULD produce a warning |
 | L2-EID-06 | `lei` values with ANNULLED status SHOULD produce an error |
@@ -316,20 +266,3 @@ These rules require external data sources and are intended for enrichment toolin
 | L3-EID-04 | For MERGED LEIs, a `former_identity` edge to the successor entity SHOULD be present |
 | L3-EID-05 | DUNS numbers on `organization` nodes SHOULD be HQ-level DUNS, not branch DUNS |
 
----
-
-## Appendix A: Check Digit Algorithms
-
-### A.1 LEI Check Digit (MOD 97-10, ISO 7064)
-
-1. Replace each letter with its numeric equivalent: A=10, B=11, ..., Z=35.
-2. Move the first 4 characters (2-letter prefix + 2-digit check digits) to the end.
-3. Compute the integer value modulo 97.
-4. Result MUST equal 1.
-
-### A.2 GS1 Check Digit (Mod-10)
-
-For a 13-digit GLN `d1 d2 d3 ... d13`:
-1. Multiply odd-positioned digits (d1, d3, d5, ..., d11) by 1 and even-positioned digits (d2, d4, d6, ..., d12) by 3.
-2. Sum all products.
-3. `d13` = (10 - (sum mod 10)) mod 10.

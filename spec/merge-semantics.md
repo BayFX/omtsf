@@ -5,8 +5,6 @@
 **Date:** 2026-02-18
 **Revision:** 1
 **License:** [CC-BY-4.0](LICENSE)
-**Addresses:** R1-C3, R1-C4, R1-C8, R1-P0-3, R1-P0-7; R2-C1 (partial, with OMTSF-SPEC-001)
-
 ---
 
 ## Related Specifications
@@ -115,21 +113,7 @@ Conflict records are informational. Validators MUST NOT reject files containing 
 
 Transitive closure (step 3) can amplify false-positive matches: a single erroneous identifier match cascades through the entire connected component. To mitigate this risk:
 
-**Advisory maximum merge-group size.** When transitive closure produces a merge group exceeding **50 nodes**, implementations SHOULD emit a warning identifying the group and its bridging identifiers. Groups of this size are rare in practice and typically indicate either a data quality issue (incorrect identifier on one node) or a genuinely large corporate family. Implementations MAY split oversized groups for human review before committing the merge.
-
-**Merge-confidence scoring.** Implementations SHOULD compute a confidence score for each merge-candidate pair based on the strength of the matching evidence:
-
-| Evidence | Confidence Level | Rationale |
-|----------|-----------------|-----------|
-| LEI match | High | LEIs are globally unique, checksum-verified, and rarely reassigned. |
-| `nat-reg` match (same RA code) | High | National registry numbers are authoritative within their jurisdiction. |
-| GLN match | Medium | GLN can identify legal entities or locations; disambiguated by node type. |
-| DUNS match (single match) | Medium | DUNS covers branches and HQs separately; verify against Family Tree if available. |
-| `same_as` with `confidence: "definite"` | Medium | Explicitly declared but not externally verified. |
-| `same_as` with `confidence: "probable"` | Low | Requires additional evidence for high-confidence merge. |
-| Name-only `same_as` | Low | High false-positive rate without identifier corroboration. |
-
-When a merge group is formed entirely through low-confidence links, implementations SHOULD flag the group for human review rather than performing automatic merge. When a merge group contains both high-confidence and low-confidence links, implementations SHOULD include the high-confidence nodes and flag the low-confidence links separately.
+When transitive closure produces a merge group exceeding **50 nodes**, implementations SHOULD emit a warning identifying the group and its bridging identifiers.
 
 5. **Rewrite** all edge source/target references to use the merged node IDs.
 6. **Identify** merge candidate edge pairs using the edge identity predicate (Section 3).
@@ -147,8 +131,6 @@ For the decentralized merge model to work -- where different parties independent
 **Associativity:** `merge(merge(A, B), C) = merge(A, merge(B, C))`. Three-file merge MUST produce the same result regardless of grouping. This is satisfied by the transitive closure computation in step 3: the final merge graph is determined by the full set of identifier overlap relationships, not by the order in which they are discovered.
 
 **Idempotency:** `merge(A, A) = A`. Merging a file with itself MUST produce an equivalent graph (same nodes, edges, identifiers, and properties; graph-local IDs may differ).
-
-**Implementation note:** The transitive closure requirement means merge implementations SHOULD use a union-find (disjoint set) data structure for efficient merge candidate grouping. This operates in O(n * α(n)) time, where α is the inverse Ackermann function (effectively constant).
 
 ### 5.1 Post-Merge Validation
 
@@ -169,18 +151,6 @@ To support post-merge auditability, the merged file SHOULD include a `merge_meta
 - Number of nodes and edges merged
 - Number of property conflicts detected
 
-### 6.1 Authenticated Provenance
-
-To prevent data poisoning and enable tamper-evident audit trails, `merge_metadata` MAY include the following authentication fields:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `source_file_hashes` | array of strings | SHA-256 hashes (hex-encoded) of each source file that contributed to this merge. Enables verification that the merge input has not been altered. |
-| `contributor_id` | string | Identifier of the entity or system that performed the merge (e.g., an LEI, domain name, or system identifier). |
-| `signature` | string | Optional. Detached signature (base64-encoded) over the `merge_metadata` object (serialized in canonical JSON form per RFC 8785, excluding the `signature` field itself). Supported algorithms: Ed25519, ECDSA-P256. |
-
-When `source_file_hashes` is present, consumers MAY verify that they possess copies of the original source files by comparing hashes. This enables end-to-end auditability: from source ERP exports through merge to the final consolidated graph.
-
 ---
 
 ## 7. `same_as` Edge Type
@@ -200,7 +170,7 @@ The `same_as` edge type declares that two nodes in the same file are believed to
 
 The `same_as` edge type is **advisory**: merge engines MAY use it to combine nodes but are not required to. Specifically:
 
-- When `confidence` is `definite`: merge engines SHOULD treat the two nodes as merge candidates and include them in the union-find computation (Section 4, step 3).
+- When `confidence` is `definite`: merge engines SHOULD treat the two nodes as merge candidates and include them in the transitive closure computation (Section 4, step 3).
 - When `confidence` is `probable` or `possible`: merge engines MAY treat the two nodes as merge candidates, depending on their confidence threshold configuration.
 
 When a merge engine honors `same_as` edges, it MUST apply transitive closure: if A `same_as` B and B `same_as` C, then A, B, and C are all merged into a single node.
@@ -226,7 +196,7 @@ Producers SHOULD use `same_as` when deduplication is not feasible during export 
 
 ## 8. Intra-File Deduplication
 
-ERP systems frequently contain duplicate records for the same real-world entity. In a typical SAP S/4HANA system with 20,000+ vendors, 5--15% are duplicates (same legal entity, different `LIFNR`). Producers MUST address this to avoid polluting the graph with duplicate nodes.
+ERP systems frequently contain duplicate records for the same real-world entity. Producers MUST address this to avoid polluting the graph with duplicate nodes.
 
 **Recommended approach:**
 
@@ -275,10 +245,3 @@ These rules require external data or cross-file context and are intended for enr
 | L3-MRG-01 | The sum of inbound `ownership` `percentage` values to any single node (for overlapping validity periods) SHOULD NOT exceed 100 |
 | L3-MRG-02 | `legal_parentage` edges SHOULD form a forest (no cycles in the parentage subgraph) |
 
----
-
-## 11. Open Questions
-
-1. ~~**Edge merge strategy.**~~ **Resolved.** Edge merge uses a two-tier strategy: (a) if edges carry explicit external identifiers, those are compared first (same as node merge); (b) if no external identifiers are present, a composite key of (resolved source, resolved target, type, merge-identity properties per Section 3.1) is used. This is specified normatively in Sections 3 and 3.1.
-
-2. ~~**`same_as` edge transitivity.**~~ **Resolved.** `same_as` edges are transitive: if node A `same_as` node B and node B `same_as` node C, then A, B, and C form an equivalence class. Merge engines that honor `same_as` edges MUST compute transitive closure over them (using the same union-find approach as cross-file merge in Section 4, step 3). This ensures that equivalence declarations compose predictably regardless of which pairs the producer explicitly linked.

@@ -5,8 +5,6 @@
 **Date:** 2026-02-18
 **Revision:** 1
 **License:** [CC-BY-4.0](LICENSE)
-**Addresses:** R1-C1, R1-C2, R1-P0-1
-
 ---
 
 ## Related Specifications
@@ -166,12 +164,7 @@ No public identifiers exist. The boundary reference `value` MUST be a hex-encode
 
 This design prevents enumeration attacks: an adversary cannot hash known LEIs to discover whether a specific entity appears in the redacted graph, because the salt is file-specific.
 
-**Boundary reference stability.** Fresh salt per file means the same entity's boundary reference hash changes with every export. This is by design: it prevents cross-file correlation of redacted entities, which would undermine the privacy model. Consequences:
-
-- A consumer cannot determine whether a boundary reference in file v2 represents the same entity as a boundary reference in file v1 (unless the entity has public identifiers and appears un-redacted in at least one file).
-- Once a boundary reference hash has been computed and shared, the sensitivity classification of the identifiers used in the hash computation SHOULD NOT change for the lifetime of that file. If sensitivity reclassification is necessary (e.g., a `nat-reg` identifier reclassified from `public` to `restricted`), the file SHOULD be re-exported with a fresh salt. The old boundary references become un-correlatable by design.
-
-This is an explicit tradeoff: privacy over temporal tracking of redacted entities.
+**Boundary reference stability.** Fresh salt per file means the same entity's boundary reference hash changes with every export, preventing cross-file correlation of redacted entities. If sensitivity reclassification is necessary, the file SHOULD be re-exported with a fresh salt. This is an explicit tradeoff: privacy over temporal tracking of redacted entities.
 
 ---
 
@@ -186,52 +179,9 @@ This is an explicit tradeoff: privacy over temporal tracking of redacted entitie
 
 ---
 
-## 6. File Integrity (Optional)
+## 6. Validation Rules
 
-To support tamper detection for files exchanged across trust boundaries, producers MAY include a `file_integrity` object in the file header:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `content_hash` | string | Hex-encoded SHA-256 hash of the canonical file content (see below) |
-| `algorithm` | string | Hash algorithm used. MUST be `sha-256`. Reserved for future algorithm agility. |
-| `signature` | string | Optional. Detached digital signature over the `content_hash` value, base64-encoded. Supported algorithms: Ed25519, ECDSA-P256. |
-| `signer` | string | Optional. Identifier of the signing entity (e.g., LEI or domain name). Required when `signature` is present. |
-
-**Content hash computation:**
-
-1. Serialize the file without the `file_integrity` field (or with `file_integrity` set to `null`).
-2. Before computing the hash, the file content MUST be serialized in **canonical JSON form per RFC 8785** (JSON Canonicalization Scheme). RFC 8785 defines deterministic rules for key ordering (lexicographic by Unicode code point), numeric formatting (no trailing zeros, no positive sign, exponential notation for large/small values), string escaping, and whitespace (none). This ensures that two semantically identical files produce the same hash regardless of the JSON serializer used.
-3. Compute SHA-256 over the resulting canonical UTF-8 bytes.
-
-> **Rationale for RFC 8785.** JSON serialization is not deterministic: key ordering, whitespace, numeric formatting (e.g., `1.0` vs `1`), and Unicode escaping all vary across implementations. Without canonical serialization, two semantically identical files will produce different content hashes, making the `file_integrity` mechanism non-portable across implementations. RFC 8785 is the IETF-standardized solution to this problem and is supported by libraries in all major languages (e.g., `json-canonicalize` in Rust, `canonicaljson` in Python, `canonicalize` in JavaScript).
-
-**Validation:**
-- When `file_integrity` is present and `content_hash` is non-null, validators MUST verify that the hash matches the file content (excluding the `file_integrity` field). Hash mismatch is an L1 validation failure.
-- Signature verification is OPTIONAL at L1 and depends on the consumer having the signer's public key. Signature validation is a tooling concern.
-
-**Note:** A companion `.omts.sha256` file MAY also be used for integrity verification without modifying the file format. The companion file contains the hex-encoded SHA-256 hash of the complete `.omts` file.
-
----
-
-## 7. Transport Security Guidance
-
-This section is informative.
-
-`.omts` files define data-at-rest sensitivity via `disclosure_scope` and identifier `sensitivity` fields. However, the format does not govern data-in-transit protection. Producers and consumers SHOULD apply the following minimum transport security measures:
-
-| Disclosure Scope | Recommended Transport |
-|-----------------|----------------------|
-| `internal` | Organization-internal channels only. SHOULD NOT be transmitted over public networks. If network transfer is required, use TLS 1.3 or encrypted file transfer (GPG, age). |
-| `partner` | TLS 1.3 for API/network transfer. GPG or age encryption for email or file-share. |
-| `public` | No transport restrictions required. TLS 1.3 recommended as general best practice. |
-
-Files with `disclosure_scope: "internal"` SHOULD NOT be transmitted via unencrypted email or stored on publicly accessible file shares.
-
----
-
-## 8. Validation Rules
-
-### 8.1 Level 1 -- Structural Integrity
+### 6.1 Level 1 -- Structural Integrity
 
 These rules MUST pass for a file to be considered structurally valid.
 
@@ -239,4 +189,3 @@ These rules MUST pass for a file to be considered structurally valid.
 |------|-------------|
 | L1-SDI-01 | `boundary_ref` nodes MUST have exactly one identifier with `scheme: "opaque"` |
 | L1-SDI-02 | If `disclosure_scope` is declared, sensitivity constraints (Section 3) MUST be satisfied |
-| L1-SDI-03 | If `file_integrity.content_hash` is present, the hash MUST match the SHA-256 of the file content (excluding the `file_integrity` field) |

@@ -6,8 +6,6 @@
 **Revision:** 1
 **License:** [CC-BY-4.0](LICENSE)
 
-**Addresses:** R1-C9, R1-C15, R1-P0-8, R1-P0-9
-
 **This document is informative, not normative.** It provides reference mappings for ERP systems but does not define required behavior.
 
 ---
@@ -24,7 +22,7 @@
 
 ## 1. Overview
 
-This guide provides reference mappings for how entity identifiers and relationships in common ERP systems correspond to OMTSF node types, identifier records, and edge types. These mappings are informative and intended to assist producers building OMTSF export tooling.
+This guide provides reference mappings for how entity identifiers and relationships in common ERP systems correspond to OMTSF node types, identifier records, and edge types. These mappings are informative and intended to assist producers building OMTSF export tooling. Field names and API endpoints are approximate and should be verified against actual system documentation for the version in use.
 
 ### 1.1 Authority Naming Convention
 
@@ -109,10 +107,6 @@ SAP's `STCD1` and `STCD2` fields in `LFA1` store different types of tax identifi
 | US | EIN (Employer ID Number) | SSN (Social Security Number) | — | — | `STCD1` → `nat-reg`; `STCD2` → `confidential`, do not export |
 | BR | CNPJ (company) or CPF (person) | Inscrição Estadual | — | — | `STCD1` → `nat-reg`; `STCD2` → `internal` |
 | GB | Company Registration Number | VAT Number | — | — | `STCD1` → `nat-reg`; `STCD2` → `vat` |
-| IN | PAN (Permanent Account Number) | GSTIN (GST Identification Number) | TAN (Tax Deduction Account Number) | — | `STCD1` → `nat-reg` (`authority: "RA000553"`); `STCD2` → `vat` (`authority: "IN"`); `STCD3` → `internal` |
-| CN | USCC (Unified Social Credit Code, 18-char) | — | — | — | `STCD1` → `nat-reg` (`authority: "RA000549"`). USCC combines former tax, org-code, and business-license numbers. |
-| MX | RFC (Registro Federal de Contribuyentes) | CURP (person) | — | — | `STCD1` → `vat` (`authority: "MX"`); `STCD2` → `confidential` (personal ID), do not export |
-| IT | Codice Fiscale | Partita IVA (P.IVA) | — | — | `STCD1` → `nat-reg` (for companies) or `confidential` (for individuals); `STCD2` → `vat` (`authority: "IT"`) |
 
 **Guidance:** Do not blindly map `STCD1`/`STCD2` to `vat`. Inspect the `LAND1` (country key) field and apply country-specific logic. When in doubt, map to `internal` with a descriptive authority (e.g., `sap-stcd1-{country}`).
 
@@ -225,28 +219,7 @@ Files typically begin with minimal identifiers (internal ERP codes only) and are
 
 **Important:** Enrichment MUST NOT remove or modify existing identifiers. It is an additive process. The original `internal` identifiers are preserved for reconciliation with the source system.
 
-### 5.3 Enrichment Cost Framework
-
-The following table provides a cost-ordered enrichment path to guide organizations in allocating identifier enrichment budgets. Start with free sources and escalate as merge requirements demand.
-
-| Cost Tier | Source | Identifier Scheme | Coverage | Cost Model |
-|-----------|--------|------------------|----------|------------|
-| **Free** | GLEIF API (`api.gleif.org`) | `lei` | ~2.7M entities | No cost. Full Level 1 and Level 2 data. Bulk download available. |
-| **Free** | OpenCorporates API | `nat-reg` (via `org.opencorporates`) | ~200M entities across 140+ jurisdictions | Free tier: 500 requests/month. Bulk data licensing available. |
-| **Free** | National registries (direct) | `nat-reg` | Varies by jurisdiction | Many EU registries offer free web lookup (UK Companies House, French SIREN, German Handelsregister). |
-| **Low** | National registry bulk downloads | `nat-reg` | Full jurisdiction coverage | Some registries offer bulk data for nominal fees (UK Companies House: free; Netherlands KvK: ~€200/year). |
-| **Low** | LEI registration (new entity) | `lei` | Per-entity | $50--200/entity/year depending on LOU. Volume discounts available. |
-| **Medium** | D&B Direct+ API (entity lookup) | `duns` | ~500M entities | Per-query pricing. Typical: $0.50--2.00/entity. Annual subscriptions reduce per-query cost. |
-| **High** | D&B Family Tree (hierarchy data) | `duns` (with corporate hierarchy) | ~500M entities | Annual license: $50K--250K/year depending on geographic scope and query volume. |
-
-**Recommended enrichment sequence:**
-1. Query GLEIF API for LEI matches (free, high-confidence).
-2. Query OpenCorporates for national registry cross-references (free tier).
-3. Use DUNS numbers already present in ERP data (no additional cost).
-4. Register LEIs for critical suppliers that lack one ($50--200/entity).
-5. License D&B hierarchy data only if corporate structure mapping is a regulatory requirement.
-
-### 5.4 Validation Level Alignment
+### 5.3 Validation Level Alignment
 
 - A file with only `internal` identifiers is valid at Level 1 (structural integrity).
 - A file where most `organization` nodes have at least one external identifier satisfies Level 2 (completeness).
