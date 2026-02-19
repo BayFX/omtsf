@@ -9,6 +9,7 @@
 /// [`build_registry`], and the top-level [`validate`] dispatch function
 /// described in Sections 3.1 and 3.2.
 pub mod rules_l1_gdm;
+pub mod rules_l1_sdi;
 
 use std::fmt;
 
@@ -617,13 +618,14 @@ impl Default for ValidationConfig {
 /// whose level is enabled in `config`.  Rules are compiled into `omtsf-core`;
 /// this is not a plugin system.
 ///
-/// L1-GDM and L1-EID rules are gated by [`ValidationConfig::run_l1`].
+/// L1-GDM, L1-EID, and L1-SDI rules are gated by [`ValidationConfig::run_l1`].
 pub fn build_registry(config: &ValidationConfig) -> Vec<Box<dyn ValidationRule>> {
     use crate::rules_l1_eid::{
         L1Eid01, L1Eid02, L1Eid03, L1Eid04, L1Eid05, L1Eid06, L1Eid07, L1Eid08, L1Eid09, L1Eid10,
         L1Eid11,
     };
     use rules_l1_gdm::{GdmRule01, GdmRule02, GdmRule03, GdmRule04, GdmRule05, GdmRule06};
+    use rules_l1_sdi::{L1Sdi01, L1Sdi02};
 
     let mut registry: Vec<Box<dyn ValidationRule>> = Vec::new();
 
@@ -645,6 +647,8 @@ pub fn build_registry(config: &ValidationConfig) -> Vec<Box<dyn ValidationRule>>
         registry.push(Box::new(L1Eid09));
         registry.push(Box::new(L1Eid10));
         registry.push(Box::new(L1Eid11));
+        registry.push(Box::new(L1Sdi01));
+        registry.push(Box::new(L1Sdi02));
     }
 
     registry
@@ -1099,13 +1103,15 @@ mod tests {
         let registry = build_registry(&cfg);
         assert!(
             !registry.is_empty(),
-            "default config must include L1-GDM and L1-EID rules"
+            "default config must include L1-GDM, L1-EID, and L1-SDI rules"
         );
         let ids: Vec<_> = registry.iter().map(|r| r.id()).collect();
         assert!(ids.contains(&RuleId::L1Gdm01));
         assert!(ids.contains(&RuleId::L1Gdm06));
         assert!(ids.contains(&RuleId::L1Eid01));
         assert!(ids.contains(&RuleId::L1Eid11));
+        assert!(ids.contains(&RuleId::L1Sdi01));
+        assert!(ids.contains(&RuleId::L1Sdi02));
     }
 
     #[test]
@@ -1120,7 +1126,7 @@ mod tests {
     }
 
     #[test]
-    fn build_registry_l1_only_has_seventeen_rules() {
+    fn build_registry_l1_only_has_nineteen_rules() {
         let cfg = ValidationConfig {
             run_l1: true,
             run_l2: false,
@@ -1129,8 +1135,8 @@ mod tests {
         let registry = build_registry(&cfg);
         assert_eq!(
             registry.len(),
-            17,
-            "6 L1-GDM + 11 L1-EID rules in the registry"
+            19,
+            "6 L1-GDM + 11 L1-EID + 2 L1-SDI rules in the registry"
         );
     }
 
