@@ -28,7 +28,8 @@ pub use enums::{
 pub use file::OmtsFile;
 pub use graph::{
     DEFAULT_MAX_DEPTH, Direction, EdgeWeight, GraphBuildError, NodeWeight, OmtsGraph, QueryError,
-    all_paths, build_graph, ego_graph, induced_subgraph, reachable_from, shortest_path,
+    all_paths, build_graph, detect_cycles, ego_graph, induced_subgraph, reachable_from,
+    shortest_path,
 };
 pub use identity::{
     EdgeCompositeKey, build_edge_candidate_index, edge_composite_key,

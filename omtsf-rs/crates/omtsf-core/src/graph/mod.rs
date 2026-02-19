@@ -1,9 +1,10 @@
 /// Graph construction from an [`OmtsFile`] using `petgraph`, plus query algorithms.
 ///
-/// This module implements Sections 2–5 of the graph-engine technical specification:
+<<<<<<< HEAD
+/// This module implements Sections 2–6 of the graph-engine technical specification:
 /// wrapping a `StableDiGraph` with typed node and edge weights, building from
-/// an in-memory [`OmtsFile`], exposing traversal and query algorithms, and
-/// extracting induced subgraphs and ego-graphs.
+/// an in-memory [`OmtsFile`], exposing traversal, query, subgraph extraction,
+/// and cycle-detection algorithms.
 ///
 /// # Two-Pass Construction
 ///
@@ -21,9 +22,16 @@
 /// # Subgraph Extraction
 ///
 /// See the [`extraction`] submodule for [`induced_subgraph`] and [`ego_graph`].
+///
+/// # Cycle Detection
+///
+/// See the [`cycles`] submodule for Kahn's algorithm cycle detection, used by
+/// the validation engine to enforce L3-MRG-02 (legal parentage must be a forest).
+pub mod cycles;
 pub mod extraction;
 pub mod queries;
 
+pub use cycles::detect_cycles;
 pub use extraction::{ego_graph, induced_subgraph};
 pub use queries::{
     DEFAULT_MAX_DEPTH, Direction, QueryError, all_paths, reachable_from, shortest_path,
