@@ -3,6 +3,7 @@
 pub mod enums;
 pub mod newtypes;
 pub mod serde_helpers;
+pub mod structures;
 pub mod types;
 pub mod validation;
 
@@ -13,6 +14,7 @@ pub use enums::{
     VerificationStatus,
 };
 pub use newtypes::{CalendarDate, CountryCode, EdgeId, FileSalt, NewtypeError, NodeId, SemVer};
+pub use structures::{Edge, EdgeProperties, Node};
 pub use types::{DataQuality, Geo, GeoParseError, Identifier, Label, parse_geo};
 pub use validation::{
     Diagnostic, Location, ParseError, RuleId, Severity, ValidateOutput, ValidationResult,
