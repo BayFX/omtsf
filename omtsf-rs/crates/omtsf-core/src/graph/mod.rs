@@ -1,6 +1,5 @@
 /// Graph construction from an [`OmtsFile`] using `petgraph`, plus query algorithms.
 ///
-<<<<<<< HEAD
 /// This module implements Sections 2–6 of the graph-engine technical specification:
 /// wrapping a `StableDiGraph` with typed node and edge weights, building from
 /// an in-memory [`OmtsFile`], exposing traversal, query, subgraph extraction,
