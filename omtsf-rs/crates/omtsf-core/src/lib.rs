@@ -1,5 +1,6 @@
 #![deny(clippy::print_stdout, clippy::print_stderr)]
 
+pub mod boundary_hash;
 pub mod canonical;
 pub mod check_digits;
 pub mod enums;
@@ -16,6 +17,7 @@ pub mod types;
 pub mod union_find;
 pub mod validation;
 
+pub use boundary_hash::{BoundaryHashError, boundary_ref_value, decode_salt};
 pub use canonical::{CanonicalId, build_identifier_index};
 pub use enums::{
     AttestationOutcome, AttestationStatus, AttestationType, Confidence, ConsolidationBasis,
