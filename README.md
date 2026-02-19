@@ -18,7 +18,7 @@ spec/                 Normative and informative specifications
 schema/               JSON Schema for .omts files
 tests/fixtures/       Validation test fixtures
 usecases/             Example use case descriptions
-cli-rs/               Rust CLI for validation, merge, and redaction
+omtsf-rs/             Rust CLI for validation, merge, and redaction
 docs/                 Vision, governance, reviews, roadmap
 ```
 

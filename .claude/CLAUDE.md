@@ -9,6 +9,9 @@
   - `selective-disclosure.md` (SPEC-004)
   - `erp-integration.md` (SPEC-005, informative)
   - `standards-mapping.md` (SPEC-006, informative)
+- `/omtsf-rs/` — Rust reference implementation (CLI + library)
+  - `docs/` — Technical specification for the implementation
+  - `README.md` — Command overview and build instructions
 - `/docs/` — Reviews, vision, and auxiliary project documentation
   - `vision.md`
   - `reviews/` — Expert panel reviews
