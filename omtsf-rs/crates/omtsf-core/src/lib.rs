@@ -22,7 +22,10 @@ pub use enums::{
     VerificationStatus,
 };
 pub use file::OmtsFile;
-pub use graph::{EdgeWeight, GraphBuildError, NodeWeight, OmtsGraph, build_graph};
+pub use graph::{
+    DEFAULT_MAX_DEPTH, Direction, EdgeWeight, GraphBuildError, NodeWeight, OmtsGraph, QueryError,
+    all_paths, build_graph, reachable_from, shortest_path,
+};
 pub use identity::{identifiers_match, is_lei_annulled, temporal_compatible};
 pub use newtypes::{CalendarDate, CountryCode, EdgeId, FileSalt, NewtypeError, NodeId, SemVer};
 pub use structures::{Edge, EdgeProperties, Node};

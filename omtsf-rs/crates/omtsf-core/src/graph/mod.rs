@@ -1,8 +1,8 @@
-/// Graph construction from an [`OmtsFile`] using `petgraph`.
+/// Graph construction from an [`OmtsFile`] using `petgraph`, plus query algorithms.
 ///
-/// This module implements Section 2 of the graph-engine technical specification:
+/// This module implements Sections 2–4 of the graph-engine technical specification:
 /// wrapping a `StableDiGraph` with typed node and edge weights, building from
-/// an in-memory [`OmtsFile`], and exposing accessors for traversal algorithms.
+/// an in-memory [`OmtsFile`], and exposing traversal and query algorithms.
 ///
 /// # Two-Pass Construction
 ///
@@ -11,6 +11,17 @@
 ///    the `local_id → NodeIndex` mapping. Fails on duplicate IDs.
 /// 2. **Edge pass** — resolves `source`/`target` IDs and inserts edges.
 ///    Fails if either endpoint is not present in the node map.
+///
+/// # Query Algorithms
+///
+/// See the [`queries`] submodule for reachability, shortest-path, and
+/// all-paths enumeration.
+pub mod queries;
+
+pub use queries::{
+    DEFAULT_MAX_DEPTH, Direction, QueryError, all_paths, reachable_from, shortest_path,
+};
+
 use std::collections::HashMap;
 
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableDiGraph};
