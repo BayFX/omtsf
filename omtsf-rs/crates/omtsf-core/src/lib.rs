@@ -2,6 +2,8 @@
 
 pub mod enums;
 pub mod newtypes;
+pub mod serde_helpers;
+pub mod types;
 
 pub use enums::{
     AttestationOutcome, AttestationStatus, AttestationType, Confidence, ConsolidationBasis,
@@ -10,6 +12,7 @@ pub use enums::{
     VerificationStatus,
 };
 pub use newtypes::{CalendarDate, CountryCode, EdgeId, FileSalt, NewtypeError, NodeId, SemVer};
+pub use types::{DataQuality, Geo, GeoParseError, Identifier, Label, parse_geo};
 
 /// Returns the current version of the omtsf-core library.
 pub fn version() -> &'static str {
