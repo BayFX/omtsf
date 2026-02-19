@@ -1,3 +1,7 @@
+pub mod error;
+pub mod format;
+pub mod io;
+
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -262,6 +266,12 @@ pub struct Cli {
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 fn main() {
+    // On Unix, reset SIGPIPE to its default disposition so that writing to a
+    // closed pipe (e.g. `omtsf validate file.omts | head`) silently exits 0
+    // rather than crashing with a Broken Pipe error message.
+    #[cfg(unix)]
+    install_sigpipe_default();
+
     let cli = Cli::parse();
 
     match cli.command {
@@ -277,6 +287,40 @@ fn main() {
         | Command::Init { .. } => {
             eprintln!("not yet implemented");
             std::process::exit(2);
+        }
+    }
+}
+
+// ── SIGPIPE handler ───────────────────────────────────────────────────────────
+
+/// Resets `SIGPIPE` to its default disposition (`SIG_DFL`).
+///
+/// Rust's runtime ignores `SIGPIPE` by default, which causes programs that
+/// write to a closed pipe (e.g. `omtsf validate file.omts | head`) to receive
+/// an `Err(BrokenPipe)` from a write call rather than being terminated silently.
+/// By restoring the default disposition, the kernel will terminate the process
+/// with exit code 0 (consistent with standard Unix behavior) when a write to a
+/// closed pipe occurs.
+///
+/// This function uses `libc::signal` which requires the `libc` crate. It is
+/// only compiled on Unix targets via `#[cfg(unix)]` at the call site.
+#[cfg(unix)]
+fn install_sigpipe_default() {
+    // SAFETY: signal() is safe to call during single-threaded program
+    // initialization before any other threads are spawned. SIG_DFL is a valid
+    // handler for SIGPIPE. The return value (previous handler) is discarded.
+    //
+    // The workspace denies `unsafe_code` globally, but this is the minimal
+    // unavoidable use of libc required for SIGPIPE handling on Unix. There is
+    // no safe Rust equivalent in the standard library.
+    //
+    // We use an inline allow rather than a workspace-level exception so the
+    // scope of the unsafe block is as narrow as possible.
+    #[allow(unsafe_code)]
+    {
+        // SAFETY: See above.
+        unsafe {
+            libc::signal(libc::SIGPIPE, libc::SIG_DFL);
         }
     }
 }
