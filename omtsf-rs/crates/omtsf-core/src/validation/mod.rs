@@ -10,6 +10,7 @@
 /// described in Sections 3.1 and 3.2.
 pub mod rules_l1_gdm;
 pub mod rules_l1_sdi;
+pub mod rules_l2;
 
 use std::fmt;
 
@@ -626,6 +627,7 @@ pub fn build_registry(config: &ValidationConfig) -> Vec<Box<dyn ValidationRule>>
     };
     use rules_l1_gdm::{GdmRule01, GdmRule02, GdmRule03, GdmRule04, GdmRule05, GdmRule06};
     use rules_l1_sdi::{L1Sdi01, L1Sdi02};
+    use rules_l2::{L2Eid01, L2Eid04, L2Gdm01, L2Gdm02, L2Gdm03, L2Gdm04};
 
     let mut registry: Vec<Box<dyn ValidationRule>> = Vec::new();
 
@@ -649,6 +651,15 @@ pub fn build_registry(config: &ValidationConfig) -> Vec<Box<dyn ValidationRule>>
         registry.push(Box::new(L1Eid11));
         registry.push(Box::new(L1Sdi01));
         registry.push(Box::new(L1Sdi02));
+    }
+
+    if config.run_l2 {
+        registry.push(Box::new(L2Gdm01));
+        registry.push(Box::new(L2Gdm02));
+        registry.push(Box::new(L2Gdm03));
+        registry.push(Box::new(L2Gdm04));
+        registry.push(Box::new(L2Eid01));
+        registry.push(Box::new(L2Eid04));
     }
 
     registry
@@ -1137,6 +1148,56 @@ mod tests {
             registry.len(),
             19,
             "6 L1-GDM + 11 L1-EID + 2 L1-SDI rules in the registry"
+        );
+    }
+
+    #[test]
+    fn build_registry_default_config_includes_l2_rules() {
+        let cfg = ValidationConfig::default();
+        let registry = build_registry(&cfg);
+        let ids: Vec<_> = registry.iter().map(|r| r.id()).collect();
+        assert!(
+            ids.contains(&RuleId::L2Gdm01),
+            "L2-GDM-01 must be in registry"
+        );
+        assert!(
+            ids.contains(&RuleId::L2Gdm02),
+            "L2-GDM-02 must be in registry"
+        );
+        assert!(
+            ids.contains(&RuleId::L2Gdm03),
+            "L2-GDM-03 must be in registry"
+        );
+        assert!(
+            ids.contains(&RuleId::L2Gdm04),
+            "L2-GDM-04 must be in registry"
+        );
+        assert!(
+            ids.contains(&RuleId::L2Eid01),
+            "L2-EID-01 must be in registry"
+        );
+        assert!(
+            ids.contains(&RuleId::L2Eid04),
+            "L2-EID-04 must be in registry"
+        );
+    }
+
+    #[test]
+    fn build_registry_l2_only_has_six_rules() {
+        let cfg = ValidationConfig {
+            run_l1: false,
+            run_l2: true,
+            run_l3: false,
+        };
+        let registry = build_registry(&cfg);
+        assert_eq!(
+            registry.len(),
+            6,
+            "L2-GDM-01..04 + L2-EID-01, L2-EID-04 = 6 L2 rules"
+        );
+        assert!(
+            registry.iter().all(|r| r.level() == Level::L2),
+            "all rules in L2-only registry must be L2 level"
         );
     }
 
