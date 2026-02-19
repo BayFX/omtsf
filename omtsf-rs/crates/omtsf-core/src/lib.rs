@@ -1,5 +1,6 @@
 #![deny(clippy::print_stdout, clippy::print_stderr)]
 
+pub mod canonical;
 pub mod enums;
 pub mod file;
 pub mod newtypes;
@@ -8,6 +9,7 @@ pub mod structures;
 pub mod types;
 pub mod validation;
 
+pub use canonical::{CanonicalId, build_identifier_index};
 pub use enums::{
     AttestationOutcome, AttestationStatus, AttestationType, Confidence, ConsolidationBasis,
     ControlType, DisclosureScope, EdgeType, EdgeTypeTag, EmissionFactorSource, EventType, NodeType,
