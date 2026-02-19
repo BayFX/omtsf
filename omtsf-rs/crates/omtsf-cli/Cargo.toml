@@ -1,0 +1,17 @@
+[package]
+name = "omtsf-cli"
+version = "0.1.0"
+edition = "2024"
+description = "CLI for the Open Multi-Tier Supply-Chain Framework"
+license = "Apache-2.0"
+
+[[bin]]
+name = "omtsf"
+path = "src/main.rs"
+
+[dependencies]
+omtsf-core = { path = "../omtsf-core" }
+clap = { version = "4", features = ["derive"] }
+
+[lints]
+workspace = true

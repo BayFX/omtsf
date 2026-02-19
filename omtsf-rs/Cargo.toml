@@ -1,0 +1,27 @@
+[workspace]
+members = [
+    "crates/omtsf-core",
+    "crates/omtsf-cli",
+    "crates/omtsf-wasm",
+]
+resolver = "3"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+dbg_macro = "deny"
+unimplemented = "deny"
+let_underscore_must_use = "deny"
+wildcard_enum_match_arm = "deny"
+needless_pass_by_value = "warn"
+cloned_instead_of_copied = "warn"
+redundant_closure_for_method_calls = "warn"
+semicolon_if_nothing_returned = "warn"
+doc_markdown = "warn"
+manual_let_else = "warn"
+implicit_clone = "warn"

@@ -1,0 +1,188 @@
+{
+  "omtsf_version": "0.1.0",
+  "snapshot_date": "2026-02-18",
+  "file_salt": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+  "disclosure_scope": "partner",
+  "previous_snapshot_ref": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "snapshot_sequence": 42,
+  "nodes": [
+    {
+      "id": "org-alpha",
+      "type": "organization",
+      "name": "Alpha Manufacturing GmbH",
+      "jurisdiction": "DE",
+      "status": "active",
+      "identifiers": [
+        { "scheme": "lei", "value": "5493006MHB84DD0ZWV18", "sensitivity": "public" },
+        { "scheme": "duns", "value": "081466849" },
+        { "scheme": "nat-reg", "value": "HRB86891", "authority": "RA000548", "sensitivity": "restricted" },
+        { "scheme": "vat", "value": "DE123456789", "authority": "DE", "sensitivity": "restricted" },
+        { "scheme": "internal", "value": "V-100234", "authority": "sap-mm-prod", "sensitivity": "restricted" }
+      ],
+      "data_quality": {
+        "confidence": "verified",
+        "source": "gleif-api",
+        "last_verified": "2026-01-15"
+      }
+    },
+    {
+      "id": "org-beta",
+      "type": "organization",
+      "name": "Beta Supplies Ltd",
+      "jurisdiction": "GB",
+      "identifiers": [
+        { "scheme": "nat-reg", "value": "07228507", "authority": "RA000585" },
+        { "scheme": "duns", "value": "234567890" },
+        { "scheme": "gln", "value": "5060012340001" }
+      ]
+    },
+    {
+      "id": "fac-sheffield",
+      "type": "facility",
+      "name": "Beta Sheffield Plant",
+      "identifiers": [
+        { "scheme": "gln", "value": "5060012340018" },
+        { "scheme": "internal", "value": "SITE-SHF-01", "authority": "beta-erp" }
+      ],
+      "geo": { "lat": 53.3811, "lon": -1.4701 }
+    },
+    {
+      "id": "good-bolts",
+      "type": "good",
+      "name": "M10 Steel Hex Bolts",
+      "commodity_code": "7318.15",
+      "unit": "pcs",
+      "identifiers": [
+        { "scheme": "org.gs1.gtin", "value": "05060012340018" }
+      ]
+    },
+    {
+      "id": "person-doe",
+      "type": "person",
+      "name": "Jane Doe",
+      "jurisdiction": "DE",
+      "role": "Ultimate Beneficial Owner",
+      "identifiers": [
+        { "scheme": "internal", "value": "UBO-001", "authority": "compliance-db", "sensitivity": "confidential" }
+      ]
+    },
+    {
+      "id": "att-sa8000",
+      "type": "attestation",
+      "name": "SA8000 Certification - Beta Sheffield",
+      "attestation_type": "certification",
+      "standard": "SA8000:2014",
+      "issuer": "Social Accountability International",
+      "valid_from": "2025-06-01",
+      "valid_to": "2028-05-31",
+      "outcome": "pass",
+      "status": "active",
+      "risk_severity": "low"
+    },
+    {
+      "id": "con-batch-001",
+      "type": "consignment",
+      "name": "Batch 2026-Q1 Steel Bolts",
+      "lot_id": "LOT-2026-Q1-001",
+      "quantity": 50000,
+      "unit": "pcs",
+      "production_date": "2026-01-20",
+      "origin_country": "GB",
+      "direct_emissions_co2e": 12.5,
+      "indirect_emissions_co2e": 3.2,
+      "emission_factor_source": "actual"
+    },
+    {
+      "id": "bref-redacted",
+      "type": "boundary_ref",
+      "name": "Redacted Entity",
+      "identifiers": [
+        { "scheme": "opaque", "value": "e8798687b081da98b7cd1c4e5e2423bd3214fbab0f1f476a2dcdbf67c2e21141" }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-ownership-01",
+      "type": "ownership",
+      "source": "org-alpha",
+      "target": "org-beta",
+      "properties": {
+        "percentage": 51.0,
+        "direct": true,
+        "valid_from": "2019-04-01"
+      }
+    },
+    {
+      "id": "edge-supplies-01",
+      "type": "supplies",
+      "source": "org-beta",
+      "target": "org-alpha",
+      "properties": {
+        "valid_from": "2023-01-15",
+        "commodity": "7318.15",
+        "tier": 1,
+        "share_of_buyer_demand": 35.0
+      }
+    },
+    {
+      "id": "edge-operates-01",
+      "type": "operates",
+      "source": "org-beta",
+      "target": "fac-sheffield",
+      "properties": {
+        "valid_from": "2018-06-01"
+      }
+    },
+    {
+      "id": "edge-produces-01",
+      "type": "produces",
+      "source": "fac-sheffield",
+      "target": "good-bolts",
+      "properties": {
+        "valid_from": "2020-03-01"
+      }
+    },
+    {
+      "id": "edge-attested-01",
+      "type": "attested_by",
+      "source": "fac-sheffield",
+      "target": "att-sa8000",
+      "properties": {
+        "scope": "labor_rights"
+      }
+    },
+    {
+      "id": "edge-bo-01",
+      "type": "beneficial_ownership",
+      "source": "person-doe",
+      "target": "org-alpha",
+      "properties": {
+        "percentage": 60.0,
+        "control_type": "capital",
+        "direct": true,
+        "valid_from": "2015-03-01"
+      }
+    },
+    {
+      "id": "edge-composed-01",
+      "type": "composed_of",
+      "source": "good-bolts",
+      "target": "con-batch-001",
+      "properties": {
+        "quantity": 50000,
+        "unit": "pcs"
+      }
+    },
+    {
+      "id": "edge-sameas-01",
+      "type": "same_as",
+      "source": "org-beta",
+      "target": "bref-redacted",
+      "properties": {
+        "confidence": "probable",
+        "basis": "name_match"
+      }
+    }
+  ]
+}

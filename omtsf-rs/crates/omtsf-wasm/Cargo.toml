@@ -1,0 +1,15 @@
+[package]
+name = "omtsf-wasm"
+version = "0.1.0"
+edition = "2024"
+description = "WASM bindings for the Open Multi-Tier Supply-Chain Framework"
+license = "Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+omtsf-core = { path = "../omtsf-core" }
+
+[lints]
+workspace = true

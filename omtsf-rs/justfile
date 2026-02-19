@@ -1,0 +1,47 @@
+default: check
+
+# Type-check the workspace
+check:
+    cargo check --workspace --all-targets
+
+# Format all code
+fmt:
+    cargo fmt --all
+
+# Check formatting without modifying files
+fmt-check:
+    cargo fmt --all -- --check
+
+# Run clippy lints
+lint:
+    cargo clippy --workspace --all-targets -- -D warnings
+
+# Run all tests
+test:
+    cargo test --workspace
+
+# Build debug binaries
+build:
+    cargo build --workspace
+
+# Build release binaries
+release:
+    cargo build --workspace --release
+
+# Check that omtsf-core compiles to WASM
+wasm-check:
+    cargo build -p omtsf-core --target wasm32-unknown-unknown
+
+# Run cargo-deny checks
+deny:
+    cargo deny check
+
+# Build documentation
+doc:
+    cargo doc --workspace --no-deps
+
+# Full CI pipeline
+ci: fmt-check lint test doc wasm-check deny
+
+# Fast pre-commit checks
+pre-commit: fmt-check lint test
