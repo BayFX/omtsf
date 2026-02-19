@@ -9,6 +9,7 @@ pub mod identity;
 pub mod merge;
 pub mod newtypes;
 pub mod rules_l1_eid;
+pub mod sensitivity;
 pub mod serde_helpers;
 pub mod structures;
 pub mod types;
@@ -37,6 +38,7 @@ pub use merge::{
     apply_same_as_edges, build_conflicts_value, merge_identifiers, merge_labels, merge_scalars,
 };
 pub use newtypes::{CalendarDate, CountryCode, EdgeId, FileSalt, NewtypeError, NodeId, SemVer};
+pub use sensitivity::{effective_property_sensitivity, effective_sensitivity};
 pub use structures::{Edge, EdgeProperties, Node};
 pub use types::{DataQuality, Geo, GeoParseError, Identifier, Label, parse_geo};
 pub use union_find::UnionFind;
