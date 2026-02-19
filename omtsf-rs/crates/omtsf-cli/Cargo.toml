@@ -11,7 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 omtsf-core = { path = "../omtsf-core" }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 
 [lints]
 workspace = true
