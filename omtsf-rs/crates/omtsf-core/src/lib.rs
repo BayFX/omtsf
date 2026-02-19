@@ -1,7 +1,14 @@
 #![deny(clippy::print_stdout, clippy::print_stderr)]
 
+pub mod enums;
 pub mod newtypes;
 
+pub use enums::{
+    AttestationOutcome, AttestationStatus, AttestationType, Confidence, ConsolidationBasis,
+    ControlType, DisclosureScope, EdgeType, EdgeTypeTag, EmissionFactorSource, EventType, NodeType,
+    NodeTypeTag, OrganizationStatus, RiskLikelihood, RiskSeverity, Sensitivity, ServiceType,
+    VerificationStatus,
+};
 pub use newtypes::{CalendarDate, CountryCode, EdgeId, FileSalt, NewtypeError, NodeId, SemVer};
 
 /// Returns the current version of the omtsf-core library.
