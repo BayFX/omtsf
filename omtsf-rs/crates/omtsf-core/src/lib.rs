@@ -26,7 +26,11 @@ pub use graph::{
     DEFAULT_MAX_DEPTH, Direction, EdgeWeight, GraphBuildError, NodeWeight, OmtsGraph, QueryError,
     all_paths, build_graph, reachable_from, shortest_path,
 };
-pub use identity::{identifiers_match, is_lei_annulled, temporal_compatible};
+pub use identity::{
+    EdgeCompositeKey, build_edge_candidate_index, edge_composite_key,
+    edge_identity_properties_match, edges_match, identifiers_match, is_lei_annulled,
+    temporal_compatible,
+};
 pub use newtypes::{CalendarDate, CountryCode, EdgeId, FileSalt, NewtypeError, NodeId, SemVer};
 pub use structures::{Edge, EdgeProperties, Node};
 pub use types::{DataQuality, Geo, GeoParseError, Identifier, Label, parse_geo};
