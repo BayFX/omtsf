@@ -1,10 +1,16 @@
-/// Diagnostic types for the OMTSF validation engine.
+/// Diagnostic types and rule dispatch for the OMTSF validation engine.
 ///
 /// This module defines [`Diagnostic`], [`Severity`], [`RuleId`], [`Location`],
 /// [`ValidationResult`], and [`ValidateOutput`] — the types that represent every
 /// finding produced by the three-level validation engine described in
 /// `omtsf-rs/docs/validation.md` Section 2.
+///
+/// It also defines the [`ValidationRule`] trait, [`ValidationConfig`],
+/// [`build_registry`], and the top-level [`validate`] dispatch function
+/// described in Sections 3.1 and 3.2.
 use std::fmt;
+
+use crate::file::OmtsFile;
 
 // ---------------------------------------------------------------------------
 // Severity
@@ -472,6 +478,173 @@ pub enum ValidateOutput {
 }
 
 // ---------------------------------------------------------------------------
+// Level
+// ---------------------------------------------------------------------------
+
+/// The validation level that a rule belongs to.
+///
+/// Maps to the three tiers defined in the OMTSF specification:
+/// - L1 rules enforce MUST constraints and produce [`Severity::Error`] findings.
+/// - L2 rules enforce SHOULD constraints and produce [`Severity::Warning`] findings.
+/// - L3 rules cross-reference external data and produce [`Severity::Info`] findings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Level {
+    /// Structural conformance rules — violations make a file non-conformant.
+    L1,
+    /// Semantic quality rules — violations are warnings, not errors.
+    L2,
+    /// Enrichment rules — require external data, off by default.
+    L3,
+}
+
+impl Level {
+    /// Returns the [`Severity`] that rules at this level produce.
+    pub fn severity(self) -> Severity {
+        match self {
+            Self::L1 => Severity::Error,
+            Self::L2 => Severity::Warning,
+            Self::L3 => Severity::Info,
+        }
+    }
+}
+
+impl fmt::Display for Level {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::L1 => f.write_str("L1"),
+            Self::L2 => f.write_str("L2"),
+            Self::L3 => f.write_str("L3"),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ValidationRule
+// ---------------------------------------------------------------------------
+
+/// A single, stateless validation rule that inspects an [`OmtsFile`].
+///
+/// Each rule in the OMTSF validation engine implements this trait.  Rules push
+/// zero or more [`Diagnostic`] values into the provided `diags` vector.  A rule
+/// that finds nothing wrong pushes nothing.
+///
+/// Rules are stateless: they hold no mutable state between invocations and
+/// receive the file only by shared reference.  The dispatch loop in [`validate`]
+/// calls each rule's [`check`][ValidationRule::check] method exactly once per
+/// validation pass.
+///
+/// # Object safety
+///
+/// The trait is object-safe; the registry stores rules as
+/// `Vec<Box<dyn ValidationRule>>`.
+///
+/// # Extension rules
+///
+/// Third-party validators implement this trait and use [`RuleId::Extension`]
+/// to carry their own identifiers.  Extension rules MUST NOT use `L1-*`,
+/// `L2-*`, or `L3-*` prefixes in their codes — those are reserved for
+/// spec-defined rules.
+pub trait ValidationRule {
+    /// The unique identifier for this rule.
+    fn id(&self) -> RuleId;
+
+    /// The validation level this rule belongs to (L1, L2, or L3).
+    fn level(&self) -> Level;
+
+    /// The severity of diagnostics produced by this rule.
+    ///
+    /// Derived from [`level`][ValidationRule::level]: L1 → Error, L2 → Warning,
+    /// L3 → Info.  Rules SHOULD NOT override this to return a severity
+    /// inconsistent with their level.
+    fn severity(&self) -> Severity {
+        self.level().severity()
+    }
+
+    /// Inspect `file` and push any findings into `diags`.
+    ///
+    /// Called exactly once per validation pass with the fully parsed file.
+    /// The rule must not mutate any state outside `diags`.
+    fn check(&self, file: &OmtsFile, diags: &mut Vec<Diagnostic>);
+}
+
+// ---------------------------------------------------------------------------
+// ValidationConfig
+// ---------------------------------------------------------------------------
+
+/// Controls which validation levels are active during a validation pass.
+///
+/// A conformant validator always runs L1 rules.  L2 rules are on by default.
+/// L3 rules are off by default because they require external data sources.
+///
+/// # Default
+///
+/// ```
+/// # use omtsf_core::ValidationConfig;
+/// let cfg = ValidationConfig::default();
+/// assert!(cfg.run_l1);
+/// assert!(cfg.run_l2);
+/// assert!(!cfg.run_l3);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValidationConfig {
+    /// Run L1 (structural) rules.  Always `true` in a conformant validator.
+    pub run_l1: bool,
+    /// Run L2 (semantic) rules.  Default `true`.
+    pub run_l2: bool,
+    /// Run L3 (enrichment) rules.  Default `false`; requires external data.
+    pub run_l3: bool,
+}
+
+impl Default for ValidationConfig {
+    fn default() -> Self {
+        Self {
+            run_l1: true,
+            run_l2: true,
+            run_l3: false,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Registry and dispatch
+// ---------------------------------------------------------------------------
+
+/// Builds the ordered rule registry for the given configuration.
+///
+/// Returns a `Vec<Box<dyn ValidationRule>>` containing every built-in rule
+/// whose level is enabled in `config`.  Rules are compiled into `omtsf-core`;
+/// this is not a plugin system.
+///
+/// Currently returns an empty registry.  Concrete rules will be appended by
+/// subsequent implementation tasks (T-010, T-011, …).
+pub fn build_registry(_config: &ValidationConfig) -> Vec<Box<dyn ValidationRule>> {
+    // Rules will be added here as T-010, T-011, … are implemented.
+    // Each rule is gated by the corresponding config flag:
+    //
+    //   if config.run_l1 { registry.push(Box::new(rules::l1::GdmRule01)); }
+    //
+    // For now the registry is empty so the engine can be wired up end-to-end.
+    Vec::new()
+}
+
+/// Run the full validation pipeline on a parsed [`OmtsFile`].
+///
+/// Builds the rule registry from `config`, walks it linearly, and collects all
+/// diagnostics.  The engine never fails fast — all diagnostics are collected
+/// before returning.
+///
+/// Returns a [`ValidationResult`] containing every diagnostic produced.  An
+/// empty result indicates a clean file (with respect to the active rule set).
+pub fn validate(file: &OmtsFile, config: &ValidationConfig) -> ValidationResult {
+    let registry = build_registry(config);
+    let mut diags: Vec<Diagnostic> = Vec::new();
+    for rule in &registry {
+        rule.check(file, &mut diags);
+    }
+    ValidationResult::from_diagnostics(diags)
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -848,5 +1021,178 @@ mod tests {
             }
             ValidateOutput::ParseFailed(_) => panic!("expected Validated"),
         }
+    }
+
+    // --- Level ---
+
+    #[test]
+    fn level_severity_mapping() {
+        assert_eq!(Level::L1.severity(), Severity::Error);
+        assert_eq!(Level::L2.severity(), Severity::Warning);
+        assert_eq!(Level::L3.severity(), Severity::Info);
+    }
+
+    #[test]
+    fn level_display() {
+        assert_eq!(Level::L1.to_string(), "L1");
+        assert_eq!(Level::L2.to_string(), "L2");
+        assert_eq!(Level::L3.to_string(), "L3");
+    }
+
+    #[test]
+    fn level_clone_and_eq() {
+        assert_eq!(Level::L1, Level::L1.clone());
+        assert_ne!(Level::L1, Level::L2);
+        assert_ne!(Level::L2, Level::L3);
+    }
+
+    // --- ValidationConfig ---
+
+    #[test]
+    fn validation_config_default() {
+        let cfg = ValidationConfig::default();
+        assert!(cfg.run_l1);
+        assert!(cfg.run_l2);
+        assert!(!cfg.run_l3);
+    }
+
+    #[test]
+    fn validation_config_clone_and_eq() {
+        let cfg = ValidationConfig::default();
+        assert_eq!(cfg, cfg.clone());
+        let cfg2 = ValidationConfig {
+            run_l1: true,
+            run_l2: false,
+            run_l3: true,
+        };
+        assert_ne!(cfg, cfg2);
+    }
+
+    // --- build_registry ---
+
+    #[test]
+    fn build_registry_empty_for_default_config() {
+        let cfg = ValidationConfig::default();
+        let registry = build_registry(&cfg);
+        assert!(
+            registry.is_empty(),
+            "registry should be empty until rules are added by T-010+"
+        );
+    }
+
+    #[test]
+    fn build_registry_all_levels_disabled_is_empty() {
+        let cfg = ValidationConfig {
+            run_l1: false,
+            run_l2: false,
+            run_l3: false,
+        };
+        let registry = build_registry(&cfg);
+        assert!(registry.is_empty());
+    }
+
+    // --- validate ---
+
+    /// Helper: build a minimal valid [`OmtsFile`] in-memory.
+    fn minimal_omts_file() -> crate::file::OmtsFile {
+        use crate::newtypes::{CalendarDate, FileSalt, SemVer};
+
+        const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        crate::file::OmtsFile {
+            omtsf_version: SemVer::try_from("1.0.0").expect("valid SemVer"),
+            snapshot_date: CalendarDate::try_from("2026-02-19").expect("valid date"),
+            file_salt: FileSalt::try_from(SALT).expect("valid salt"),
+            disclosure_scope: None,
+            previous_snapshot_ref: None,
+            snapshot_sequence: None,
+            reporting_entity: None,
+            nodes: vec![],
+            edges: vec![],
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    #[test]
+    fn validate_empty_registry_produces_zero_diagnostics() {
+        let file = minimal_omts_file();
+        let cfg = ValidationConfig::default();
+        let result = validate(&file, &cfg);
+        assert!(
+            result.is_empty(),
+            "empty registry must produce no diagnostics"
+        );
+        assert!(result.is_conformant());
+    }
+
+    #[test]
+    fn validate_returns_validation_result() {
+        let file = minimal_omts_file();
+        let cfg = ValidationConfig::default();
+        let result = validate(&file, &cfg);
+        assert_eq!(result.len(), 0);
+    }
+
+    /// A mock rule that always emits one diagnostic.
+    struct MockRule {
+        rule_id: RuleId,
+        level: Level,
+    }
+
+    impl ValidationRule for MockRule {
+        fn id(&self) -> RuleId {
+            self.rule_id.clone()
+        }
+
+        fn level(&self) -> Level {
+            self.level
+        }
+
+        fn check(&self, _file: &OmtsFile, diags: &mut Vec<Diagnostic>) {
+            diags.push(Diagnostic::new(
+                self.rule_id.clone(),
+                self.level.severity(),
+                Location::Global,
+                "mock diagnostic",
+            ));
+        }
+    }
+
+    #[test]
+    fn mock_rule_diagnostic_appears_in_results() {
+        let file = minimal_omts_file();
+        let rule: Box<dyn ValidationRule> = Box::new(MockRule {
+            rule_id: RuleId::L1Gdm01,
+            level: Level::L1,
+        });
+
+        let mut diags: Vec<Diagnostic> = Vec::new();
+        rule.check(&file, &mut diags);
+
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].rule_id, RuleId::L1Gdm01);
+        assert_eq!(diags[0].severity, Severity::Error);
+        assert_eq!(diags[0].location, Location::Global);
+        assert_eq!(diags[0].message, "mock diagnostic");
+    }
+
+    #[test]
+    fn mock_rule_severity_derived_from_level() {
+        let l1_rule = MockRule {
+            rule_id: RuleId::L1Gdm01,
+            level: Level::L1,
+        };
+        assert_eq!(l1_rule.severity(), Severity::Error);
+
+        let l2_rule = MockRule {
+            rule_id: RuleId::L2Gdm01,
+            level: Level::L2,
+        };
+        assert_eq!(l2_rule.severity(), Severity::Warning);
+
+        let l3_rule = MockRule {
+            rule_id: RuleId::L3Mrg01,
+            level: Level::L3,
+        };
+        assert_eq!(l3_rule.severity(), Severity::Info);
     }
 }

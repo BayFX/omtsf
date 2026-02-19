@@ -21,7 +21,8 @@ pub use newtypes::{CalendarDate, CountryCode, EdgeId, FileSalt, NewtypeError, No
 pub use structures::{Edge, EdgeProperties, Node};
 pub use types::{DataQuality, Geo, GeoParseError, Identifier, Label, parse_geo};
 pub use validation::{
-    Diagnostic, Location, ParseError, RuleId, Severity, ValidateOutput, ValidationResult,
+    Diagnostic, Level, Location, ParseError, RuleId, Severity, ValidateOutput, ValidationConfig,
+    ValidationResult, ValidationRule, build_registry, validate,
 };
 
 /// Returns the current version of the omtsf-core library.
