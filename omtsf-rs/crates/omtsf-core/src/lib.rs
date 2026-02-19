@@ -6,6 +6,7 @@ pub mod enums;
 pub mod file;
 pub mod graph;
 pub mod identity;
+pub mod merge;
 pub mod newtypes;
 pub mod rules_l1_eid;
 pub mod serde_helpers;
@@ -30,6 +31,10 @@ pub use identity::{
     EdgeCompositeKey, build_edge_candidate_index, edge_composite_key,
     edge_identity_properties_match, edges_match, identifiers_match, is_lei_annulled,
     temporal_compatible,
+};
+pub use merge::{
+    Conflict, ConflictEntry, MergeMetadata, SameAsThreshold, ScalarMergeResult,
+    apply_same_as_edges, build_conflicts_value, merge_identifiers, merge_labels, merge_scalars,
 };
 pub use newtypes::{CalendarDate, CountryCode, EdgeId, FileSalt, NewtypeError, NodeId, SemVer};
 pub use structures::{Edge, EdgeProperties, Node};
