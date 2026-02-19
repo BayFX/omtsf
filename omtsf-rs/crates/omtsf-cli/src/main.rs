@@ -1,3 +1,4 @@
+pub mod cmd;
 pub mod error;
 pub mod format;
 pub mod io;
@@ -274,17 +275,41 @@ fn main() {
 
     let cli = Cli::parse();
 
-    match cli.command {
+    let result = dispatch(&cli);
+
+    if let Err(e) = result {
+        eprintln!("{}", e.message());
+        std::process::exit(e.exit_code());
+    }
+}
+
+/// Dispatches the parsed CLI arguments to the appropriate command handler.
+///
+/// Returns `Ok(())` on success or a [`error::CliError`] on failure. The
+/// caller is responsible for printing the error message and exiting with the
+/// appropriate exit code.
+fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
+    match &cli.command {
+        Command::Inspect { file } => {
+            let content = io::read_input(file, cli.max_file_size)?;
+            cmd::inspect::run(&content, &cli.format)
+        }
+
+        Command::Convert { file, compact, .. } => {
+            let content = io::read_input(file, cli.max_file_size)?;
+            cmd::convert::run(&content, *compact)
+        }
+
+        Command::Init { example } => cmd::init::run(*example),
+
+        // Commands not yet implemented — exit 2 to indicate input failure.
         Command::Validate { .. }
         | Command::Merge { .. }
         | Command::Redact { .. }
-        | Command::Inspect { .. }
         | Command::Diff { .. }
-        | Command::Convert { .. }
         | Command::Reach { .. }
         | Command::Path { .. }
-        | Command::Subgraph { .. }
-        | Command::Init { .. } => {
+        | Command::Subgraph { .. } => {
             eprintln!("not yet implemented");
             std::process::exit(2);
         }

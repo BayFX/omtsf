@@ -13,9 +13,11 @@ path = "src/main.rs"
 omtsf-core = { path = "../omtsf-core" }
 clap = { version = "4", features = ["derive", "env"] }
 libc = { version = "0.2", optional = false }
+serde_json = "1"
 
 [dev-dependencies]
 tempfile = "3"
+serde_json = "1"
 
 [lints]
 workspace = true

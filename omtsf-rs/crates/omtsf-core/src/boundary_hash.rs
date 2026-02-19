@@ -144,6 +144,24 @@ pub fn decode_salt(salt: &FileSalt) -> Result<[u8; 32], BoundaryHashError> {
     hex_decode_salt(salt.as_ref())
 }
 
+/// Generates a fresh [`FileSalt`] using 32 CSPRNG bytes.
+///
+/// The result is a 64-character lowercase hex string suitable for use as the
+/// `file_salt` field in a new OMTSF file (SPEC-001 Section 2).
+///
+/// # Errors
+///
+/// Returns [`BoundaryHashError::CsprngFailure`] if the platform CSPRNG is
+/// unavailable.
+pub fn generate_file_salt() -> Result<FileSalt, BoundaryHashError> {
+    let mut buf = [0u8; 32];
+    getrandom::getrandom(&mut buf).map_err(BoundaryHashError::CsprngFailure)?;
+    let hex = hex_encode(&buf);
+    // SAFETY: hex_encode always produces exactly 64 lowercase hex characters,
+    // which satisfies the FileSalt invariant.
+    FileSalt::try_from(hex.as_str()).map_err(|e| BoundaryHashError::InvalidSalt(e.to_string()))
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
