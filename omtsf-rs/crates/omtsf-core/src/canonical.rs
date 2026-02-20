@@ -76,7 +76,7 @@ impl CanonicalId {
     /// Constructs a `CanonicalId` from an [`Identifier`].
     ///
     /// The canonical form encodes each component (scheme, authority if
-    /// applicable, value) with [`percent_encode`], then joins them with `:`.
+    /// applicable, value) with `percent_encode`, then joins them with `:`.
     ///
     /// Authority-required schemes (`nat-reg`, `vat`) include the authority as
     /// the middle segment. For other schemes the authority component is omitted

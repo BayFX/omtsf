@@ -330,7 +330,7 @@ fn node_type_display(tag: &NodeTypeTag) -> String {
 /// (SPEC-001 Section 9.5). Extension edges are exempt.
 ///
 /// For each core edge type the permitted source and target [`NodeType`] sets
-/// are encoded in [`permitted_types`]. Extension edges (those with
+/// are encoded in `permitted_types`. Extension edges (those with
 /// [`EdgeTypeTag::Extension`]) are skipped entirely.
 ///
 /// A diagnostic is emitted per invalid endpoint — both `source` and `target`

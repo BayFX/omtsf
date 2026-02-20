@@ -115,7 +115,7 @@ pub fn run(content: &str, scope: &CliScope) -> Result<(), CliError> {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/// Converts a CLI [`DisclosureScope`] to the core library [`CoreScope`].
+/// Converts a CLI [`crate::DisclosureScope`] to the core library [`CoreScope`].
 fn cli_scope_to_core(scope: &CliScope) -> CoreScope {
     match scope {
         CliScope::Public => CoreScope::Public,

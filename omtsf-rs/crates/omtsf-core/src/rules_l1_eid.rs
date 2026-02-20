@@ -429,7 +429,7 @@ impl ValidationRule for L1Eid07 {
 /// strings in `YYYY-MM-DD` format (SPEC-002 L1-EID-08).
 ///
 /// Note: [`crate::newtypes::CalendarDate`] already enforces the `YYYY-MM-DD`
-/// shape at deserialization time, so any [`CalendarDate`] value in a parsed
+/// shape at deserialization time, so any [`crate::newtypes::CalendarDate`] value in a parsed
 /// [`crate::types::Identifier`] is guaranteed to have the correct format.
 /// This rule therefore checks the *semantic* calendar validity (e.g. month
 /// must be 01–12, day must be within the month's range).
