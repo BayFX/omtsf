@@ -1,0 +1,37 @@
+{
+  "omtsf_version": "1.0.0",
+  "snapshot_date": "2026-02-20",
+  "file_salt": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "nodes": [
+    {
+      "id": "org-epsilon-b",
+      "type": "organization",
+      "name": "Epsilon Corp (updated)",
+      "jurisdiction": "DE",
+      "identifiers": [
+        { "scheme": "lei", "value": "5493006MHB84DD0ZWV18" },
+        { "scheme": "duns", "value": "555666777" }
+      ]
+    },
+    {
+      "id": "org-zeta-b",
+      "type": "organization",
+      "name": "Zeta Partners",
+      "identifiers": [
+        { "scheme": "lei", "value": "7LTWFZYICNSX8D621K86" }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-eps-zeta-b",
+      "type": "ownership",
+      "source": "org-epsilon-b",
+      "target": "org-zeta-b",
+      "properties": {
+        "percentage": 100.0,
+        "direct": true
+      }
+    }
+  ]
+}

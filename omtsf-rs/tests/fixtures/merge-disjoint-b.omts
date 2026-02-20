@@ -1,0 +1,41 @@
+{
+  "omtsf_version": "1.0.0",
+  "snapshot_date": "2026-02-19",
+  "file_salt": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "nodes": [
+    {
+      "id": "org-delta",
+      "type": "organization",
+      "name": "Delta Logistics",
+      "identifiers": [
+        { "scheme": "duns", "value": "999888777" }
+      ]
+    },
+    {
+      "id": "fac-delta-plant",
+      "type": "facility",
+      "name": "Delta Main Plant"
+    },
+    {
+      "id": "good-widget",
+      "type": "good",
+      "name": "Standard Widget",
+      "commodity_code": "8544.60",
+      "unit": "pcs"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-delta-operates",
+      "type": "operates",
+      "source": "org-delta",
+      "target": "fac-delta-plant"
+    },
+    {
+      "id": "e-delta-produces",
+      "type": "produces",
+      "source": "fac-delta-plant",
+      "target": "good-widget"
+    }
+  ]
+}

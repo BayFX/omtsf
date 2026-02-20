@@ -1,0 +1,31 @@
+{
+  "omtsf_version": "1.0.0",
+  "snapshot_date": "2026-02-20",
+  "file_salt": "2020202020202020202020202020202020202020202020202020202020202020",
+  "nodes": [
+    {
+      "id": "org-hub-2",
+      "type": "organization",
+      "name": "Hub Corp",
+      "identifiers": [
+        { "scheme": "lei", "value": "HWUPKR0MPOU8FGXBT394" }
+      ]
+    },
+    {
+      "id": "org-spoke-b",
+      "type": "organization",
+      "name": "Spoke B GmbH",
+      "identifiers": [
+        { "scheme": "duns", "value": "400500600" }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-hub-b",
+      "type": "supplies",
+      "source": "org-spoke-b",
+      "target": "org-hub-2"
+    }
+  ]
+}

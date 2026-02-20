@@ -1,0 +1,31 @@
+{
+  "omtsf_version": "1.0.0",
+  "snapshot_date": "2026-02-19",
+  "file_salt": "5050505050505050505050505050505050505050505050505050505050505050",
+  "nodes": [
+    {
+      "id": "org-t1",
+      "type": "organization",
+      "name": "Tier 1 Corp",
+      "identifiers": [
+        { "scheme": "lei", "value": "HWUPKR0MPOU8FGXBT394" }
+      ]
+    },
+    {
+      "id": "org-t2",
+      "type": "organization",
+      "name": "Tier 2 Supplier",
+      "identifiers": [
+        { "scheme": "duns", "value": "111222333" }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-t1-t2",
+      "type": "supplies",
+      "source": "org-t2",
+      "target": "org-t1"
+    }
+  ]
+}

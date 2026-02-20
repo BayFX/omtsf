@@ -1,0 +1,40 @@
+{
+  "omtsf_version": "1.0.0",
+  "snapshot_date": "2026-02-20",
+  "file_salt": "4040404040404040404040404040404040404040404040404040404040404040",
+  "nodes": [
+    {
+      "id": "org-live-2",
+      "type": "organization",
+      "name": "Live Entity Corp",
+      "identifiers": [
+        { "scheme": "lei", "value": "5493006MHB84DD0ZWV18" },
+        { "scheme": "duns", "value": "987654321" }
+      ]
+    },
+    {
+      "id": "org-annulled-2",
+      "type": "organization",
+      "name": "Annulled Entity (updated name)",
+      "identifiers": [
+        {
+          "scheme": "lei",
+          "value": "7LTWFZYICNSX8D621K86",
+          "entity_status": "ANNULLED"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-live-annulled-2",
+      "type": "ownership",
+      "source": "org-live-2",
+      "target": "org-annulled-2",
+      "properties": {
+        "percentage": 80.0,
+        "direct": true
+      }
+    }
+  ]
+}

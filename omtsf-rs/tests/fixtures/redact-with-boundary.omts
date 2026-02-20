@@ -1,0 +1,52 @@
+{
+  "omtsf_version": "1.0.0",
+  "snapshot_date": "2026-02-19",
+  "file_salt": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+  "nodes": [
+    {
+      "id": "org-public",
+      "type": "organization",
+      "name": "Public Facing Corp",
+      "identifiers": [
+        { "scheme": "lei", "value": "5493006MHB84DD0ZWV18", "sensitivity": "public" }
+      ]
+    },
+    {
+      "id": "person-owner",
+      "type": "person",
+      "name": "Secret Owner",
+      "identifiers": [
+        { "scheme": "internal", "value": "UBO-007", "authority": "hr-db", "sensitivity": "confidential" }
+      ]
+    },
+    {
+      "id": "bref-existing",
+      "type": "boundary_ref",
+      "name": "Pre-existing Boundary Ref",
+      "identifiers": [
+        { "scheme": "opaque", "value": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2" }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-bo-owner",
+      "type": "beneficial_ownership",
+      "source": "person-owner",
+      "target": "org-public",
+      "properties": {
+        "percentage": 55.0,
+        "direct": true
+      }
+    },
+    {
+      "id": "e-sameas-bref",
+      "type": "same_as",
+      "source": "org-public",
+      "target": "bref-existing",
+      "properties": {
+        "confidence": "probable"
+      }
+    }
+  ]
+}

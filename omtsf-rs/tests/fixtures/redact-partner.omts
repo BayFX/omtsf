@@ -1,0 +1,32 @@
+{
+  "omtsf_version": "1.0.0",
+  "snapshot_date": "2026-02-19",
+  "file_salt": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  "disclosure_scope": "partner",
+  "nodes": [
+    {
+      "id": "org-001",
+      "type": "organization",
+      "name": "Alpha Corp",
+      "identifiers": [
+        { "scheme": "lei", "value": "5493006MHB84DD0ZWV18", "sensitivity": "public" }
+      ]
+    },
+    {
+      "id": "org-002",
+      "type": "organization",
+      "name": "Beta Supplies",
+      "identifiers": [
+        { "scheme": "duns", "value": "123456789" }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-supply-001",
+      "type": "supplies",
+      "source": "org-002",
+      "target": "org-001"
+    }
+  ]
+}

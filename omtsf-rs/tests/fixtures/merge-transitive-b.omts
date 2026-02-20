@@ -1,0 +1,31 @@
+{
+  "omtsf_version": "1.0.0",
+  "snapshot_date": "2026-02-19",
+  "file_salt": "6060606060606060606060606060606060606060606060606060606060606060",
+  "nodes": [
+    {
+      "id": "org-t2-mirror",
+      "type": "organization",
+      "name": "Tier 2 Supplier",
+      "identifiers": [
+        { "scheme": "duns", "value": "111222333" }
+      ]
+    },
+    {
+      "id": "org-t3",
+      "type": "organization",
+      "name": "Tier 3 Component Maker",
+      "identifiers": [
+        { "scheme": "duns", "value": "444555666" }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-t2-t3",
+      "type": "supplies",
+      "source": "org-t3",
+      "target": "org-t2-mirror"
+    }
+  ]
+}

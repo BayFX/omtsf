@@ -1,0 +1,31 @@
+{
+  "omtsf_version": "1.0.0",
+  "snapshot_date": "2026-02-19",
+  "file_salt": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "nodes": [
+    {
+      "id": "org-epsilon",
+      "type": "organization",
+      "name": "Epsilon Corp",
+      "identifiers": [
+        { "scheme": "lei", "value": "5493006MHB84DD0ZWV18" }
+      ]
+    },
+    {
+      "id": "org-zeta",
+      "type": "organization",
+      "name": "Zeta Partners",
+      "identifiers": [
+        { "scheme": "lei", "value": "7LTWFZYICNSX8D621K86" }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-eps-zeta",
+      "type": "supplies",
+      "source": "org-epsilon",
+      "target": "org-zeta"
+    }
+  ]
+}

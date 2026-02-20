@@ -1,0 +1,31 @@
+{
+  "omtsf_version": "1.0.0",
+  "snapshot_date": "2026-02-19",
+  "file_salt": "1010101010101010101010101010101010101010101010101010101010101010",
+  "nodes": [
+    {
+      "id": "org-hub",
+      "type": "organization",
+      "name": "Hub Corp",
+      "identifiers": [
+        { "scheme": "lei", "value": "HWUPKR0MPOU8FGXBT394" }
+      ]
+    },
+    {
+      "id": "org-spoke-a",
+      "type": "organization",
+      "name": "Spoke A Ltd",
+      "identifiers": [
+        { "scheme": "duns", "value": "100200300" }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-hub-a",
+      "type": "supplies",
+      "source": "org-spoke-a",
+      "target": "org-hub"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "omtsf_version": "1.0.0",
+  "snapshot_date": "2026-02-19",
+  "file_salt": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "nodes": [
+    {
+      "id": "org-gamma",
+      "type": "organization",
+      "name": "Gamma Industries",
+      "identifiers": [
+        { "scheme": "duns", "value": "111111111" }
+      ]
+    },
+    {
+      "id": "fac-gamma-main",
+      "type": "facility",
+      "name": "Gamma Main Plant"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-gamma-operates",
+      "type": "operates",
+      "source": "org-gamma",
+      "target": "fac-gamma-main"
+    }
+  ]
+}

@@ -356,9 +356,7 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
             cmd::subgraph::run(&content, node_ids, *expand)
         }
 
-        Command::Merge { files, strategy } => {
-            cmd::merge::run(files, strategy, cli.max_file_size)
-        }
+        Command::Merge { files, strategy } => cmd::merge::run(files, strategy, cli.max_file_size),
 
         Command::Redact { file, scope } => {
             let content = io::read_input(file, cli.max_file_size)?;
