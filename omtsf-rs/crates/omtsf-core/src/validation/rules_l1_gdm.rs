@@ -415,7 +415,12 @@ impl ValidationRule for GdmRule06 {
             // responsibility.
             if let Some(src_node) = node_map.get(source_id) {
                 if let NodeTypeTag::Known(ref src_type) = src_node.node_type {
-                    if !permitted_src.contains(src_type) {
+                    // boundary_ref nodes may appear at any edge endpoint (SPEC-004
+                    // Section 5.1): they preserve graph connectivity when a node is
+                    // replaced during redaction, so the type-compatibility constraint
+                    // does not apply to them.
+                    let is_boundary_ref = *src_type == NodeType::BoundaryRef;
+                    if !is_boundary_ref && !permitted_src.contains(src_type) {
                         diags.push(Diagnostic::new(
                             RuleId::L1Gdm06,
                             Severity::Error,
@@ -439,7 +444,9 @@ impl ValidationRule for GdmRule06 {
 
             if let Some(tgt_node) = node_map.get(target_id) {
                 if let NodeTypeTag::Known(ref tgt_type) = tgt_node.node_type {
-                    if !permitted_tgt.contains(tgt_type) {
+                    // boundary_ref nodes may appear at any edge endpoint (see above).
+                    let is_boundary_ref = *tgt_type == NodeType::BoundaryRef;
+                    if !is_boundary_ref && !permitted_tgt.contains(tgt_type) {
                         diags.push(Diagnostic::new(
                             RuleId::L1Gdm06,
                             Severity::Error,

@@ -39,8 +39,9 @@ static GLN_RE: LazyLock<Regex> = LazyLock::new(|| {
         .unwrap_or_else(|_| Regex::new(".").unwrap_or_else(|_| unreachable!("regex engine broken")))
 });
 
-/// Core scheme codes defined by SPEC-002 Section 5.1.
-static CORE_SCHEMES: &[&str] = &["lei", "duns", "gln", "nat-reg", "vat", "internal"];
+/// Core scheme codes defined by SPEC-002 Section 5.1, plus the reserved
+/// `opaque` scheme used exclusively by `boundary_ref` nodes (SPEC-004 Section 5.1).
+static CORE_SCHEMES: &[&str] = &["lei", "duns", "gln", "nat-reg", "vat", "internal", "opaque"];
 
 /// Returns `true` if the scheme string is a valid core scheme or a
 /// reverse-domain extension scheme (contains a dot, e.g. `"com.example.id"`).

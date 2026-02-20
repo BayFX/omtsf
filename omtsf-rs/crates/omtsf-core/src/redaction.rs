@@ -1,18 +1,30 @@
-/// Node classification, identifier filtering, and edge handling for the
-/// selective disclosure / redaction engine.
+/// Node classification, identifier filtering, edge handling, and the
+/// top-level redaction pipeline for the selective disclosure engine.
 ///
-/// This module implements Sections 3, 5, and 6 of the redaction specification:
+/// This module implements Sections 3, 5, 6, and the orchestration layer
+/// described in the redaction specification:
 /// - Node classification into [`NodeAction`] dispositions (Section 5)
 /// - Identifier filtering based on target scope (Section 3.1–3.2)
 /// - Edge property filtering based on target scope (Section 6.5)
 /// - Edge action classification (Sections 6.1–6.4)
+/// - [`redact`]: the top-level pipeline that produces a valid redacted
+///   [`OmtsFile`] from a higher-trust source file.
 ///
-/// The module is deliberately pure-functional: all functions take inputs and
-/// return outputs without side effects, making them easy to test in isolation.
+/// The lower-level functions (`classify_node`, `filter_identifiers`, etc.) are
+/// deliberately pure-functional: they take inputs and return outputs without
+/// side effects, making them easy to test in isolation.
+use std::collections::{HashMap, HashSet};
+use std::fmt;
+
+use crate::boundary_hash::{BoundaryHashError, boundary_ref_value, decode_salt};
+use crate::canonical::CanonicalId;
 use crate::enums::{DisclosureScope, EdgeType, EdgeTypeTag, NodeType, NodeTypeTag, Sensitivity};
+use crate::file::OmtsFile;
+use crate::newtypes::NodeId;
 use crate::sensitivity::{effective_property_sensitivity, effective_sensitivity};
 use crate::structures::{Edge, EdgeProperties, Node};
 use crate::types::Identifier;
+use crate::validation::{ValidationConfig, validate};
 
 // ---------------------------------------------------------------------------
 // NodeAction
@@ -403,6 +415,321 @@ pub fn classify_edge(
     // Section 6.1: boundary crossing (one Retain, one Replace) → retained.
     // Also covers both-Retain case.
     EdgeAction::Retain
+}
+
+// ---------------------------------------------------------------------------
+// RedactError
+// ---------------------------------------------------------------------------
+
+/// Errors that can occur during redaction.
+#[derive(Debug)]
+pub enum RedactError {
+    /// The file salt could not be decoded or a CSPRNG call failed.
+    BoundaryHash(BoundaryHashError),
+    /// The redacted output failed L1 validation, indicating a logic error in
+    /// the redaction engine.
+    InvalidOutput(String),
+}
+
+impl fmt::Display for RedactError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::BoundaryHash(e) => write!(f, "boundary hash error: {e}"),
+            Self::InvalidOutput(msg) => write!(f, "redacted output failed validation: {msg}"),
+        }
+    }
+}
+
+impl std::error::Error for RedactError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::BoundaryHash(e) => Some(e),
+            Self::InvalidOutput(_) => None,
+        }
+    }
+}
+
+impl From<BoundaryHashError> for RedactError {
+    fn from(e: BoundaryHashError) -> Self {
+        Self::BoundaryHash(e)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// redact — top-level pipeline
+// ---------------------------------------------------------------------------
+
+/// Redacts an [`OmtsFile`] to the given `scope`, retaining nodes in
+/// `retain_ids` and replacing all other non-person nodes with
+/// `boundary_ref` stubs.
+///
+/// # Arguments
+///
+/// * `file` — the source file to redact (typically `internal` scope).
+/// * `scope` — the target disclosure scope (`partner`, `public`, or `internal`).
+/// * `retain_ids` — the set of node IDs the producer wants to keep in the
+///   output.  Every node whose ID is in this set is classified `Retain` (if
+///   it would not be `Omit` at the target scope); every other node whose
+///   base classification is `Retain` is promoted to `Replace`.
+///
+/// # Algorithm
+///
+/// 1. **Internal scope short-circuit** — returns a clone with `disclosure_scope`
+///    set; no filtering.
+/// 2. **Decode salt** — decode `file.file_salt` to a 32-byte array.
+/// 3. **Classify nodes** — build a `NodeId → NodeAction` map; apply
+///    `retain_ids` to promote eligible nodes from `Retain` → `Replace`.
+/// 4. **Compute boundary refs** — for each `Replace` node, compute the opaque
+///    hash from the node's public identifiers and the decoded salt.  One hash
+///    per node, deduplicated.
+/// 5. **Build output nodes** — for each input node emit one of:
+///    - `Retain`: the node with filtered identifiers (and `name` cleared for
+///      `person` nodes with no remaining identifiers).
+///    - `Replace`: a minimal `boundary_ref` node with the opaque identifier.
+///    - `Omit`: nothing.
+/// 6. **Build output edges** — classify each edge using `classify_edge`; for
+///    `Retain` edges strip properties per scope threshold.
+/// 7. **Assemble output** — copy the header, set `disclosure_scope` to `scope`,
+///    preserve `file_salt`.
+/// 8. **Post-redaction validation** — run L1 rules; return
+///    [`RedactError::InvalidOutput`] if any errors are found.
+///
+/// # Errors
+///
+/// - [`RedactError::BoundaryHash`] if salt decoding or CSPRNG fails.
+/// - [`RedactError::InvalidOutput`] if the produced file fails L1 validation.
+pub fn redact(
+    file: &OmtsFile,
+    scope: DisclosureScope,
+    retain_ids: &HashSet<NodeId>,
+) -> Result<OmtsFile, RedactError> {
+    // ------------------------------------------------------------------
+    // 1. Internal scope: no-op path.
+    // ------------------------------------------------------------------
+    if matches!(scope, DisclosureScope::Internal) {
+        let mut out = file.clone();
+        out.disclosure_scope = Some(DisclosureScope::Internal);
+        return Ok(out);
+    }
+
+    // ------------------------------------------------------------------
+    // 2. Decode file salt for boundary hash computation.
+    // ------------------------------------------------------------------
+    let salt = decode_salt(&file.file_salt)?;
+
+    // ------------------------------------------------------------------
+    // 3. Classify every node.
+    //
+    // Base classification from classify_node:
+    //   - Omit: person in public scope.
+    //   - Retain: everything else (boundary_ref pass-through, etc.)
+    //
+    // Then apply producer choice: nodes NOT in retain_ids that have a
+    // base classification of Retain are promoted to Replace, UNLESS they
+    // are boundary_ref nodes (those pass through unconditionally).
+    // ------------------------------------------------------------------
+    let mut node_actions: HashMap<NodeId, NodeAction> = HashMap::new();
+    for node in &file.nodes {
+        let base = classify_node(node, &scope);
+        let action = match base {
+            NodeAction::Omit => NodeAction::Omit,
+            NodeAction::Retain | NodeAction::Replace => {
+                // Pass-through boundary_ref nodes regardless of retain_ids;
+                // also retain nodes the producer explicitly placed in retain_ids.
+                let is_bref = matches!(&node.node_type, NodeTypeTag::Known(NodeType::BoundaryRef));
+                if is_bref || retain_ids.contains(&node.id) {
+                    NodeAction::Retain
+                } else {
+                    NodeAction::Replace
+                }
+            }
+        };
+        node_actions.insert(node.id.clone(), action);
+    }
+
+    // ------------------------------------------------------------------
+    // 4. Compute one boundary-ref value per replaced node (deduplicated).
+    // ------------------------------------------------------------------
+    let mut boundary_ref_values: HashMap<NodeId, String> = HashMap::new();
+    for node in &file.nodes {
+        let action = node_actions.get(&node.id);
+        if !matches!(action, Some(NodeAction::Replace)) {
+            continue;
+        }
+        // Collect public identifiers for the hash.
+        let public_ids: Vec<CanonicalId> = node
+            .identifiers
+            .as_deref()
+            .unwrap_or(&[])
+            .iter()
+            .filter(|id| {
+                matches!(
+                    effective_sensitivity(id, &node.node_type),
+                    Sensitivity::Public
+                )
+            })
+            .map(CanonicalId::from_identifier)
+            .collect();
+
+        let hash = boundary_ref_value(&public_ids, &salt)?;
+        boundary_ref_values.insert(node.id.clone(), hash);
+    }
+
+    // ------------------------------------------------------------------
+    // 5. Build output nodes.
+    // ------------------------------------------------------------------
+    let mut output_nodes: Vec<Node> = Vec::with_capacity(file.nodes.len());
+    for node in &file.nodes {
+        let Some(action) = node_actions.get(&node.id) else {
+            continue;
+        };
+        match action {
+            NodeAction::Omit => {
+                // Drop entirely.
+            }
+            NodeAction::Replace => {
+                // Build a minimal boundary_ref stub.
+                let opaque_value = match boundary_ref_values.get(&node.id) {
+                    Some(v) => v.clone(),
+                    None => continue,
+                };
+                let stub = build_boundary_ref_node(node.id.clone(), opaque_value);
+                output_nodes.push(stub);
+            }
+            NodeAction::Retain => {
+                // Emit the node with filtered identifiers.
+                let filtered_ids = filter_identifiers(
+                    node.identifiers.as_deref().unwrap_or(&[]),
+                    &node.node_type,
+                    &scope,
+                );
+                let mut retained = node.clone();
+                retained.identifiers = if filtered_ids.is_empty() {
+                    // Keep an explicit empty array (not None) to distinguish
+                    // "filtered to zero" from "no identifiers field" — but the
+                    // spec allows either. Use None to avoid an empty array in the
+                    // output (smaller, cleaner JSON).
+                    None
+                } else {
+                    Some(filtered_ids)
+                };
+                output_nodes.push(retained);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 6. Build output edges.
+    // ------------------------------------------------------------------
+    let mut output_edges: Vec<Edge> = Vec::with_capacity(file.edges.len());
+    for edge in &file.edges {
+        // Look up source and target actions; default to Omit for unknown nodes.
+        let source_action = node_actions.get(&edge.source).unwrap_or(&NodeAction::Omit);
+        let target_action = node_actions.get(&edge.target).unwrap_or(&NodeAction::Omit);
+
+        let edge_action = classify_edge(edge, source_action, target_action, &scope);
+        if matches!(edge_action, EdgeAction::Omit) {
+            continue;
+        }
+
+        // Retain: strip properties per scope threshold.
+        let mut retained_edge = edge.clone();
+        retained_edge.properties = filter_edge_properties(edge, &scope);
+        output_edges.push(retained_edge);
+    }
+
+    // ------------------------------------------------------------------
+    // 7. Assemble output file.
+    // ------------------------------------------------------------------
+    let output = OmtsFile {
+        omtsf_version: file.omtsf_version.clone(),
+        snapshot_date: file.snapshot_date.clone(),
+        file_salt: file.file_salt.clone(),
+        disclosure_scope: Some(scope),
+        previous_snapshot_ref: file.previous_snapshot_ref.clone(),
+        snapshot_sequence: file.snapshot_sequence,
+        reporting_entity: file.reporting_entity.clone(),
+        nodes: output_nodes,
+        edges: output_edges,
+        extra: file.extra.clone(),
+    };
+
+    // ------------------------------------------------------------------
+    // 8. Post-redaction L1 validation.
+    // ------------------------------------------------------------------
+    let config = ValidationConfig {
+        run_l1: true,
+        run_l2: false,
+        run_l3: false,
+    };
+    let result = validate(&output, &config, None);
+    if result.has_errors() {
+        let messages: Vec<String> = result
+            .errors()
+            .map(|d| format!("{}: {}", d.rule_id, d.message))
+            .collect();
+        return Err(RedactError::InvalidOutput(messages.join("; ")));
+    }
+
+    Ok(output)
+}
+
+// ---------------------------------------------------------------------------
+// Helper: build a boundary_ref stub node
+// ---------------------------------------------------------------------------
+
+/// Constructs a minimal `boundary_ref` node with a single `opaque` identifier.
+///
+/// The `id` is preserved from the original node so that existing edge
+/// `source`/`target` references remain valid (Section 5.1 of redaction.md).
+fn build_boundary_ref_node(id: NodeId, opaque_value: String) -> Node {
+    let opaque_id = Identifier {
+        scheme: "opaque".to_owned(),
+        value: opaque_value,
+        authority: None,
+        valid_from: None,
+        valid_to: None,
+        sensitivity: None,
+        verification_status: None,
+        verification_date: None,
+        extra: serde_json::Map::new(),
+    };
+    Node {
+        id,
+        node_type: NodeTypeTag::Known(NodeType::BoundaryRef),
+        identifiers: Some(vec![opaque_id]),
+        data_quality: None,
+        labels: None,
+        name: None,
+        jurisdiction: None,
+        status: None,
+        governance_structure: None,
+        operator: None,
+        address: None,
+        geo: None,
+        commodity_code: None,
+        unit: None,
+        role: None,
+        attestation_type: None,
+        standard: None,
+        issuer: None,
+        valid_from: None,
+        valid_to: None,
+        outcome: None,
+        attestation_status: None,
+        reference: None,
+        risk_severity: None,
+        risk_likelihood: None,
+        lot_id: None,
+        quantity: None,
+        production_date: None,
+        origin_country: None,
+        direct_emissions_co2e: None,
+        indirect_emissions_co2e: None,
+        emission_factor_source: None,
+        installation_id: None,
+        extra: serde_json::Map::new(),
+    }
 }
 
 // ---------------------------------------------------------------------------

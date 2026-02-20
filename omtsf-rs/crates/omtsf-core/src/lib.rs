@@ -53,8 +53,8 @@ pub use merge_pipeline::{
 };
 pub use newtypes::{CalendarDate, CountryCode, EdgeId, FileSalt, NewtypeError, NodeId, SemVer};
 pub use redaction::{
-    EdgeAction, NodeAction, classify_edge, classify_node, filter_edge_properties,
-    filter_identifiers,
+    EdgeAction, NodeAction, RedactError, classify_edge, classify_node, filter_edge_properties,
+    filter_identifiers, redact,
 };
 pub use sensitivity::{effective_property_sensitivity, effective_sensitivity};
 pub use structures::{Edge, EdgeProperties, Node};
