@@ -1,0 +1,36 @@
+{
+  "omtsf_version": "1.0.0",
+  "snapshot_date": "2026-02-19",
+  "file_salt": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  "nodes": [
+    {
+      "id": "org-001",
+      "type": "organization",
+      "name": "Acme Corp",
+      "identifiers": [
+        { "scheme": "lei", "value": "5493006MHB84DD0ZWV18", "sensitivity": "public" },
+        { "scheme": "nat-reg", "value": "HRB86891", "authority": "RA000548", "sensitivity": "restricted" }
+      ]
+    },
+    {
+      "id": "person-001",
+      "type": "person",
+      "name": "Jane Doe",
+      "identifiers": [
+        { "scheme": "internal", "value": "UBO-001", "authority": "hr-db", "sensitivity": "confidential" }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-bo-001",
+      "type": "beneficial_ownership",
+      "source": "person-001",
+      "target": "org-001",
+      "properties": {
+        "percentage": 60.0,
+        "direct": true
+      }
+    }
+  ]
+}

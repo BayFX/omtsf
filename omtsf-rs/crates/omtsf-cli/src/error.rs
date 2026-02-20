@@ -115,6 +115,16 @@ pub enum CliError {
     /// so `main` can call `process::exit(1)` cleanly (following the `diff(1)`
     /// convention: exit 1 = differences found, not an error).
     DiffHasDifferences,
+
+    /// A redaction operation failed due to a scope or engine error.
+    ///
+    /// This covers the case where the target scope is less restrictive than
+    /// the existing `disclosure_scope` of the input file, or when the
+    /// redaction engine produces invalid output.
+    RedactionError {
+        /// A description of the redaction error.
+        detail: String,
+    },
 }
 
 impl CliError {
@@ -136,7 +146,8 @@ impl CliError {
             | Self::MergeConflict { .. }
             | Self::NodeNotFound { .. }
             | Self::NoResults { .. }
-            | Self::DiffHasDifferences => 1,
+            | Self::DiffHasDifferences
+            | Self::RedactionError { .. } => 1,
 
             Self::GraphBuildError { .. } => 2,
         }
@@ -196,6 +207,9 @@ impl CliError {
                 format!("error: graph build failed: {detail}")
             }
             Self::DiffHasDifferences => "diff: files differ".to_owned(),
+            Self::RedactionError { detail } => {
+                format!("error: redaction failed: {detail}")
+            }
         }
     }
 }
