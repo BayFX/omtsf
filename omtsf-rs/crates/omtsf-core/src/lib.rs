@@ -9,6 +9,7 @@ pub mod file;
 pub mod graph;
 pub mod identity;
 pub mod merge;
+pub mod merge_pipeline;
 pub mod newtypes;
 pub mod redaction;
 pub mod rules_l1_eid;
@@ -46,6 +47,9 @@ pub use identity::{
 pub use merge::{
     Conflict, ConflictEntry, MergeMetadata, SameAsThreshold, ScalarMergeResult,
     apply_same_as_edges, build_conflicts_value, merge_identifiers, merge_labels, merge_scalars,
+};
+pub use merge_pipeline::{
+    MergeConfig, MergeError, MergeOutput, MergeWarning, merge, merge_with_config,
 };
 pub use newtypes::{CalendarDate, CountryCode, EdgeId, FileSalt, NewtypeError, NodeId, SemVer};
 pub use redaction::{
