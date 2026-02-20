@@ -139,6 +139,18 @@ pub enum Command {
         /// Only report added/removed/changed IDs, not property-level detail.
         #[arg(long)]
         ids_only: bool,
+        /// Only print the summary statistics line, no per-element details.
+        #[arg(long)]
+        summary_only: bool,
+        /// Restrict diff to nodes of this type (repeatable).
+        #[arg(long, value_name = "TYPE")]
+        node_type: Vec<String>,
+        /// Restrict diff to edges of this type (repeatable).
+        #[arg(long, value_name = "TYPE")]
+        edge_type: Vec<String>,
+        /// Exclude this property from comparison (repeatable).
+        #[arg(long, value_name = "FIELD")]
+        ignore_field: Vec<String>,
     },
 
     /// Re-serialize an .omts file (normalize whitespace, key ordering).
@@ -344,8 +356,31 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
             cmd::subgraph::run(&content, node_ids, *expand)
         }
 
+        Command::Diff {
+            a,
+            b,
+            ids_only,
+            summary_only,
+            node_type,
+            edge_type,
+            ignore_field,
+        } => {
+            let content_a = io::read_input(a, cli.max_file_size)?;
+            let content_b = io::read_input(b, cli.max_file_size)?;
+            cmd::diff::run(
+                &content_a,
+                &content_b,
+                *ids_only,
+                *summary_only,
+                node_type,
+                edge_type,
+                ignore_field,
+                &cli.format,
+            )
+        }
+
         // Commands not yet implemented — exit 2 to indicate input failure.
-        Command::Merge { .. } | Command::Redact { .. } | Command::Diff { .. } => {
+        Command::Merge { .. } | Command::Redact { .. } => {
             eprintln!("not yet implemented");
             std::process::exit(2);
         }

@@ -4,6 +4,7 @@
 /// module takes the parsed arguments and returns `Ok(())` on success or
 /// a [`crate::error::CliError`] on failure.
 pub mod convert;
+pub mod diff;
 pub mod init;
 pub mod inspect;
 pub mod path;

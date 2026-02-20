@@ -1,0 +1,14 @@
+{
+  "omtsf_version": "0.1.0",
+  "snapshot_date": "2026-02-19",
+  "file_salt": "2222222222222222222222222222222222222222222222222222222222222222",
+  "nodes": [
+    {
+      "id": "org-001",
+      "type": "organization",
+      "name": "Acme Corporation",
+      "identifiers": [{"scheme": "duns", "value": "123456789"}]
+    }
+  ],
+  "edges": []
+}

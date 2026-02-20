@@ -108,6 +108,13 @@ pub enum CliError {
         /// A description of the construction error.
         detail: String,
     },
+
+    /// A diff was computed successfully and found at least one difference.
+    ///
+    /// The diff output has already been written to stdout; this variant exists
+    /// so `main` can call `process::exit(1)` cleanly (following the `diff(1)`
+    /// convention: exit 1 = differences found, not an error).
+    DiffHasDifferences,
 }
 
 impl CliError {
@@ -128,7 +135,8 @@ impl CliError {
             Self::ValidationErrors
             | Self::MergeConflict { .. }
             | Self::NodeNotFound { .. }
-            | Self::NoResults { .. } => 1,
+            | Self::NoResults { .. }
+            | Self::DiffHasDifferences => 1,
 
             Self::GraphBuildError { .. } => 2,
         }
@@ -187,6 +195,7 @@ impl CliError {
             Self::GraphBuildError { detail } => {
                 format!("error: graph build failed: {detail}")
             }
+            Self::DiffHasDifferences => "diff: files differ".to_owned(),
         }
     }
 }
