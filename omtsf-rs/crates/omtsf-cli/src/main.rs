@@ -290,6 +290,18 @@ fn main() {
 /// appropriate exit code.
 fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
     match &cli.command {
+        Command::Validate { file, level } => {
+            let content = io::read_input(file, cli.max_file_size)?;
+            cmd::validate::run(
+                &content,
+                *level,
+                &cli.format,
+                cli.quiet,
+                cli.verbose,
+                cli.no_color,
+            )
+        }
+
         Command::Inspect { file } => {
             let content = io::read_input(file, cli.max_file_size)?;
             cmd::inspect::run(&content, &cli.format)
@@ -303,8 +315,7 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
         Command::Init { example } => cmd::init::run(*example),
 
         // Commands not yet implemented — exit 2 to indicate input failure.
-        Command::Validate { .. }
-        | Command::Merge { .. }
+        Command::Merge { .. }
         | Command::Redact { .. }
         | Command::Diff { .. }
         | Command::Reach { .. }
