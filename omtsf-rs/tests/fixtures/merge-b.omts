@@ -1,0 +1,28 @@
+{
+  "omtsf_version": "1.0.0",
+  "snapshot_date": "2026-02-20",
+  "file_salt": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "nodes": [
+    {
+      "id": "org-acme-2",
+      "type": "organization",
+      "name": "Acme Corp",
+      "identifiers": [
+        { "scheme": "lei", "value": "TESTLEISHAREDTEST062" }
+      ]
+    },
+    {
+      "id": "org-factory",
+      "type": "facility",
+      "name": "Acme Factory East"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-operates",
+      "type": "operates",
+      "source": "org-acme-2",
+      "target": "org-factory"
+    }
+  ]
+}

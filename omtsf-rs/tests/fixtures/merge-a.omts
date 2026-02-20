@@ -1,0 +1,31 @@
+{
+  "omtsf_version": "1.0.0",
+  "snapshot_date": "2026-02-19",
+  "file_salt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "nodes": [
+    {
+      "id": "org-acme",
+      "type": "organization",
+      "name": "Acme Corp",
+      "identifiers": [
+        { "scheme": "lei", "value": "TESTLEISHAREDTEST062" }
+      ]
+    },
+    {
+      "id": "org-supplier",
+      "type": "organization",
+      "name": "Supplier Alpha",
+      "identifiers": [
+        { "scheme": "duns", "value": "111111111" }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-supplies",
+      "type": "supplies",
+      "source": "org-supplier",
+      "target": "org-acme"
+    }
+  ]
+}
