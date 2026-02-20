@@ -10,8 +10,10 @@
 //! - 2 = parse/validation failure on any input file
 use std::io::Write as _;
 
+use omtsf_core::validation::{ValidationConfig, validate};
 use omtsf_core::{OmtsFile, merge};
 
+use crate::MergeStrategy;
 use crate::PathOrStdin;
 use crate::error::CliError;
 use crate::io::read_input;
@@ -22,22 +24,61 @@ use crate::io::read_input;
 
 /// Runs the `merge` command.
 ///
-/// Reads each path in `files`, parses them as OMTSF files, runs the merge
+/// Reads each path in `files`, runs L1 validation on each, runs the merge
 /// engine, and writes the merged output to stdout as pretty-printed JSON.
 /// Warnings and conflict statistics are written to stderr.
 ///
 /// # Errors
 ///
 /// - [`CliError::ParseFailed`] — any input file is not a valid OMTSF file.
+/// - [`CliError::ValidationErrors`] — any input file fails L1 validation.
 /// - [`CliError::MergeConflict`] — the merge engine reports an internal error.
-pub fn run(files: &[PathOrStdin], max_file_size: u64) -> Result<(), CliError> {
-    // --- Read and parse each file ---
+pub fn run(
+    files: &[PathOrStdin],
+    strategy: &MergeStrategy,
+    max_file_size: u64,
+) -> Result<(), CliError> {
+    // --- Reject unimplemented strategy variants ---
+    if matches!(strategy, MergeStrategy::Intersect) {
+        eprintln!("error: intersect strategy is not yet implemented");
+        return Err(CliError::MergeConflict {
+            detail: "intersect strategy is not yet implemented".to_owned(),
+        });
+    }
+
+    // --- Read, parse, and L1-validate each file ---
+    let l1_config = ValidationConfig {
+        run_l1: true,
+        run_l2: false,
+        run_l3: false,
+    };
+    let stderr = std::io::stderr();
+    let mut err_out = stderr.lock();
+
     let mut parsed: Vec<OmtsFile> = Vec::with_capacity(files.len());
     for source in files {
         let content = read_input(source, max_file_size)?;
         let file: OmtsFile = serde_json::from_str(&content).map_err(|e| CliError::ParseFailed {
             detail: e.to_string(),
         })?;
+
+        // Run L1 validation on each input file before merging.
+        let validation_result = validate(&file, &l1_config, None);
+        if validation_result.has_errors() {
+            for diag in validation_result.errors() {
+                writeln!(
+                    err_out,
+                    "error: {} {}: {}",
+                    diag.rule_id, diag.location, diag.message
+                )
+                .map_err(|e| CliError::IoError {
+                    source: "stderr".to_owned(),
+                    detail: e.to_string(),
+                })?;
+            }
+            return Err(CliError::ValidationErrors);
+        }
+
         parsed.push(file);
     }
 
@@ -47,9 +88,6 @@ pub fn run(files: &[PathOrStdin], max_file_size: u64) -> Result<(), CliError> {
     })?;
 
     // --- Emit warnings to stderr ---
-    let stderr = std::io::stderr();
-    let mut err_out = stderr.lock();
-
     for warning in &output.warnings {
         writeln!(err_out, "warning: {warning}").map_err(|e| CliError::IoError {
             source: "stderr".to_owned(),
