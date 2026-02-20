@@ -18,9 +18,7 @@ use crate::boundary_hash::generate_file_salt;
 use crate::canonical::CanonicalId;
 use crate::enums::{EdgeType, EdgeTypeTag};
 use crate::file::OmtsFile;
-use crate::identity::{
-    build_edge_candidate_index, edges_match, identifiers_match, is_lei_annulled,
-};
+use crate::identity::{edges_match, identifiers_match, is_lei_annulled};
 use crate::merge::{
     Conflict, MergeMetadata, SameAsThreshold, ScalarMergeResult, build_conflicts_value,
     merge_identifiers, merge_labels, merge_scalars,
@@ -581,32 +579,47 @@ pub fn merge_with_config(
     // -----------------------------------------------------------------------
     // Step 7: Merge edges.
     // -----------------------------------------------------------------------
-    // Build a node-id → ordinal lookup for the edge candidate index.
-    // For edges: source/target IDs are file-local; we need to resolve them
-    // to global ordinals using the per-file maps.
-    // We build a combined lookup: (file_idx, id_str) → ordinal.
-    // Since all_edges already has edge_origins, we need a lookup that
-    // takes (file_idx, id_str).
+    // Node IDs are file-local: two files can both have a node named "org-1"
+    // that refer to entirely different entities.  We must resolve each edge's
+    // source/target through the id-map of the file that owns that edge, not
+    // through a global map that would silently clobber later files' entries.
     //
-    // For build_edge_candidate_index we need a single closure. We'll build
-    // a combined node_id lookup that assumes IDs are unique across all files
-    // (if two files have the same node ID, we take the first occurrence).
-    // The per-file maps handle same_as above; here for edge candidate detection
-    // we use a global map that maps id_str → ordinal of first occurrence.
-    let mut global_node_id_map: HashMap<String, usize> = HashMap::new();
-    for (ord, node) in all_nodes.iter().enumerate() {
-        global_node_id_map.entry(node.id.to_string()).or_insert(ord);
-    }
+    // `edge_node_ordinal(edge_idx, id_str)` performs that per-file lookup.
 
     // Pre-compute a snapshot of union-find representatives for all node ordinals.
-    // `build_edge_candidate_index` requires a `Fn` closure (not `FnMut`), so we
-    // cannot pass `uf.find` directly (which takes `&mut self`).
+    // We need this as a plain Vec (not &mut uf) so we can call it from closures.
     let node_representatives: Vec<usize> = (0..total_nodes).map(|i| uf.find(i)).collect();
 
-    let node_ordinal_fn = |id: &str| -> Option<usize> { global_node_id_map.get(id).copied() };
-    let find_fn = |ord: usize| -> usize { node_representatives[ord] };
+    // Per-file node ordinal lookup: resolves an id string to a global ordinal
+    // using the file that owns edge `edge_idx`.
+    let edge_node_ordinal = |edge_idx: usize, id: &str| -> Option<usize> {
+        let file_idx = edge_origins[edge_idx];
+        per_file_id_maps[file_idx].get(id).copied()
+    };
 
-    let edge_candidate_index = build_edge_candidate_index(&all_edges, node_ordinal_fn, find_fn);
+    // Build the edge candidate index using per-file resolution.
+    // We inline the logic from `build_edge_candidate_index` so we can pass
+    // the edge index to the node-ordinal lookup.
+    let edge_candidate_index = {
+        use crate::identity::{EdgeCompositeKey, edge_composite_key};
+        let mut index: HashMap<EdgeCompositeKey, Vec<usize>> = HashMap::new();
+        for (edge_idx, edge) in all_edges.iter().enumerate() {
+            let Some(src_ord) = edge_node_ordinal(edge_idx, edge.source.as_ref()) else {
+                continue;
+            };
+            let Some(tgt_ord) = edge_node_ordinal(edge_idx, edge.target.as_ref()) else {
+                continue;
+            };
+            let src_rep = node_representatives[src_ord];
+            let tgt_rep = node_representatives[tgt_ord];
+            let Some(key) = edge_composite_key(src_rep, tgt_rep, edge) else {
+                // same_as — skip
+                continue;
+            };
+            index.entry(key).or_default().push(edge_idx);
+        }
+        index
+    };
 
     // For each bucket in the edge candidate index, run pairwise edges_match
     // and build merge groups using a second union-find for edges.
@@ -624,18 +637,18 @@ pub fn merge_with_config(
                 let edge_a = &all_edges[ei];
                 let edge_b = &all_edges[ej];
 
-                // Resolve representatives.
-                let src_rep_a = node_ordinal_fn(edge_a.source.as_ref())
-                    .map(|o| uf.find(o))
+                // Resolve representatives using per-file maps.
+                let src_rep_a = edge_node_ordinal(ei, edge_a.source.as_ref())
+                    .map(|o| node_representatives[o])
                     .unwrap_or(usize::MAX);
-                let tgt_rep_a = node_ordinal_fn(edge_a.target.as_ref())
-                    .map(|o| uf.find(o))
+                let tgt_rep_a = edge_node_ordinal(ei, edge_a.target.as_ref())
+                    .map(|o| node_representatives[o])
                     .unwrap_or(usize::MAX);
-                let src_rep_b = node_ordinal_fn(edge_b.source.as_ref())
-                    .map(|o| uf.find(o))
+                let src_rep_b = edge_node_ordinal(ej, edge_b.source.as_ref())
+                    .map(|o| node_representatives[o])
                     .unwrap_or(usize::MAX);
-                let tgt_rep_b = node_ordinal_fn(edge_b.target.as_ref())
-                    .map(|o| uf.find(o))
+                let tgt_rep_b = edge_node_ordinal(ej, edge_b.target.as_ref())
+                    .map(|o| node_representatives[o])
                     .unwrap_or(usize::MAX);
 
                 if edges_match(src_rep_a, tgt_rep_a, src_rep_b, tgt_rep_b, edge_a, edge_b) {
@@ -691,15 +704,16 @@ pub fn merge_with_config(
     let mut edge_group_sort_keys: Vec<(String, String, String, String, usize)> = edge_groups
         .iter()
         .map(|(&rep, member_ordinals)| {
-            let first_edge = &all_edges[member_ordinals[0]];
+            let first_edge_idx = member_ordinals[0];
+            let first_edge = &all_edges[first_edge_idx];
 
-            let src_canonical = node_ordinal_fn(first_edge.source.as_ref())
-                .map(|o| uf.find(o))
+            let src_canonical = edge_node_ordinal(first_edge_idx, first_edge.source.as_ref())
+                .map(|o| node_representatives[o])
                 .and_then(|node_rep| node_rep_to_canonical.get(&node_rep).cloned())
                 .unwrap_or_default();
 
-            let tgt_canonical = node_ordinal_fn(first_edge.target.as_ref())
-                .map(|o| uf.find(o))
+            let tgt_canonical = edge_node_ordinal(first_edge_idx, first_edge.target.as_ref())
+                .map(|o| node_representatives[o])
                 .and_then(|node_rep| node_rep_to_canonical.get(&node_rep).cloned())
                 .unwrap_or_default();
 
@@ -1415,5 +1429,90 @@ mod tests {
             "merge_metadata must be present in output file extra"
         );
         assert_eq!(output.metadata.source_files.len(), 2);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test: colliding node IDs across files are treated as distinct entities
+    // -----------------------------------------------------------------------
+
+    /// Two files each have a node named "org-1", but they refer to different
+    /// real-world entities (different names, no shared external identifiers).
+    /// Each file also has an edge from "org-1" to its own distinct buyer node.
+    ///
+    /// After merging, the pipeline must produce two separate supplier nodes (one
+    /// per file) and two separate edges, not mistakenly bucket both files'
+    /// edges as candidates for the same merge group because they share the
+    /// local string "org-1".
+    #[test]
+    fn merge_colliding_node_ids_across_files_are_distinct() {
+        // File A: org-1 (Alpha Supplier) → buyer-1 (Alpha Buyer)
+        let supplier_a = make_org_node(
+            "org-1",
+            Some("Alpha Supplier"),
+            Some(vec![make_identifier("duns", "111111111")]),
+        );
+        let buyer_a = make_org_node("buyer-1", Some("Alpha Buyer"), None);
+        let edge_a = make_supplies_edge("e-1", "org-1", "buyer-1");
+
+        // File B: org-1 (Beta Supplier) → buyer-1 (Beta Buyer)
+        // Same local node ID strings, entirely different entities.
+        let supplier_b = make_org_node(
+            "org-1",
+            Some("Beta Supplier"),
+            Some(vec![make_identifier("duns", "222222222")]),
+        );
+        let buyer_b = make_org_node("buyer-1", Some("Beta Buyer"), None);
+        let edge_b = make_supplies_edge("e-1", "org-1", "buyer-1");
+
+        let file_a = minimal_file(SALT_A, vec![supplier_a, buyer_a], vec![edge_a]);
+        let file_b = minimal_file(SALT_B, vec![supplier_b, buyer_b], vec![edge_b]);
+
+        let output = merge(&[file_a, file_b]).expect("colliding-id merge should succeed");
+
+        // No shared external identifiers → all four nodes stay distinct.
+        assert_eq!(
+            output.file.nodes.len(),
+            4,
+            "four distinct nodes expected (2 suppliers + 2 buyers)"
+        );
+
+        // Each file contributes one edge; they connect different node pairs, so
+        // they must NOT be merged together.
+        assert_eq!(
+            output.file.edges.len(),
+            2,
+            "two distinct edges expected — one per file"
+        );
+
+        // Every edge must reference nodes that exist in the output.
+        let node_ids: std::collections::HashSet<&str> =
+            output.file.nodes.iter().map(|n| &n.id as &str).collect();
+        for edge in &output.file.edges {
+            assert!(
+                node_ids.contains(&edge.source as &str),
+                "edge source {} must reference an existing merged node",
+                &edge.source as &str,
+            );
+            assert!(
+                node_ids.contains(&edge.target as &str),
+                "edge target {} must reference an existing merged node",
+                &edge.target as &str,
+            );
+        }
+
+        // The two output edges must connect different source/target pairs,
+        // confirming that file A's "org-1" and file B's "org-1" were resolved
+        // to different merged node IDs.
+        let edge_pairs: Vec<(&str, &str)> = output
+            .file
+            .edges
+            .iter()
+            .map(|e| (&e.source as &str, &e.target as &str))
+            .collect();
+        assert_eq!(edge_pairs.len(), 2, "there must be exactly two edge pairs");
+        assert_ne!(
+            edge_pairs[0], edge_pairs[1],
+            "the two edges must connect different (source, target) pairs"
+        );
     }
 }
