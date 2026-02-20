@@ -6,3 +6,4 @@
 pub mod convert;
 pub mod init;
 pub mod inspect;
+pub mod validate;

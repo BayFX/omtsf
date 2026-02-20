@@ -68,6 +68,16 @@ pub enum CliError {
         detail: String,
     },
 
+    /// The input is not a valid OMTSF file (not valid JSON or missing required
+    /// fields).
+    ///
+    /// This is distinct from I/O errors: the bytes were read successfully but
+    /// could not be parsed as an [`omtsf_core::OmtsFile`].
+    ParseFailed {
+        /// A human-readable description of the parse failure.
+        detail: String,
+    },
+
     // --- Exit code 1: logical failures ---
     /// A validation pass found one or more L1 errors.
     ///
@@ -94,7 +104,8 @@ impl CliError {
             | Self::FileTooLarge { .. }
             | Self::InvalidUtf8 { .. }
             | Self::StdinReadError { .. }
-            | Self::IoError { .. } => 2,
+            | Self::IoError { .. }
+            | Self::ParseFailed { .. } => 2,
 
             Self::ValidationErrors | Self::MergeConflict { .. } => 1,
         }
@@ -136,6 +147,9 @@ impl CliError {
             }
             Self::IoError { source, detail } => {
                 format!("error: I/O error reading {source}: {detail}")
+            }
+            Self::ParseFailed { detail } => {
+                format!("error: parse failed: {detail}")
             }
             Self::ValidationErrors => "error: validation failed with one or more errors".to_owned(),
             Self::MergeConflict { detail } => {
