@@ -15,7 +15,7 @@ use omtsf_core::{OmtsFile, merge};
 
 use crate::MergeStrategy;
 use crate::PathOrStdin;
-use crate::error::{CliError, internal_error_message};
+use crate::error::CliError;
 use crate::io::read_input;
 
 // ---------------------------------------------------------------------------
@@ -109,7 +109,7 @@ pub fn run(
 
     // --- Write merged file to stdout ---
     let json = serde_json::to_string_pretty(&output.file).map_err(|e| CliError::InternalError {
-        detail: internal_error_message(&format!("JSON serialization of merged output failed: {e}")),
+        detail: format!("JSON serialization of merged output failed: {e}"),
     })?;
 
     let stdout = std::io::stdout();

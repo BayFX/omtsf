@@ -16,7 +16,7 @@ use omtsf_core::redact;
 use omtsf_core::{DisclosureScope as CoreScope, OmtsFile, enums::NodeType, enums::NodeTypeTag};
 
 use crate::DisclosureScope as CliScope;
-use crate::error::{CliError, internal_error_message};
+use crate::error::CliError;
 
 // ---------------------------------------------------------------------------
 // run
@@ -98,9 +98,7 @@ pub fn run(content: &str, scope: &CliScope) -> Result<(), CliError> {
 
     // --- Write redacted file to stdout ---
     let json = serde_json::to_string_pretty(&redacted).map_err(|e| CliError::InternalError {
-        detail: internal_error_message(&format!(
-            "JSON serialization of redacted output failed: {e}"
-        )),
+        detail: format!("JSON serialization of redacted output failed: {e}"),
     })?;
 
     let stdout = std::io::stdout();

@@ -10,7 +10,7 @@
 //! Exit codes: 0 = success, 2 = parse failure.
 use omtsf_core::OmtsFile;
 
-use crate::error::{CliError, internal_error_message};
+use crate::error::CliError;
 
 // ---------------------------------------------------------------------------
 // run
@@ -35,11 +35,11 @@ pub fn run(content: &str, compact: bool) -> Result<(), CliError> {
 
     let output = if compact {
         serde_json::to_string(&file).map_err(|e| CliError::InternalError {
-            detail: internal_error_message(&format!("JSON serialization failed: {e}")),
+            detail: format!("JSON serialization failed: {e}"),
         })?
     } else {
         serde_json::to_string_pretty(&file).map_err(|e| CliError::InternalError {
-            detail: internal_error_message(&format!("JSON serialization failed: {e}")),
+            detail: format!("JSON serialization failed: {e}"),
         })?
     };
 
