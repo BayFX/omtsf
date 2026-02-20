@@ -93,7 +93,7 @@ impl EdgeRef {
 }
 
 // ---------------------------------------------------------------------------
-// Property/identifier/label change stubs (out of scope for T-029)
+// Property/identifier/label change types
 // ---------------------------------------------------------------------------
 
 /// A change to a single scalar property field.
@@ -151,11 +151,11 @@ pub struct NodeDiff {
     pub node_type: String,
     /// Canonical identifier strings that caused the match.
     pub matched_by: Vec<String>,
-    /// Scalar property changes (populated in a later task).
+    /// Scalar property changes detected between the two nodes.
     pub property_changes: Vec<PropertyChange>,
-    /// Identifier set differences (populated in a later task).
+    /// Identifier set differences: identifiers added, removed, or modified.
     pub identifier_changes: IdentifierSetDiff,
-    /// Label set differences (populated in a later task).
+    /// Label set differences: labels added or removed.
     pub label_changes: LabelSetDiff,
 }
 
@@ -168,11 +168,11 @@ pub struct EdgeDiff {
     pub id_b: String,
     /// Edge type.
     pub edge_type: String,
-    /// Scalar property changes (populated in a later task).
+    /// Scalar property changes detected between the two edges.
     pub property_changes: Vec<PropertyChange>,
-    /// Identifier set differences (populated in a later task).
+    /// Identifier set differences: identifiers added, removed, or modified.
     pub identifier_changes: IdentifierSetDiff,
-    /// Label set differences (populated in a later task).
+    /// Label set differences: labels added or removed.
     pub label_changes: LabelSetDiff,
 }
 
@@ -808,13 +808,22 @@ fn compare_data_quality(
                 }
             }
             // Extra fields in data_quality are compared as raw JSON values.
-            for key in aq.extra.keys().chain(bq.extra.keys()) {
+            // Collect all keys from both sides into a set so that keys present
+            // in both maps are visited exactly once (avoiding duplicate entries).
+            let mut extra_keys: HashSet<&str> = HashSet::new();
+            for k in aq.extra.keys() {
+                extra_keys.insert(k.as_str());
+            }
+            for k in bq.extra.keys() {
+                extra_keys.insert(k.as_str());
+            }
+            for key in &extra_keys {
                 let name = format!("{field_prefix}.{key}");
                 if ignore.contains(&name) {
                     continue;
                 }
-                let av = aq.extra.get(key).cloned();
-                let bv = bq.extra.get(key).cloned();
+                let av = aq.extra.get(*key).cloned();
+                let bv = bq.extra.get(*key).cloned();
                 maybe_change(&name, av, bv, out);
             }
         }
@@ -1793,7 +1802,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // T-029 Node matching tests
+    // Node matching tests
     // -----------------------------------------------------------------------
 
     /// Two empty files produce an empty diff.
@@ -1954,7 +1963,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // T-029 Edge matching tests
+    // Edge matching tests
     // -----------------------------------------------------------------------
 
     /// Edges are matched when both endpoints match and type is the same.
