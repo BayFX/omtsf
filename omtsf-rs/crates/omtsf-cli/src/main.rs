@@ -345,9 +345,7 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
         }
 
         // Commands not yet implemented — exit 2 to indicate input failure.
-        Command::Merge { .. }
-        | Command::Redact { .. }
-        | Command::Diff { .. } => {
+        Command::Merge { .. } | Command::Redact { .. } | Command::Diff { .. } => {
             eprintln!("not yet implemented");
             std::process::exit(2);
         }
