@@ -1,0 +1,18 @@
+{
+  "omtsf_version": "0.1.0",
+  "snapshot_date": "2026-02-20",
+  "file_salt": "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00",
+  "nodes": [
+    { "id": "org-a", "type": "organization", "name": "Org A" },
+    { "id": "org-b", "type": "organization", "name": "Org B" },
+    { "id": "org-c", "type": "organization", "name": "Org C" },
+    { "id": "org-d", "type": "organization", "name": "Org D" },
+    { "id": "org-e", "type": "organization", "name": "Org E" }
+  ],
+  "edges": [
+    { "id": "e-ab", "type": "supplies", "source": "org-a", "target": "org-b" },
+    { "id": "e-bc", "type": "supplies", "source": "org-b", "target": "org-c" },
+    { "id": "e-cd", "type": "supplies", "source": "org-c", "target": "org-d" },
+    { "id": "e-ae", "type": "supplies", "source": "org-a", "target": "org-e" }
+  ]
+}

@@ -314,13 +314,40 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
 
         Command::Init { example } => cmd::init::run(*example),
 
+        Command::Reach {
+            file,
+            node_id,
+            depth,
+            direction,
+        } => {
+            let content = io::read_input(file, cli.max_file_size)?;
+            cmd::reach::run(&content, node_id, *depth, direction, &cli.format)
+        }
+
+        Command::Path {
+            file,
+            from,
+            to,
+            max_paths,
+            max_depth,
+        } => {
+            let content = io::read_input(file, cli.max_file_size)?;
+            cmd::path::run(&content, from, to, *max_paths, *max_depth, &cli.format)
+        }
+
+        Command::Subgraph {
+            file,
+            node_ids,
+            expand,
+        } => {
+            let content = io::read_input(file, cli.max_file_size)?;
+            cmd::subgraph::run(&content, node_ids, *expand)
+        }
+
         // Commands not yet implemented — exit 2 to indicate input failure.
         Command::Merge { .. }
         | Command::Redact { .. }
-        | Command::Diff { .. }
-        | Command::Reach { .. }
-        | Command::Path { .. }
-        | Command::Subgraph { .. } => {
+        | Command::Diff { .. } => {
             eprintln!("not yet implemented");
             std::process::exit(2);
         }

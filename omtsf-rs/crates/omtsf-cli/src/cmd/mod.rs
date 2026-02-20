@@ -6,4 +6,7 @@
 pub mod convert;
 pub mod init;
 pub mod inspect;
+pub mod path;
+pub mod reach;
+pub mod subgraph;
 pub mod validate;

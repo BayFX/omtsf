@@ -90,6 +90,24 @@ pub enum CliError {
         /// A description of the conflict.
         detail: String,
     },
+
+    /// A node ID supplied to a graph query was not found in the graph.
+    NodeNotFound {
+        /// The node ID that could not be resolved.
+        node_id: String,
+    },
+
+    /// A graph query returned no results (e.g. no path found).
+    NoResults {
+        /// A human-readable description of what was not found.
+        detail: String,
+    },
+
+    /// The graph could not be built from the input file.
+    GraphBuildError {
+        /// A description of the construction error.
+        detail: String,
+    },
 }
 
 impl CliError {
@@ -107,7 +125,12 @@ impl CliError {
             | Self::IoError { .. }
             | Self::ParseFailed { .. } => 2,
 
-            Self::ValidationErrors | Self::MergeConflict { .. } => 1,
+            Self::ValidationErrors
+            | Self::MergeConflict { .. }
+            | Self::NodeNotFound { .. }
+            | Self::NoResults { .. } => 1,
+
+            Self::GraphBuildError { .. } => 2,
         }
     }
 
@@ -154,6 +177,15 @@ impl CliError {
             Self::ValidationErrors => "error: validation failed with one or more errors".to_owned(),
             Self::MergeConflict { detail } => {
                 format!("error: merge conflict: {detail}")
+            }
+            Self::NodeNotFound { node_id } => {
+                format!("error: node not found: {node_id:?}")
+            }
+            Self::NoResults { detail } => {
+                format!("error: {detail}")
+            }
+            Self::GraphBuildError { detail } => {
+                format!("error: graph build failed: {detail}")
             }
         }
     }
