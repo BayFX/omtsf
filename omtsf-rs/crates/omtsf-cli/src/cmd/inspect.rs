@@ -123,9 +123,8 @@ impl InspectStats {
 ///
 /// Returns [`CliError`] with exit code 2 if the content cannot be parsed.
 pub fn run(content: &str, format: &OutputFormat) -> Result<(), CliError> {
-    let file: OmtsFile = serde_json::from_str(content).map_err(|e| CliError::IoError {
-        source: "<input>".to_owned(),
-        detail: format!("JSON parse error: {e}"),
+    let file: OmtsFile = serde_json::from_str(content).map_err(|e| CliError::ParseFailed {
+        detail: format!("line {}, column {}: {e}", e.line(), e.column()),
     })?;
 
     let stats = InspectStats::from_file(&file);

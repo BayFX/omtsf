@@ -19,7 +19,7 @@ use omtsf_core::generate_file_salt;
 use omtsf_core::newtypes::{CalendarDate, EdgeId, NodeId, SemVer};
 use omtsf_core::structures::{Edge, EdgeProperties, Node};
 
-use crate::error::CliError;
+use crate::error::{CliError, internal_error_message};
 
 // ---------------------------------------------------------------------------
 // run
@@ -44,9 +44,8 @@ pub fn run(example: bool) -> Result<(), CliError> {
         source: "system clock".to_owned(),
         detail: format!("generated date is invalid: {e}"),
     })?;
-    let version = SemVer::try_from("1.0.0").map_err(|e| CliError::IoError {
-        source: "init".to_owned(),
-        detail: format!("internal error: {e}"),
+    let version = SemVer::try_from("1.0.0").map_err(|e| CliError::InternalError {
+        detail: internal_error_message(&format!("hardcoded SemVer is invalid: {e}")),
     })?;
 
     let file = if example {
@@ -54,9 +53,8 @@ pub fn run(example: bool) -> Result<(), CliError> {
     } else {
         build_minimal_file(version, snapshot_date, salt)
     }
-    .map_err(|e| CliError::IoError {
-        source: "init".to_owned(),
-        detail: format!("failed to construct file: {e}"),
+    .map_err(|e| CliError::InternalError {
+        detail: internal_error_message(&format!("failed to construct init file: {e}")),
     })?;
 
     let json = serde_json::to_string_pretty(&file).map_err(|e| CliError::IoError {

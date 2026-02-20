@@ -125,6 +125,16 @@ pub enum CliError {
         /// A description of the redaction error.
         detail: String,
     },
+
+    /// An internal error that indicates a bug in omtsf.
+    ///
+    /// These should never occur under normal operation. If one appears it
+    /// means a condition that is logically impossible was reached, and the
+    /// user should file a bug report.
+    InternalError {
+        /// A description of the internal failure.
+        detail: String,
+    },
 }
 
 impl CliError {
@@ -149,69 +159,125 @@ impl CliError {
             | Self::DiffHasDifferences
             | Self::RedactionError { .. } => 1,
 
-            Self::GraphBuildError { .. } => 2,
+            Self::GraphBuildError { .. } | Self::InternalError { .. } => 2,
         }
     }
 
     /// Returns a human-readable error message suitable for printing to stderr.
+    ///
+    /// Every message includes: what went wrong, which file/node/edge is
+    /// affected (where applicable), and guidance on how to fix it.
     pub fn message(&self) -> String {
         match self {
             Self::FileNotFound { path } => {
-                format!("error: file not found: {}", path.display())
+                format!(
+                    "error: file not found: {}\n\
+                     hint: check that the path is correct and the file exists",
+                    path.display()
+                )
             }
             Self::PermissionDenied { path } => {
-                format!("error: permission denied: {}", path.display())
+                format!(
+                    "error: permission denied reading {}\n\
+                     hint: check that you have read access to this file",
+                    path.display()
+                )
             }
             Self::FileTooLarge {
                 source,
                 limit,
                 actual: Some(actual),
             } => {
-                format!("error: file too large: {source} is {actual} bytes, limit is {limit} bytes")
+                format!(
+                    "error: file too large: {source} is {actual} bytes, limit is {limit} bytes\n\
+                     hint: use --max-file-size to raise the limit, or split the file into smaller inputs"
+                )
             }
             Self::FileTooLarge {
                 source,
                 limit,
                 actual: None,
             } => {
-                format!("error: file too large: {source} exceeded limit of {limit} bytes")
+                format!(
+                    "error: file too large: {source} exceeded limit of {limit} bytes\n\
+                     hint: use --max-file-size to raise the limit, or split the input into smaller chunks"
+                )
             }
             Self::InvalidUtf8 {
                 source,
                 byte_offset,
             } => {
                 format!(
-                    "error: invalid UTF-8 in {source}: first invalid byte at offset {byte_offset}"
+                    "error: invalid UTF-8 in {source}: first invalid byte at offset {byte_offset}\n\
+                     hint: ensure the file is saved as UTF-8; re-encode it with `iconv -t UTF-8` if needed"
                 )
             }
             Self::StdinReadError { detail } => {
-                format!("error: failed to read stdin: {detail}")
+                format!(
+                    "error: failed to read stdin: {detail}\n\
+                     hint: ensure the piped input is not truncated and the source process exited cleanly"
+                )
             }
             Self::IoError { source, detail } => {
                 format!("error: I/O error reading {source}: {detail}")
             }
             Self::ParseFailed { detail } => {
-                format!("error: parse failed: {detail}")
+                format!(
+                    "error: failed to parse input as an OMTSF file: {detail}\n\
+                     hint: validate the JSON syntax and ensure all required fields \
+                     (omtsf_version, snapshot_date, file_salt, nodes, edges) are present"
+                )
             }
-            Self::ValidationErrors => "error: validation failed with one or more errors".to_owned(),
+            Self::ValidationErrors => "error: validation failed with one or more errors\n\
+                 hint: review the diagnostics above and correct the reported fields"
+                .to_owned(),
             Self::MergeConflict { detail } => {
-                format!("error: merge conflict: {detail}")
+                format!(
+                    "error: merge conflict: {detail}\n\
+                     hint: ensure each input file is individually valid before merging"
+                )
             }
             Self::NodeNotFound { node_id } => {
-                format!("error: node not found: {node_id:?}")
+                format!(
+                    "error: node not found: {node_id:?}\n\
+                     hint: run `omtsf inspect <file>` to list node IDs present in the graph"
+                )
             }
             Self::NoResults { detail } => {
-                format!("error: {detail}")
+                format!(
+                    "error: {detail}\n\
+                     hint: verify the node IDs are correct and the graph contains the expected edges"
+                )
             }
             Self::GraphBuildError { detail } => {
-                format!("error: graph build failed: {detail}")
+                format!(
+                    "error: could not build graph from input: {detail}\n\
+                     hint: run `omtsf validate <file>` to check for structural errors first"
+                )
             }
             Self::DiffHasDifferences => "diff: files differ".to_owned(),
             Self::RedactionError { detail } => {
-                format!("error: redaction failed: {detail}")
+                format!(
+                    "error: redaction failed: {detail}\n\
+                     hint: the target --scope must be at least as restrictive as the \
+                     file's existing disclosure_scope"
+                )
             }
+            Self::InternalError { detail } => internal_error_message(detail),
         }
     }
+}
+
+/// Formats a message for an internal error (bug) that should be reported.
+///
+/// Call this for error paths that indicate a bug in omtsf rather than a
+/// user input problem.
+pub fn internal_error_message(detail: &str) -> String {
+    format!(
+        "error: internal error: {detail}\n\
+         This is a bug in omtsf. Please report it at \
+         https://github.com/omtsf/omtsf-rs/issues"
+    )
 }
 
 impl fmt::Display for CliError {
@@ -369,5 +435,117 @@ mod tests {
     fn error_trait_is_implemented() {
         let e: Box<dyn std::error::Error> = Box::new(CliError::ValidationErrors);
         assert!(!e.to_string().is_empty());
+    }
+
+    // ── InternalError ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn internal_error_is_exit_2() {
+        let e = CliError::InternalError {
+            detail: "unexpected None in resolved id".to_owned(),
+        };
+        assert_eq!(e.exit_code(), 2);
+    }
+
+    #[test]
+    fn internal_error_message_contains_bug_report_url() {
+        let e = CliError::InternalError {
+            detail: "unreachable branch".to_owned(),
+        };
+        let msg = e.message();
+        assert!(
+            msg.contains("https://github.com/omtsf/omtsf-rs/issues"),
+            "message should contain bug report URL: {msg}"
+        );
+    }
+
+    #[test]
+    fn internal_error_message_contains_detail() {
+        let e = CliError::InternalError {
+            detail: "my specific detail".to_owned(),
+        };
+        let msg = e.message();
+        assert!(
+            msg.contains("my specific detail"),
+            "message should contain detail: {msg}"
+        );
+    }
+
+    #[test]
+    fn internal_error_message_fn_contains_url() {
+        let msg = super::internal_error_message("test detail");
+        assert!(
+            msg.contains("https://github.com/omtsf/omtsf-rs/issues"),
+            "helper should contain bug report URL: {msg}"
+        );
+    }
+
+    // ── ParseFailed with line/column ─────────────────────────────────────────
+
+    #[test]
+    fn parse_failed_message_contains_detail() {
+        let e = CliError::ParseFailed {
+            detail: "line 3, column 5: expected value".to_owned(),
+        };
+        let msg = e.message();
+        assert!(msg.contains("line 3"), "message should contain line: {msg}");
+        assert!(
+            msg.contains("column 5"),
+            "message should contain column: {msg}"
+        );
+    }
+
+    #[test]
+    fn parse_failed_message_contains_guidance() {
+        let e = CliError::ParseFailed {
+            detail: "some error".to_owned(),
+        };
+        let msg = e.message();
+        assert!(
+            msg.contains("omtsf_version") || msg.contains("required fields"),
+            "message should mention required fields: {msg}"
+        );
+    }
+
+    // ── Guidance text ────────────────────────────────────────────────────────
+
+    #[test]
+    fn file_not_found_message_contains_hint() {
+        let e = CliError::FileNotFound {
+            path: PathBuf::from("missing.omts"),
+        };
+        let msg = e.message();
+        assert!(
+            msg.contains("hint") || msg.contains("check"),
+            "message should contain guidance: {msg}"
+        );
+    }
+
+    #[test]
+    fn node_not_found_message_contains_guidance() {
+        let e = CliError::NodeNotFound {
+            node_id: "org-999".to_owned(),
+        };
+        let msg = e.message();
+        assert!(
+            msg.contains("org-999"),
+            "message should contain node ID: {msg}"
+        );
+        assert!(
+            msg.contains("hint") || msg.contains("inspect"),
+            "message should contain guidance: {msg}"
+        );
+    }
+
+    #[test]
+    fn graph_build_error_message_contains_guidance() {
+        let e = CliError::GraphBuildError {
+            detail: "duplicate node ID org-001".to_owned(),
+        };
+        let msg = e.message();
+        assert!(
+            msg.contains("validate") || msg.contains("hint"),
+            "message should suggest validate: {msg}"
+        );
     }
 }
