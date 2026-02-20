@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: CI (${{ matrix.toolchain }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [stable, "1.85.0"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: omtsf-rs
+
+      - name: Check formatting
+        if: matrix.toolchain == 'stable'
+        working-directory: omtsf-rs
+        run: cargo fmt --all -- --check
+
+      - name: Lint
+        working-directory: omtsf-rs
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Test
+        working-directory: omtsf-rs
+        run: cargo test --locked --workspace
+
+      - name: WASM compile check
+        working-directory: omtsf-rs
+        run: cargo check --target wasm32-unknown-unknown -p omtsf-core
+
+      - name: Doc build
+        if: matrix.toolchain == 'stable'
+        working-directory: omtsf-rs
+        run: cargo doc --workspace --no-deps
