@@ -57,10 +57,10 @@ pub fn run(
 ) -> Result<(), CliError> {
     // --- Parse both files ---
     let file_a: OmtsFile = serde_json::from_str(content_a).map_err(|e| CliError::ParseFailed {
-        detail: format!("file A: {e}"),
+        detail: format!("file A, line {}, column {}: {e}", e.line(), e.column()),
     })?;
     let file_b: OmtsFile = serde_json::from_str(content_b).map_err(|e| CliError::ParseFailed {
-        detail: format!("file B: {e}"),
+        detail: format!("file B, line {}, column {}: {e}", e.line(), e.column()),
     })?;
 
     // --- Build DiffFilter ---

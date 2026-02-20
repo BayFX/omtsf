@@ -44,7 +44,7 @@ pub fn run(
 ) -> Result<(), CliError> {
     // --- Parse ---
     let file: OmtsFile = serde_json::from_str(content).map_err(|e| CliError::ParseFailed {
-        detail: e.to_string(),
+        detail: format!("line {}, column {}: {e}", e.line(), e.column()),
     })?;
 
     // --- Build ValidationConfig from --level ---
@@ -216,6 +216,20 @@ mod tests {
         let result = run(NOT_JSON, 2, &OutputFormat::Human, false, false, true);
         let err = result.expect_err("should fail");
         assert_eq!(err.exit_code(), 2);
+    }
+
+    #[test]
+    fn run_parse_error_message_includes_line_and_column() {
+        // Multi-line JSON with a syntax error on a known line.
+        let bad_json = "{\n  \"omtsf_version\": !!bad\n}";
+        let err = run(bad_json, 2, &OutputFormat::Human, false, false, true)
+            .expect_err("should fail to parse");
+        let msg = err.message();
+        assert!(msg.contains("line"), "message should contain 'line': {msg}");
+        assert!(
+            msg.contains("column"),
+            "message should contain 'column': {msg}"
+        );
     }
 
     // ── run: validation errors ────────────────────────────────────────────────

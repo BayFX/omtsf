@@ -37,7 +37,7 @@ use crate::error::CliError;
 pub fn run(content: &str, scope: &CliScope) -> Result<(), CliError> {
     // --- Parse ---
     let file: OmtsFile = serde_json::from_str(content).map_err(|e| CliError::ParseFailed {
-        detail: e.to_string(),
+        detail: format!("line {}, column {}: {e}", e.line(), e.column()),
     })?;
 
     // --- Scope compatibility check ---
@@ -97,8 +97,8 @@ pub fn run(content: &str, scope: &CliScope) -> Result<(), CliError> {
     })?;
 
     // --- Write redacted file to stdout ---
-    let json = serde_json::to_string_pretty(&redacted).map_err(|e| CliError::RedactionError {
-        detail: format!("serialization failed: {e}"),
+    let json = serde_json::to_string_pretty(&redacted).map_err(|e| CliError::InternalError {
+        detail: format!("JSON serialization of redacted output failed: {e}"),
     })?;
 
     let stdout = std::io::stdout();

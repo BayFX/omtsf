@@ -59,7 +59,7 @@ pub fn run(
     for source in files {
         let content = read_input(source, max_file_size)?;
         let file: OmtsFile = serde_json::from_str(&content).map_err(|e| CliError::ParseFailed {
-            detail: e.to_string(),
+            detail: format!("line {}, column {}: {e}", e.line(), e.column()),
         })?;
 
         // Run L1 validation on each input file before merging.
@@ -108,8 +108,8 @@ pub fn run(
     }
 
     // --- Write merged file to stdout ---
-    let json = serde_json::to_string_pretty(&output.file).map_err(|e| CliError::MergeConflict {
-        detail: format!("serialization failed: {e}"),
+    let json = serde_json::to_string_pretty(&output.file).map_err(|e| CliError::InternalError {
+        detail: format!("JSON serialization of merged output failed: {e}"),
     })?;
 
     let stdout = std::io::stdout();

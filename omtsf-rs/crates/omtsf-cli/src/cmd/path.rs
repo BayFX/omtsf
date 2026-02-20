@@ -45,9 +45,8 @@ pub fn run(
     max_depth: u32,
     format: &OutputFormat,
 ) -> Result<(), CliError> {
-    let file: OmtsFile = serde_json::from_str(content).map_err(|e| CliError::IoError {
-        source: "<input>".to_owned(),
-        detail: format!("JSON parse error: {e}"),
+    let file: OmtsFile = serde_json::from_str(content).map_err(|e| CliError::ParseFailed {
+        detail: format!("line {}, column {}: {e}", e.line(), e.column()),
     })?;
 
     let graph = build_graph(&file).map_err(|e| CliError::GraphBuildError {
