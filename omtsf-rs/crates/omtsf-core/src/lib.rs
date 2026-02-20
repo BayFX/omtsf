@@ -3,6 +3,7 @@
 pub mod boundary_hash;
 pub mod canonical;
 pub mod check_digits;
+pub mod diff;
 pub mod enums;
 pub mod file;
 pub mod graph;
@@ -20,6 +21,11 @@ pub mod validation;
 
 pub use boundary_hash::{BoundaryHashError, boundary_ref_value, decode_salt, generate_file_salt};
 pub use canonical::{CanonicalId, build_identifier_index};
+pub use diff::{
+    DiffFilter, DiffResult, DiffSummary, EdgeDiff, EdgeRef, EdgesDiff, IdentifierFieldDiff,
+    IdentifierSetDiff, LabelSetDiff, NodeDiff, NodeRef, NodesDiff, PropertyChange, diff,
+    diff_filtered,
+};
 pub use enums::{
     AttestationOutcome, AttestationStatus, AttestationType, Confidence, ConsolidationBasis,
     ControlType, DisclosureScope, EdgeType, EdgeTypeTag, EmissionFactorSource, EventType, NodeType,
