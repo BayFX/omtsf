@@ -278,6 +278,64 @@ omtsf init --example > demo.omts
 omtsf init --example | omtsf validate -
 ```
 
+### 3.11 `omtsf query <file> [selectors]`
+
+Displays nodes and edges matching property-based selectors. See `query.md` for selector semantics and composition rules.
+
+**Arguments:**
+- `<file>` (required) -- Path to an `.omts` file, or `-` for stdin.
+
+**Selector flags:** (all repeatable)
+- `--node-type <type>` -- Filter by node type (`organization`, `facility`, `good`, `person`, `attestation`, `consignment`, `boundary_ref`, or extension type).
+- `--edge-type <type>` -- Filter by edge type (`supplies`, `ownership`, etc.).
+- `--label <spec>` -- Filter by label. `<key>` matches any label with that key; `<key>=<value>` matches exact key-value pair.
+- `--identifier <spec>` -- Filter by identifier. `<scheme>` matches any identifier with that scheme; `<scheme>:<value>` matches exact scheme-value pair.
+- `--jurisdiction <CC>` -- Filter by jurisdiction (ISO 3166-1 alpha-2 country code).
+- `--name <pattern>` -- Case-insensitive substring match on node name.
+
+**Additional flags:**
+- `--count` -- Print only the count of matching nodes and edges, not the full listing.
+
+**Behavior:** Parses the file, evaluates selectors against all nodes and edges, and displays matching elements to stdout. In human mode, output is a table with columns for ID, type, and name (nodes) or source/target (edges). In JSON mode, emits a JSON object with `nodes` and `edges` arrays. Reports match counts to stderr.
+
+At least one selector flag is required. If none are provided, clap produces a usage error.
+
+**Exit codes:** 0 = at least one match found, 1 = no matches found, 2 = parse/input failure.
+
+**Examples:**
+```
+omtsf query supply-chain.omts --node-type organization --jurisdiction DE
+omtsf query supply-chain.omts --label certified --name "Acme"
+omtsf query -f json graph.omts --identifier lei --count
+omtsf query graph.omts --edge-type supplies --label tier=1
+```
+
+### 3.12 `omtsf extract-subchain <file> [selectors]`
+
+Extracts the subgraph matching property-based selectors and writes a valid `.omts` file to stdout. This is the property-based equivalent of `omtsf subgraph`.
+
+**Arguments:**
+- `<file>` (required) -- Path to an `.omts` file, or `-` for stdin.
+
+**Selector flags:** Same as `omtsf query` (Section 3.11).
+
+**Additional flags:**
+- `--expand <n>` -- Include neighbors up to `n` hops from the seed set (default: 1). Setting `--expand 0` returns only the seed nodes/edges and their immediate incident neighbors.
+
+**Behavior:** Parses the file, evaluates selectors to build the seed set, expands by `--expand` hops using BFS, computes the induced subgraph, and writes the result to stdout as a valid `.omts` file. The output header is copied from the input with an updated `snapshot_date`. The `reporting_entity` is retained only if the referenced node is present in the output subgraph. Reports extraction statistics (seed count, expanded count, output node/edge count) to stderr in verbose mode.
+
+At least one selector flag is required. If none are provided, clap produces a usage error.
+
+**Exit codes:** 0 = subgraph extracted, 1 = no matches found for the given selectors, 2 = parse/input failure.
+
+**Examples:**
+```
+omtsf extract-subchain supply-chain.omts --node-type organization --jurisdiction DE > german-orgs.omts
+omtsf extract-subchain supply-chain.omts --identifier lei --expand 2 > lei-neighborhood.omts
+omtsf extract-subchain graph.omts --label tier=1 --expand 0 > tier1-only.omts
+cat graph.omts | omtsf extract-subchain - --name "Acme" > acme-subchain.omts
+```
+
 ---
 
 ## 4. File I/O Module
@@ -432,7 +490,7 @@ The CLI never emits ANSI codes to stdout. Color is used exclusively for stderr d
 | Code | Meaning | Used By |
 |------|---------|---------|
 | 0 | Success. No errors, or diff found no differences. | All commands |
-| 1 | Logical failure: validation errors (L1), merge conflicts, no path found, node ID not found, diff found differences, redaction scope error. | `validate`, `merge`, `redact`, `reach`, `path`, `subgraph`, `diff` |
+| 1 | Logical failure: validation errors (L1), merge conflicts, no path found, node ID not found, diff found differences, redaction scope error, no selector matches. | `validate`, `merge`, `redact`, `reach`, `path`, `subgraph`, `query`, `extract-subchain`, `diff` |
 | 2 | Input failure: file not found, permission denied, size limit exceeded, invalid UTF-8, JSON parse error, missing required fields. | All commands |
 
 ### Detailed Exit Code Mapping
@@ -450,6 +508,7 @@ The CLI never emits ANSI codes to stdout. Color is used exclusively for stderr d
 | Source or target node ID not found in graph | 1 | `reach`, `path`, `subgraph` |
 | No path exists between nodes | 1 | `path` |
 | Diff computed, differences found | 1 | `diff` |
+| No nodes or edges match the given selectors | 1 | `query`, `extract-subchain` |
 | File not found | 2 | All |
 | Permission denied | 2 | All |
 | File exceeds size limit | 2 | All |
@@ -542,6 +601,44 @@ enum Command {
         #[arg(value_name = "NODE_ID", num_args = 1..)]
         node_ids: Vec<String>,
         #[arg(long, default_value = "0")]
+        expand: u32,
+    },
+    /// Display nodes and edges matching property-based selectors.
+    Query {
+        #[arg(value_name = "FILE")]
+        file: PathOrStdin,
+        #[arg(long, num_args = 1..)]
+        node_type: Vec<String>,
+        #[arg(long, num_args = 1..)]
+        edge_type: Vec<String>,
+        #[arg(long, num_args = 1..)]
+        label: Vec<String>,
+        #[arg(long, num_args = 1..)]
+        identifier: Vec<String>,
+        #[arg(long, num_args = 1..)]
+        jurisdiction: Vec<String>,
+        #[arg(long, num_args = 1..)]
+        name: Vec<String>,
+        #[arg(long)]
+        count: bool,
+    },
+    /// Extract a subgraph matching property-based selectors.
+    ExtractSubchain {
+        #[arg(value_name = "FILE")]
+        file: PathOrStdin,
+        #[arg(long, num_args = 1..)]
+        node_type: Vec<String>,
+        #[arg(long, num_args = 1..)]
+        edge_type: Vec<String>,
+        #[arg(long, num_args = 1..)]
+        label: Vec<String>,
+        #[arg(long, num_args = 1..)]
+        identifier: Vec<String>,
+        #[arg(long, num_args = 1..)]
+        jurisdiction: Vec<String>,
+        #[arg(long, num_args = 1..)]
+        name: Vec<String>,
+        #[arg(long, default_value = "1")]
         expand: u32,
     },
     /// Scaffold a new .omts file.

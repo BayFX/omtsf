@@ -261,6 +261,50 @@ The output of both extraction functions is a valid `OmtsFile`. Graph-local IDs a
 
 The output round-trips cleanly through serde: `serde_json::to_string` followed by `serde_json::from_str` produces an identical `OmtsFile`.
 
+### 5.4 Selector-Based Subgraph Extraction
+
+The selector-based extraction extends the induced subgraph and ego-graph functions to support property-based node/edge selection. The full specification is in `query.md`; this section covers the algorithm and its integration with the existing extraction infrastructure.
+
+#### 5.4.1 Algorithm
+
+```rust
+pub fn selector_subgraph(
+    graph: &OmtsGraph,
+    file: &OmtsFile,
+    selectors: &SelectorSet,
+    expand: usize,
+) -> Result<OmtsFile, QueryError>
+```
+
+The algorithm has four phases:
+
+1. **Seed scan.** Linear scan of `file.nodes` and `file.edges`, evaluating `SelectorSet::matches_node` and `SelectorSet::matches_edge` per element. Produces two sets: `seed_nodes: HashSet<NodeIndex>` and `seed_edges: HashSet<EdgeIndex>`. Complexity: O((N + E) * S) where S is the selector count.
+
+2. **Seed edge resolution.** For each seed edge, add its source and target to `seed_nodes`. This ensures that directly matched edges contribute their endpoints to the expansion frontier. Complexity: O(|seed_edges|).
+
+3. **BFS expansion.** Starting from `seed_nodes`, perform bounded BFS for `expand` hops using the same traversal logic as `ego_graph` (Section 5.2). Edges are traversed in both directions (treating the graph as undirected) to capture both upstream and downstream neighbors. Complexity: O(V + E) per hop, bounded by graph size.
+
+4. **Induced subgraph assembly.** Delegate to the shared `assemble_subgraph` internal function (Section 5.1, step 5). The expanded node set defines the induced subgraph. Complexity: O(E).
+
+The phases are sequential; the total complexity is O((N + E) * S + expand * (V + E)).
+
+#### 5.4.2 Shared Infrastructure
+
+The `assemble_subgraph` function used by `induced_subgraph`, `ego_graph`, and `selector_subgraph` is the same internal function. It accepts a `HashSet<NodeIndex>` and the source `OmtsFile`, and produces a filtered `OmtsFile`. This ensures consistent output validity (Section 5.3) across all extraction paths.
+
+#### 5.4.3 `selector_match` (Scan Only)
+
+For the `query` CLI command, which displays matches without producing a subgraph:
+
+```rust
+pub fn selector_match(
+    file: &OmtsFile,
+    selectors: &SelectorSet,
+) -> SelectorMatchResult
+```
+
+This function performs only phase 1 (seed scan) and returns indices into the `file.nodes` and `file.edges` vectors. It does not build the graph, making it faster for display-only queries. Complexity: O((N + E) * S).
+
 ---
 
 ## 6. Cycle Detection
@@ -366,4 +410,6 @@ All algorithms use stack-allocated or heap-allocated Rust structures. No OS-leve
 | `all_paths` (depth d) | O(V^d) | O(V * d) |
 | `induced_subgraph` | O(E) | O(N + E) |
 | `ego_graph` (radius r) | O(V + E) | O(V + E) |
+| `selector_match` | O((N + E) * S) | O(N + E) |
+| `selector_subgraph` | O((N + E) * S + expand * (V + E)) | O(V + E) |
 | `detect_cycles` | O(V + E) | O(V + E) |
