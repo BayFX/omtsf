@@ -15,6 +15,7 @@ use omtsf_core::{OmtsFile, merge};
 
 use crate::MergeStrategy;
 use crate::PathOrStdin;
+use crate::TargetEncoding;
 use crate::error::CliError;
 use crate::io::read_and_parse;
 
@@ -22,8 +23,8 @@ use crate::io::read_and_parse;
 ///
 /// Reads each path in `files` using the multi-encoding pipeline, runs L1
 /// validation on each, runs the merge engine, and writes the merged output to
-/// stdout as pretty-printed JSON. Warnings and conflict statistics are written
-/// to stderr.
+/// stdout in the requested encoding. Warnings and conflict statistics are
+/// written to stderr.
 ///
 /// # Errors
 ///
@@ -33,6 +34,8 @@ use crate::io::read_and_parse;
 pub fn run(
     files: &[PathOrStdin],
     strategy: &MergeStrategy,
+    to: &TargetEncoding,
+    compress: bool,
     max_file_size: u64,
     verbose: bool,
 ) -> Result<(), CliError> {
@@ -97,18 +100,55 @@ pub fn run(
         })?;
     }
 
-    let json = serde_json::to_string_pretty(&output.file).map_err(|e| CliError::InternalError {
-        detail: format!("JSON serialization of merged output failed: {e}"),
-    })?;
+    let bytes = encode_output(&output.file, to, compress)?;
 
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
-    writeln!(out, "{json}").map_err(|_| CliError::IoError {
+    out.write_all(&bytes).map_err(|e| CliError::IoError {
         source: "stdout".to_owned(),
-        detail: "write failed".to_owned(),
+        detail: e.to_string(),
     })?;
 
+    // Append a trailing newline for uncompressed JSON so the shell prompt
+    // appears on a new line. Binary outputs must not have an appended newline.
+    if matches!(to, TargetEncoding::Json) && !compress {
+        out.write_all(b"\n").map_err(|e| CliError::IoError {
+            source: "stdout".to_owned(),
+            detail: e.to_string(),
+        })?;
+    }
+
     Ok(())
+}
+
+/// Serializes `file` to the requested encoding, optionally compressing with zstd.
+///
+/// Pretty-printed JSON is the default for `--to json`. CBOR uses the
+/// self-describing tag 55799 prepended per SPEC-007 Section 4.1.
+fn encode_output(
+    file: &OmtsFile,
+    to: &TargetEncoding,
+    compress: bool,
+) -> Result<Vec<u8>, CliError> {
+    match to {
+        TargetEncoding::Cbor => omtsf_core::convert(file, omtsf_core::Encoding::Cbor, compress)
+            .map_err(|e| CliError::InternalError {
+                detail: e.to_string(),
+            }),
+        TargetEncoding::Json => {
+            let json_bytes =
+                serde_json::to_vec_pretty(file).map_err(|e| CliError::InternalError {
+                    detail: format!("JSON serialization of merged output failed: {e}"),
+                })?;
+            if compress {
+                omtsf_core::compress_zstd(&json_bytes).map_err(|e| CliError::InternalError {
+                    detail: format!("zstd compression failed: {e}"),
+                })
+            } else {
+                Ok(json_bytes)
+            }
+        }
+    }
 }
 
 #[cfg(test)]

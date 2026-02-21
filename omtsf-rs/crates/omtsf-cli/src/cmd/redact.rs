@@ -16,19 +16,26 @@ use omtsf_core::redact;
 use omtsf_core::{DisclosureScope as CoreScope, OmtsFile, enums::NodeType, enums::NodeTypeTag};
 
 use crate::DisclosureScope as CliScope;
+use crate::TargetEncoding;
 use crate::error::CliError;
 
 /// Runs the `redact` command.
 ///
 /// Checks that the target scope is at least as restrictive as the pre-parsed
 /// `file`'s existing `disclosure_scope`, then applies the redaction engine.
-/// The redacted file is written to stdout; statistics go to stderr.
+/// The redacted file is written to stdout in the requested encoding;
+/// statistics go to stderr.
 ///
 /// # Errors
 ///
 /// - [`CliError::RedactionError`] — target scope is less restrictive than
 ///   the existing scope, or the engine produces an invalid output.
-pub fn run(file: &OmtsFile, scope: &CliScope) -> Result<(), CliError> {
+pub fn run(
+    file: &OmtsFile,
+    scope: &CliScope,
+    to: &TargetEncoding,
+    compress: bool,
+) -> Result<(), CliError> {
     let target_core = cli_scope_to_core(scope);
     if let Some(existing) = &file.disclosure_scope {
         if scope_is_less_restrictive(&target_core, existing) {
@@ -76,18 +83,55 @@ pub fn run(file: &OmtsFile, scope: &CliScope) -> Result<(), CliError> {
         detail: e.to_string(),
     })?;
 
-    let json = serde_json::to_string_pretty(&redacted).map_err(|e| CliError::InternalError {
-        detail: format!("JSON serialization of redacted output failed: {e}"),
-    })?;
+    let bytes = encode_output(&redacted, to, compress)?;
 
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
-    writeln!(out, "{json}").map_err(|_| CliError::IoError {
+    out.write_all(&bytes).map_err(|e| CliError::IoError {
         source: "stdout".to_owned(),
-        detail: "write failed".to_owned(),
+        detail: e.to_string(),
     })?;
 
+    // Append a trailing newline for uncompressed JSON so the shell prompt
+    // appears on a new line. Binary outputs must not have an appended newline.
+    if matches!(to, TargetEncoding::Json) && !compress {
+        out.write_all(b"\n").map_err(|e| CliError::IoError {
+            source: "stdout".to_owned(),
+            detail: e.to_string(),
+        })?;
+    }
+
     Ok(())
+}
+
+/// Serializes `file` to the requested encoding, optionally compressing with zstd.
+///
+/// Pretty-printed JSON is the default for `--to json`. CBOR uses the
+/// self-describing tag 55799 prepended per SPEC-007 Section 4.1.
+fn encode_output(
+    file: &OmtsFile,
+    to: &TargetEncoding,
+    compress: bool,
+) -> Result<Vec<u8>, CliError> {
+    match to {
+        TargetEncoding::Cbor => omtsf_core::convert(file, omtsf_core::Encoding::Cbor, compress)
+            .map_err(|e| CliError::InternalError {
+                detail: e.to_string(),
+            }),
+        TargetEncoding::Json => {
+            let json_bytes =
+                serde_json::to_vec_pretty(file).map_err(|e| CliError::InternalError {
+                    detail: format!("JSON serialization of redacted output failed: {e}"),
+                })?;
+            if compress {
+                omtsf_core::compress_zstd(&json_bytes).map_err(|e| CliError::InternalError {
+                    detail: format!("zstd compression failed: {e}"),
+                })
+            } else {
+                Ok(json_bytes)
+            }
+        }
+    }
 }
 
 /// Converts a CLI [`crate::DisclosureScope`] to the core library [`CoreScope`].
@@ -127,6 +171,7 @@ mod tests {
 
     use super::*;
     use crate::DisclosureScope as CliScope;
+    use crate::TargetEncoding;
     const MINIMAL: &str = r#"{
         "omtsf_version": "1.0.0",
         "snapshot_date": "2026-02-19",
@@ -230,7 +275,7 @@ mod tests {
     #[test]
     fn run_less_restrictive_scope_returns_error() {
         let file = parse(ALREADY_PUBLIC);
-        let result = run(&file, &CliScope::Partner);
+        let result = run(&file, &CliScope::Partner, &TargetEncoding::Json, false);
         match result {
             Err(CliError::RedactionError { .. }) => {}
             other => panic!("expected RedactionError, got {other:?}"),
@@ -240,7 +285,7 @@ mod tests {
     #[test]
     fn run_less_restrictive_scope_exit_code_is_1() {
         let file = parse(ALREADY_PUBLIC);
-        let result = run(&file, &CliScope::Partner);
+        let result = run(&file, &CliScope::Partner, &TargetEncoding::Json, false);
         let err = result.expect_err("should fail");
         assert_eq!(err.exit_code(), 1);
     }
@@ -249,7 +294,7 @@ mod tests {
     #[test]
     fn run_partner_to_internal_returns_error() {
         let file = parse(ALREADY_PARTNER);
-        let result = run(&file, &CliScope::Internal);
+        let result = run(&file, &CliScope::Internal, &TargetEncoding::Json, false);
         match result {
             Err(CliError::RedactionError { .. }) => {}
             other => panic!("expected RedactionError, got {other:?}"),
@@ -260,7 +305,7 @@ mod tests {
     #[test]
     fn run_same_scope_is_ok() {
         let file = parse(ALREADY_PUBLIC);
-        let result = run(&file, &CliScope::Public);
+        let result = run(&file, &CliScope::Public, &TargetEncoding::Json, false);
         assert!(result.is_ok(), "same scope should succeed: {result:?}");
     }
 
@@ -268,7 +313,7 @@ mod tests {
     #[test]
     fn run_minimal_to_public_succeeds() {
         let file = parse(MINIMAL);
-        let result = run(&file, &CliScope::Public);
+        let result = run(&file, &CliScope::Public, &TargetEncoding::Json, false);
         assert!(result.is_ok(), "expected Ok for minimal file: {result:?}");
     }
 
@@ -276,7 +321,7 @@ mod tests {
     #[test]
     fn run_minimal_to_partner_succeeds() {
         let file = parse(MINIMAL);
-        let result = run(&file, &CliScope::Partner);
+        let result = run(&file, &CliScope::Partner, &TargetEncoding::Json, false);
         assert!(result.is_ok(), "expected Ok for minimal file: {result:?}");
     }
 
@@ -284,7 +329,7 @@ mod tests {
     #[test]
     fn run_minimal_to_internal_succeeds() {
         let file = parse(MINIMAL);
-        let result = run(&file, &CliScope::Internal);
+        let result = run(&file, &CliScope::Internal, &TargetEncoding::Json, false);
         assert!(result.is_ok(), "expected Ok for minimal file: {result:?}");
     }
 
@@ -303,7 +348,7 @@ mod tests {
             "edges": []
         }"#;
         let file = parse(content);
-        let result = run(&file, &CliScope::Public);
+        let result = run(&file, &CliScope::Public, &TargetEncoding::Json, false);
         assert!(result.is_ok(), "expected Ok: {result:?}");
     }
 
