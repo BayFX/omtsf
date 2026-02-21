@@ -9,10 +9,6 @@
 //!
 //! See `omtsf-rs/docs/validation.md` Section 4.3 for the full specification.
 
-// ---------------------------------------------------------------------------
-// LeiRecord
-// ---------------------------------------------------------------------------
-
 /// A record returned by an LEI data source for a given LEI string.
 ///
 /// Fields represent the subset of GLEIF LEVEL 1 data needed by L3 validation rules.
@@ -28,10 +24,6 @@ pub struct LeiRecord {
     pub is_active: bool,
 }
 
-// ---------------------------------------------------------------------------
-// NatRegRecord
-// ---------------------------------------------------------------------------
-
 /// A record returned by a national business registry lookup.
 ///
 /// Fields represent the minimum information needed by L3 validation rules
@@ -45,10 +37,6 @@ pub struct NatRegRecord {
     /// Whether the registration is currently active in the registry.
     pub is_active: bool,
 }
-
-// ---------------------------------------------------------------------------
-// ExternalDataSource
-// ---------------------------------------------------------------------------
 
 /// An injected data source for L3 validation rules.
 ///

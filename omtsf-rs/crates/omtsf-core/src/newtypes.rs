@@ -11,10 +11,6 @@ use std::sync::LazyLock;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
-// ---------------------------------------------------------------------------
-// Error type
-// ---------------------------------------------------------------------------
-
 /// Errors produced when constructing a validated newtype from an invalid string.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NewtypeError {
@@ -43,19 +39,13 @@ impl fmt::Display for NewtypeError {
 
 impl std::error::Error for NewtypeError {}
 
-// ---------------------------------------------------------------------------
-// Regex statics
-//
-// All patterns are compile-time string literals; Regex::new never returns Err
-// for them. The match + unreachable branch is required because the workspace
-// bans expect() and unwrap(), but "a^" (a pattern that never matches) is always
-// valid, so we use it as a safe fallback that satisfies the type checker.
-// ---------------------------------------------------------------------------
+// Regex::new never returns Err for these compile-time literals. The nested
+// unwrap_or_else chain satisfies the workspace ban on expect()/unwrap() while
+// keeping the code safe — "a^" is a valid regex that never matches anything.
 
 /// Matches `MAJOR.MINOR.PATCH`.
 static SEMVER_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^\d+\.\d+\.\d+$").unwrap_or_else(|_| {
-        // Never reached: the pattern above is always valid.
         Regex::new("a^").unwrap_or_else(|_| {
             Regex::new(".").unwrap_or_else(|_| {
                 Regex::new(".").unwrap_or_else(|_| {
@@ -98,10 +88,6 @@ static COUNTRY_CODE_RE: LazyLock<Regex> = LazyLock::new(|| {
         })
     })
 });
-
-// ---------------------------------------------------------------------------
-// SemVer
-// ---------------------------------------------------------------------------
 
 /// Semantic version string in `MAJOR.MINOR.PATCH` format.
 ///
@@ -188,10 +174,6 @@ impl<'de> Deserialize<'de> for SemVer {
     }
 }
 
-// ---------------------------------------------------------------------------
-// CalendarDate
-// ---------------------------------------------------------------------------
-
 /// ISO 8601 calendar date in `YYYY-MM-DD` format.
 ///
 /// Validates that the string matches `^\d{4}-\d{2}-\d{2}$`. No semantic
@@ -243,10 +225,6 @@ impl<'de> Deserialize<'de> for CalendarDate {
     }
 }
 
-// ---------------------------------------------------------------------------
-// FileSalt
-// ---------------------------------------------------------------------------
-
 /// Exactly 64 lowercase hexadecimal characters.
 ///
 /// Regex: `^[0-9a-f]{64}$`. Used as the `file_salt` field in OMTSF files to
@@ -295,10 +273,6 @@ impl<'de> Deserialize<'de> for FileSalt {
         Self::try_from(s.as_str()).map_err(de::Error::custom)
     }
 }
-
-// ---------------------------------------------------------------------------
-// NodeId
-// ---------------------------------------------------------------------------
 
 /// Non-empty, file-unique string identifier for nodes and edges.
 ///
@@ -355,10 +329,6 @@ impl<'de> Deserialize<'de> for NodeId {
 /// Semantically distinct in documentation; the same validation rules apply.
 pub type EdgeId = NodeId;
 
-// ---------------------------------------------------------------------------
-// CountryCode
-// ---------------------------------------------------------------------------
-
 /// ISO 3166-1 alpha-2 country code: exactly two uppercase ASCII letters.
 ///
 /// Regex: `^[A-Z]{2}$`. No lookup against the official country list is
@@ -408,17 +378,11 @@ impl<'de> Deserialize<'de> for CountryCode {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
 
     use super::*;
-
-    // -- SemVer --------------------------------------------------------------
 
     #[test]
     fn semver_valid_basic() {
@@ -489,8 +453,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // -- CalendarDate --------------------------------------------------------
-
     #[test]
     fn calendar_date_valid() {
         let d = CalendarDate::try_from("2026-02-19").expect("valid date");
@@ -552,8 +514,6 @@ mod tests {
         let result: Result<CalendarDate, _> = serde_json::from_str("\"2026-2-1\"");
         assert!(result.is_err());
     }
-
-    // -- FileSalt ------------------------------------------------------------
 
     #[test]
     fn file_salt_valid_all_zeros() {
@@ -621,8 +581,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // -- NodeId --------------------------------------------------------------
-
     #[test]
     fn node_id_valid_simple() {
         let id = NodeId::try_from("node-1").expect("valid id");
@@ -670,12 +628,9 @@ mod tests {
 
     #[test]
     fn edge_id_is_node_id_alias() {
-        // EdgeId is a type alias; ensure it compiles and behaves identically.
         let eid: EdgeId = NodeId::try_from("edge-1").expect("valid");
         assert_eq!(&*eid, "edge-1");
     }
-
-    // -- CountryCode ---------------------------------------------------------
 
     #[test]
     fn country_code_valid_us() {
@@ -745,8 +700,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // -- NewtypeError --------------------------------------------------------
-
     #[test]
     fn newtype_error_display() {
         let err = NewtypeError::InvalidFormat {
@@ -770,12 +723,9 @@ mod tests {
         assert!(!err.to_string().is_empty());
     }
 
-    // -- Deref (no DerefMut) -------------------------------------------------
-
     #[test]
     fn deref_gives_str_access() {
         let v = SemVer::try_from("1.0.0").expect("valid");
-        // Deref to &str allows string methods.
         assert!(v.starts_with("1."));
         assert_eq!(v.len(), 5);
     }

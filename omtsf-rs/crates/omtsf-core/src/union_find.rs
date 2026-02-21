@@ -9,10 +9,6 @@
 //! [`UnionFind::find`] returns a deterministic representative regardless of
 //! operation order (required for commutativity).
 
-// ---------------------------------------------------------------------------
-// UnionFind
-// ---------------------------------------------------------------------------
-
 /// A union-find (disjoint set) structure with path-halving and union-by-rank.
 ///
 /// Each element is identified by a `usize` ordinal in `[0, n)` where `n` is
@@ -54,7 +50,6 @@ impl UnionFind {
     /// Vec, which is acceptable for a logic error in the caller).
     pub fn find(&mut self, mut x: usize) -> usize {
         while self.parent[x] != x {
-            // Path-halving: point x to its grandparent.
             let grandparent = self.parent[self.parent[x]];
             self.parent[x] = grandparent;
             x = grandparent;
@@ -71,23 +66,17 @@ impl UnionFind {
         let rb = self.find(b);
 
         if ra == rb {
-            // Already in the same set; nothing to do.
             return;
         }
 
-        // Attach the smaller-rank tree under the larger-rank root.
-        // On a tie, the lower ordinal wins (becomes root).
         match self.rank[ra].cmp(&self.rank[rb]) {
             std::cmp::Ordering::Less => {
-                // ra has lower rank → attach ra under rb.
                 self.parent[ra] = rb;
             }
             std::cmp::Ordering::Greater => {
-                // rb has lower rank → attach rb under ra.
                 self.parent[rb] = ra;
             }
             std::cmp::Ordering::Equal => {
-                // Tie: lower ordinal becomes root.
                 if ra < rb {
                     self.parent[rb] = ra;
                     self.rank[ra] += 1;
@@ -109,10 +98,6 @@ impl UnionFind {
         self.parent.is_empty()
     }
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -162,7 +147,6 @@ mod tests {
 
     #[test]
     fn transitive_closure() {
-        // union(0,1) and union(1,2) => all three in same set
         let mut uf = UnionFind::new(3);
         uf.union(0, 1);
         uf.union(1, 2);
@@ -175,8 +159,6 @@ mod tests {
 
     #[test]
     fn deterministic_representative_lower_ordinal_wins_on_tie() {
-        // When two fresh singletons (rank 0) are unioned, the lower ordinal
-        // must be the representative. union(3, 1) → representative should be 1.
         let mut uf = UnionFind::new(5);
         uf.union(3, 1);
         assert_eq!(uf.find(3), 1, "lower ordinal 1 should win over 3");
@@ -185,7 +167,6 @@ mod tests {
 
     #[test]
     fn union_commutativity_same_representative() {
-        // union(a, b) and union(b, a) must produce the same representative.
         let mut uf_ab = UnionFind::new(2);
         uf_ab.union(0, 1);
         let rep_ab = uf_ab.find(0);
@@ -209,10 +190,7 @@ mod tests {
 
     #[test]
     fn path_halving_compresses_path() {
-        // Build a long chain: 0←1←2←3←4 by unioning in ascending order.
-        // Then verify find still returns the correct root.
         let mut uf = UnionFind::new(5);
-        // Union in a way that tends to build a chain (pair-wise ascending).
         uf.union(0, 1);
         uf.union(0, 2);
         uf.union(0, 3);
@@ -229,13 +207,9 @@ mod tests {
 
     #[test]
     fn union_by_rank_higher_rank_wins() {
-        // Build two sets of different ranks, then merge them.
-        // Set A: {0,1} after union(0,1) → rank[root_A] = 1
-        // Set B: {2}   singleton         → rank[2] = 0
-        // Merging should attach the singleton under the higher-rank root.
         let mut uf = UnionFind::new(3);
-        uf.union(0, 1); // root=0, rank[0]=1
-        uf.union(0, 2); // rank[0]=1 > rank[2]=0 → 2 goes under 0
+        uf.union(0, 1);
+        uf.union(0, 2);
         assert_eq!(
             uf.find(2),
             0,

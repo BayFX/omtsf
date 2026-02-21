@@ -7,8 +7,6 @@ use std::process::Command;
 /// Path to the compiled `omtsf` binary.
 fn omtsf_bin() -> PathBuf {
     let mut path = std::env::current_exe().expect("current exe");
-    // current_exe is something like …/deps/cmd_inspect-<hash>
-    // The binary lives in the parent directory.
     path.pop();
     if path.ends_with("deps") {
         path.pop();
@@ -20,16 +18,10 @@ fn omtsf_bin() -> PathBuf {
 /// Path to a shared fixture file.
 fn fixture(name: &str) -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    // CARGO_MANIFEST_DIR is .../crates/omtsf-cli; fixtures are in tests/fixtures
-    // relative to the workspace root.
     path.push("../../tests/fixtures");
     path.push(name);
     path
 }
-
-// ---------------------------------------------------------------------------
-// inspect: human mode
-// ---------------------------------------------------------------------------
 
 #[test]
 fn inspect_minimal_human_exit_0() {
@@ -69,7 +61,6 @@ fn inspect_minimal_human_shows_node_count() {
         .output()
         .expect("run omtsf inspect");
     let stdout = String::from_utf8_lossy(&out.stdout);
-    // minimal.omts has 1 organization node and 0 edges
     assert!(stdout.contains("nodes:"), "stdout: {stdout}");
     assert!(stdout.contains("organization:"), "stdout: {stdout}");
 }
@@ -85,15 +76,10 @@ fn inspect_full_featured_human_counts() {
         .expect("run omtsf inspect");
     assert!(out.status.success(), "exit code: {:?}", out.status.code());
     let stdout = String::from_utf8_lossy(&out.stdout);
-    // 8 nodes, 8 edges, disclosure scope present
     assert!(stdout.contains("disclosure:"), "stdout: {stdout}");
     assert!(stdout.contains("partner"), "stdout: {stdout}");
     assert!(stdout.contains("identifiers:"), "stdout: {stdout}");
 }
-
-// ---------------------------------------------------------------------------
-// inspect: JSON mode
-// ---------------------------------------------------------------------------
 
 #[test]
 fn inspect_minimal_json_exit_0() {
@@ -180,10 +166,6 @@ fn inspect_full_json_has_correct_counts() {
     assert_eq!(value["disclosure_scope"], "partner");
 }
 
-// ---------------------------------------------------------------------------
-// inspect: stdin
-// ---------------------------------------------------------------------------
-
 #[test]
 fn inspect_stdin_minimal() {
     use std::io::Write as _;
@@ -205,10 +187,6 @@ fn inspect_stdin_minimal() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("version:"), "stdout: {stdout}");
 }
-
-// ---------------------------------------------------------------------------
-// inspect: error cases
-// ---------------------------------------------------------------------------
 
 #[test]
 fn inspect_nonexistent_file_exits_2() {

@@ -16,10 +16,6 @@ use std::ops::Deref;
 use crate::structures::Node;
 use crate::types::Identifier;
 
-// ---------------------------------------------------------------------------
-// Authority-required schemes
-// ---------------------------------------------------------------------------
-
 /// Returns `true` if `scheme` requires an authority component in its canonical
 /// form.
 ///
@@ -28,10 +24,6 @@ use crate::types::Identifier;
 fn requires_authority(scheme: &str) -> bool {
     scheme == "nat-reg" || scheme == "vat"
 }
-
-// ---------------------------------------------------------------------------
-// Percent-encoding helper
-// ---------------------------------------------------------------------------
 
 /// Percent-encodes a single component string per SPEC-002 Section 4.
 ///
@@ -55,10 +47,6 @@ fn percent_encode(s: &str) -> String {
     }
     out
 }
-
-// ---------------------------------------------------------------------------
-// CanonicalId
-// ---------------------------------------------------------------------------
 
 /// A canonical identifier string used as the key in the identifier index.
 ///
@@ -148,10 +136,6 @@ impl AsRef<str> for CanonicalId {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Identifier index
-// ---------------------------------------------------------------------------
-
 /// Builds a `HashMap` from canonical identifier to the list of node indices
 /// that carry that identifier.
 ///
@@ -193,10 +177,6 @@ pub fn build_identifier_index(nodes: &[Node]) -> HashMap<CanonicalId, Vec<usize>
     index
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -205,8 +185,6 @@ mod tests {
     use crate::enums::{NodeType, NodeTypeTag};
     use crate::newtypes::NodeId;
     use crate::types::Identifier;
-
-    // --- helpers ------------------------------------------------------------
 
     fn make_identifier(scheme: &str, value: &str, authority: Option<&str>) -> Identifier {
         Identifier {
@@ -261,11 +239,8 @@ mod tests {
         }
     }
 
-    // --- CanonicalId: basic canonical forms ---------------------------------
-
     #[test]
     fn canonical_id_basic_lei() {
-        // Basic canonical form: lei:529900T8BM49AURSDO55
         let id = make_identifier("lei", "529900T8BM49AURSDO55", None);
         let cid = CanonicalId::from_identifier(&id);
         assert_eq!(cid.as_str(), "lei:529900T8BM49AURSDO55");
@@ -285,11 +260,8 @@ mod tests {
         assert_eq!(cid.as_str(), "gln:1234567890123");
     }
 
-    // --- CanonicalId: authority-required schemes ----------------------------
-
     #[test]
     fn canonical_id_nat_reg_with_authority() {
-        // nat-reg requires authority: nat-reg:DE:HRB12345
         let id = make_identifier("nat-reg", "HRB12345", Some("DE"));
         let cid = CanonicalId::from_identifier(&id);
         assert_eq!(cid.as_str(), "nat-reg:DE:HRB12345");
@@ -297,7 +269,6 @@ mod tests {
 
     #[test]
     fn canonical_id_vat_with_authority() {
-        // vat requires authority: vat:DE:DE123456789
         let id = make_identifier("vat", "DE123456789", Some("DE"));
         let cid = CanonicalId::from_identifier(&id);
         assert_eq!(cid.as_str(), "vat:DE:DE123456789");
@@ -305,7 +276,6 @@ mod tests {
 
     #[test]
     fn canonical_id_nat_reg_missing_authority_uses_empty() {
-        // nat-reg without authority: authority field absent → empty string segment
         let id = make_identifier("nat-reg", "HRB12345", None);
         let cid = CanonicalId::from_identifier(&id);
         assert_eq!(cid.as_str(), "nat-reg::HRB12345");
@@ -313,18 +283,13 @@ mod tests {
 
     #[test]
     fn canonical_id_non_authority_scheme_ignores_authority() {
-        // For non-authority schemes, the authority field is not included
-        // in the canonical string even if present.
         let id = make_identifier("lei", "529900T8BM49AURSDO55", Some("GLEIF"));
         let cid = CanonicalId::from_identifier(&id);
         assert_eq!(cid.as_str(), "lei:529900T8BM49AURSDO55");
     }
 
-    // --- CanonicalId: percent-encoding --------------------------------------
-
     #[test]
     fn canonical_id_percent_encodes_colon_in_value() {
-        // internal:foo%3Abar — colon in the value must become %3A
         let id = make_identifier("internal", "foo:bar", None);
         let cid = CanonicalId::from_identifier(&id);
         assert_eq!(cid.as_str(), "internal:foo%3Abar");
@@ -332,7 +297,6 @@ mod tests {
 
     #[test]
     fn canonical_id_percent_encodes_percent_in_value() {
-        // lei:50%25 — percent sign in value must become %25
         let id = make_identifier("lei", "50%", None);
         let cid = CanonicalId::from_identifier(&id);
         assert_eq!(cid.as_str(), "lei:50%25");
@@ -340,8 +304,6 @@ mod tests {
 
     #[test]
     fn canonical_id_percent_encodes_percent_then_percent() {
-        // A value of "50%" should produce "50%25", not "50%%".
-        // A value of "50%25" (already-encoded) should become "50%2525".
         let id = make_identifier("lei", "50%25", None);
         let cid = CanonicalId::from_identifier(&id);
         assert_eq!(cid.as_str(), "lei:50%2525");
@@ -363,7 +325,6 @@ mod tests {
 
     #[test]
     fn canonical_id_percent_encodes_colon_in_scheme() {
-        // Extension scheme with colon in it
         let id = make_identifier("com.example:ext", "value", None);
         let cid = CanonicalId::from_identifier(&id);
         assert_eq!(cid.as_str(), "com.example%3Aext:value");
@@ -371,7 +332,6 @@ mod tests {
 
     #[test]
     fn canonical_id_percent_encodes_colon_in_authority() {
-        // nat-reg with a colon in the authority
         let id = make_identifier("nat-reg", "HRB12345", Some("D:E"));
         let cid = CanonicalId::from_identifier(&id);
         assert_eq!(cid.as_str(), "nat-reg:D%3AE:HRB12345");
@@ -384,8 +344,6 @@ mod tests {
         assert_eq!(cid.as_str(), "lei:foo%0D%0Abar");
     }
 
-    // --- CanonicalId: trait impls -------------------------------------------
-
     #[test]
     fn canonical_id_display() {
         let id = make_identifier("duns", "123456789", None);
@@ -397,7 +355,6 @@ mod tests {
     fn canonical_id_deref() {
         let id = make_identifier("lei", "TEST", None);
         let cid = CanonicalId::from_identifier(&id);
-        // Deref allows str methods
         assert!(cid.starts_with("lei:"));
         assert_eq!(cid.len(), "lei:TEST".len());
     }
@@ -434,8 +391,6 @@ mod tests {
         assert_eq!(map.get(&cid), Some(&42));
     }
 
-    // --- build_identifier_index --------------------------------------------
-
     #[test]
     fn index_empty_nodes() {
         let nodes: Vec<Node> = vec![];
@@ -459,7 +414,6 @@ mod tests {
 
     #[test]
     fn index_internal_scheme_excluded() {
-        // internal identifiers must not be inserted into the index
         let id = make_identifier("internal", "sap-prod:V-100234", None);
         let nodes = vec![make_node("org-1", Some(vec![id]))];
         let index = build_identifier_index(&nodes);
@@ -511,7 +465,6 @@ mod tests {
 
     #[test]
     fn index_overlapping_identifier_maps_to_both_nodes() {
-        // Two nodes sharing the same LEI → both indices in the Vec
         let shared_lei = "529900T8BM49AURSDO55";
         let nodes = vec![
             make_node(
@@ -534,8 +487,6 @@ mod tests {
 
     #[test]
     fn index_three_nodes_transitive_overlap() {
-        // node 0 and node 1 share a LEI; node 1 and node 2 share a DUNS.
-        // The index itself is flat — transitive closure is the union-find's job.
         let nodes = vec![
             make_node("org-1", Some(vec![make_identifier("lei", "LEI_AB", None)])),
             make_node(
@@ -567,7 +518,6 @@ mod tests {
 
     #[test]
     fn index_mixed_internal_and_external_identifiers() {
-        // internal ids skipped; external ids indexed
         let ids = vec![
             make_identifier("internal", "sap:1234", None),
             make_identifier("lei", "PUBLIC_LEI", None),
@@ -591,8 +541,6 @@ mod tests {
 
     #[test]
     fn index_value_with_colon_percent_encoded() {
-        // A value containing a colon is percent-encoded, so it uses a
-        // different key than a value without one.
         let id_with_colon = make_identifier("duns", "12:34", None);
         let id_plain = make_identifier("duns", "1234", None);
         let nodes = vec![

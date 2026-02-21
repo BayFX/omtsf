@@ -21,10 +21,6 @@ use omtsf_core::structures::{Edge, EdgeProperties, Node};
 
 use crate::error::CliError;
 
-// ---------------------------------------------------------------------------
-// run
-// ---------------------------------------------------------------------------
-
 /// Runs the `init` command.
 ///
 /// Generates and prints a valid `.omts` file to stdout. When `example` is
@@ -66,10 +62,6 @@ pub fn run(example: bool) -> Result<(), CliError> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Minimal file builder
-// ---------------------------------------------------------------------------
-
 /// Builds a minimal valid [`OmtsFile`] with empty nodes and edges.
 fn build_minimal_file(
     version: SemVer,
@@ -89,10 +81,6 @@ fn build_minimal_file(
         extra: serde_json::Map::new(),
     })
 }
-
-// ---------------------------------------------------------------------------
-// Example file builder
-// ---------------------------------------------------------------------------
 
 /// Builds a realistic example [`OmtsFile`] with sample nodes and edges.
 ///
@@ -254,10 +242,6 @@ fn build_example_file(
     })
 }
 
-// ---------------------------------------------------------------------------
-// Date helpers
-// ---------------------------------------------------------------------------
-
 /// Returns today's date as a `YYYY-MM-DD` string derived from the system clock.
 ///
 /// Uses `std::time::SystemTime` and Unix epoch arithmetic to avoid a dependency
@@ -278,28 +262,22 @@ pub(crate) fn today_string() -> Result<String, String> {
 /// Uses the proleptic Gregorian calendar algorithm. Accurate for all dates
 /// from 1970-01-01 onwards.
 fn epoch_secs_to_ymd(secs: u64) -> (u32, u32, u32) {
-    // Number of days since 1970-01-01.
     let days = (secs / 86_400) as u32;
 
     // Algorithm from http://howardhinnant.github.io/date_algorithms.html
-    // "civil_from_days" — adapted to u32 inputs for dates after epoch.
     let z = days + 719_468;
     let era = z / 146_097;
-    let doe = z - era * 146_097; // day of era [0, 146096]
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365; // year of era [0, 399]
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
     let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // day of year [0, 365]
-    let mp = (5 * doy + 2) / 153; // month prime [0, 11]
-    let d = doy - (153 * mp + 2) / 5 + 1; // day [1, 31]
-    let m = if mp < 10 { mp + 3 } else { mp - 9 }; // month [1, 12]
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = if m <= 2 { y + 1 } else { y };
 
     (y, m, d)
 }
-
-// ---------------------------------------------------------------------------
-// Error mapping helpers
-// ---------------------------------------------------------------------------
 
 /// Maps a [`BoundaryHashError`] to a [`CliError`] with exit code 2.
 fn csprng_to_cli_error(e: &BoundaryHashError) -> CliError {

@@ -10,10 +10,6 @@
 use std::fmt;
 use std::path::PathBuf;
 
-// ---------------------------------------------------------------------------
-// CliError
-// ---------------------------------------------------------------------------
-
 /// All error conditions that the `omtsf` CLI can produce.
 ///
 /// Use [`CliError::exit_code`] to obtain the exit code associated with each
@@ -21,7 +17,6 @@ use std::path::PathBuf;
 /// that should be printed to stderr before exiting.
 #[derive(Debug)]
 pub enum CliError {
-    // --- Exit code 2: input failures ---
     /// A file argument could not be found on the filesystem.
     FileNotFound {
         /// The path that was not found.
@@ -78,7 +73,6 @@ pub enum CliError {
         detail: String,
     },
 
-    // --- Exit code 1: logical failures ---
     /// A validation pass found one or more L1 errors.
     ///
     /// The diagnostics have already been printed; this variant exists so
@@ -306,10 +300,6 @@ impl fmt::Display for CliError {
 
 impl std::error::Error for CliError {}
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -317,8 +307,6 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-
-    // ── exit_code ────────────────────────────────────────────────────────────
 
     #[test]
     fn file_not_found_is_exit_2() {
@@ -384,8 +372,6 @@ mod tests {
         };
         assert_eq!(e.exit_code(), 1);
     }
-
-    // ── message content ──────────────────────────────────────────────────────
 
     #[test]
     fn file_not_found_message_contains_path() {
@@ -455,8 +441,6 @@ mod tests {
         assert!(!e.to_string().is_empty());
     }
 
-    // ── InternalError ─────────────────────────────────────────────────────────
-
     #[test]
     fn internal_error_is_exit_2() {
         let e = CliError::InternalError {
@@ -498,8 +482,6 @@ mod tests {
         );
     }
 
-    // ── ParseFailed with line/column ─────────────────────────────────────────
-
     #[test]
     fn parse_failed_message_contains_detail() {
         let e = CliError::ParseFailed {
@@ -524,8 +506,6 @@ mod tests {
             "message should mention required fields: {msg}"
         );
     }
-
-    // ── Guidance text ────────────────────────────────────────────────────────
 
     #[test]
     fn file_not_found_message_contains_hint() {

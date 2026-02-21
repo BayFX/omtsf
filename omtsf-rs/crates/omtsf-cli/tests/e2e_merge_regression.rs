@@ -67,18 +67,12 @@ fn validate_value(value: &serde_json::Value) -> bool {
     out.status.code() == Some(0)
 }
 
-// ---------------------------------------------------------------------------
-// Regression 1: Disjoint graphs
-// ---------------------------------------------------------------------------
-
 /// Merging two files with no overlapping nodes (no shared LEI/DUNS etc.)
 /// preserves all nodes from both files in the output.
 #[test]
 fn merge_disjoint_preserves_all_nodes() {
     let value = run_merge("merge-disjoint-a.omts", "merge-disjoint-b.omts");
     let nodes = value["nodes"].as_array().expect("nodes array");
-    // disjoint-a has 2 nodes (org + facility).
-    // disjoint-b has 3 nodes (org + facility + good), no shared identifiers.
     assert_eq!(
         nodes.len(),
         5,
@@ -91,7 +85,6 @@ fn merge_disjoint_preserves_all_nodes() {
 fn merge_disjoint_preserves_all_edges() {
     let value = run_merge("merge-disjoint-a.omts", "merge-disjoint-b.omts");
     let edges = value["edges"].as_array().expect("edges array");
-    // disjoint-a has 1 edge, disjoint-b has 2 edges.
     assert_eq!(
         edges.len(),
         3,
@@ -109,17 +102,12 @@ fn merge_disjoint_output_passes_validate() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Regression 2: Full overlap (same LEIs in both files)
-// ---------------------------------------------------------------------------
-
 /// Merging two files where all nodes share the same LEIs produces a merged
 /// file where each entity group is a single canonical node.
 #[test]
 fn merge_full_overlap_deduplicates_nodes() {
     let value = run_merge("merge-full-overlap-a.omts", "merge-full-overlap-b.omts");
     let nodes = value["nodes"].as_array().expect("nodes array");
-    // Both files have 2 nodes sharing the same 2 LEIs → should reduce to 2 nodes.
     assert_eq!(
         nodes.len(),
         2,
@@ -174,19 +162,12 @@ fn merge_full_overlap_accumulates_identifiers() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Regression 3: Partial overlap
-// ---------------------------------------------------------------------------
-
 /// Merging files with partial overlap: some nodes share identifiers, some are
 /// unique. The merged output contains one canonical node for each entity group.
 #[test]
 fn merge_partial_overlap_correct_node_count() {
     let value = run_merge("merge-partial-a.omts", "merge-partial-b.omts");
     let nodes = value["nodes"].as_array().expect("nodes array");
-    // partial-a: org-hub (LEI TESTLEIHUBCORPTEST001) + org-spoke-a (DUNS only)
-    // partial-b: org-hub-2 (same LEI) + org-spoke-b (different LEI)
-    // Hub is shared → 1 merged hub + spoke-a + spoke-b = 3 unique entities.
     assert_eq!(
         nodes.len(),
         3,
@@ -204,19 +185,12 @@ fn merge_partial_overlap_output_passes_validate() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Regression 4: Transitive chain
-// ---------------------------------------------------------------------------
-
 /// Merging files that form a transitive supply chain produces a connected graph
 /// covering all tiers. The shared tier-2 node (by DUNS) is merged.
 #[test]
 fn merge_transitive_chain_merges_shared_tier() {
     let value = run_merge("merge-transitive-a.omts", "merge-transitive-b.omts");
     let nodes = value["nodes"].as_array().expect("nodes array");
-    // transitive-a: org-t1 (LEI) + org-t2 (DUNS 111222333)
-    // transitive-b: org-t2-mirror (same DUNS) + org-t3 (different DUNS)
-    // org-t2 and org-t2-mirror share DUNS → merged; total = t1 + t2 + t3 = 3.
     assert_eq!(
         nodes.len(),
         3,
@@ -239,13 +213,11 @@ fn merge_transitive_chain_output_passes_validate() {
 fn merge_transitive_chain_has_full_supply_chain() {
     let value = run_merge("merge-transitive-a.omts", "merge-transitive-b.omts");
     let edges = value["edges"].as_array().expect("edges array");
-    // Each file has one supply edge; after merge, both edges survive.
     assert_eq!(
         edges.len(),
         2,
         "merged transitive chain must have 2 supply edges; edges: {edges:?}"
     );
-    // Both edges must be of type "supplies".
     for edge in edges {
         assert_eq!(
             edge["type"].as_str(),
@@ -255,10 +227,6 @@ fn merge_transitive_chain_has_full_supply_chain() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Regression 5: ANNULLED LEI
-// ---------------------------------------------------------------------------
-
 /// Merging files where some nodes carry an ANNULLED LEI. Annulled LEI nodes
 /// are not used for identity matching, so each keeps its own identity group.
 #[test]
@@ -266,14 +234,8 @@ fn merge_annulled_lei_nodes_not_merged_by_lei() {
     let value = run_merge("merge-annulled-lei-a.omts", "merge-annulled-lei-b.omts");
     let nodes = value["nodes"].as_array().expect("nodes array");
 
-    // annulled-a: org-live (LEI 5493006MHB84DD0ZWV18) + org-annulled (annulled LEI)
-    // annulled-b: org-live-2 (same LEI + DUNS) + org-annulled-2 (same annulled LEI)
-    //
-    // org-live and org-live-2 share a valid LEI → merged into 1 node.
-    // org-annulled and org-annulled-2 share an ANNULLED LEI.
-    // Annulled LEIs are excluded from the identity index. Without other matching
-    // identifiers, they form 2 separate groups.
-    // Total: 1 (live merged) + 2 (annulled, not merged) = 3 groups.
+    // Annulled LEIs are excluded from the identity index, so without other
+    // matching identifiers, the two annulled nodes form separate groups.
     assert_eq!(
         nodes.len(),
         3,
@@ -332,10 +294,6 @@ fn merge_annulled_lei_live_entity_merged_correctly() {
         "live entity must carry DUNS from file-b after merge"
     );
 }
-
-// ---------------------------------------------------------------------------
-// Regression 6: merge output has required merge metadata
-// ---------------------------------------------------------------------------
 
 /// Any merged output must carry `merge_metadata` per the spec.
 #[test]

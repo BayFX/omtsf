@@ -14,10 +14,6 @@ use std::path::{Path, PathBuf};
 use crate::PathOrStdin;
 use crate::error::CliError;
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
 /// Reads the entire contents of `source` into a `String`.
 ///
 /// For disk files the file length is checked against `max_size` via
@@ -40,13 +36,8 @@ pub fn read_input(source: &PathOrStdin, max_size: u64) -> Result<String, CliErro
     }
 }
 
-// ---------------------------------------------------------------------------
-// Disk file reading
-// ---------------------------------------------------------------------------
-
 /// Reads a disk file, enforcing the size limit and UTF-8 requirement.
 fn read_file(path: &PathBuf, max_size: u64) -> Result<String, CliError> {
-    // Size check via metadata — no allocation until we know it's within bounds.
     let file_size = match std::fs::metadata(path) {
         Ok(meta) => meta.len(),
         Err(e) => {
@@ -81,9 +72,7 @@ fn io_error_to_cli(e: &std::io::Error, path: &Path) -> CliError {
         std::io::ErrorKind::PermissionDenied => CliError::PermissionDenied {
             path: path.to_path_buf(),
         },
-        // All other I/O error kinds are wrapped in the generic IoError variant.
-        // We list a few common ones explicitly to silence the exhaustiveness
-        // lint while still routing everything unknown to IoError.
+        // Exhaustive match: all remaining kinds route to IoError.
         std::io::ErrorKind::ConnectionRefused
         | std::io::ErrorKind::ConnectionReset
         | std::io::ErrorKind::HostUnreachable
@@ -127,10 +116,6 @@ fn io_error_to_cli(e: &std::io::Error, path: &Path) -> CliError {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Stdin reading
-// ---------------------------------------------------------------------------
-
 /// Reads the entire stdin stream, capped at `max_size` bytes.
 ///
 /// Uses `Read::take` so the buffer allocation is bounded. If the stream
@@ -140,7 +125,6 @@ fn read_stdin(max_size: u64) -> Result<String, CliError> {
     let stdin = std::io::stdin();
     let handle = stdin.lock();
 
-    // Read at most max_size bytes; allocate no more.
     let mut limited = handle.take(max_size);
     let mut buf: Vec<u8> = Vec::new();
 
@@ -150,8 +134,8 @@ fn read_stdin(max_size: u64) -> Result<String, CliError> {
             detail: e.to_string(),
         })?;
 
-    // If we read exactly max_size bytes the stream may still have more data.
-    // Attempt to read one additional byte to detect overflow.
+    // Probe for overflow: if we got exactly max_size bytes, the stream may
+    // have more data beyond the limit.
     if buf.len() as u64 == max_size {
         let stdin2 = std::io::stdin();
         let mut handle2 = stdin2.lock();
@@ -173,10 +157,6 @@ fn read_stdin(max_size: u64) -> Result<String, CliError> {
     bytes_to_string(&buf, "-")
 }
 
-// ---------------------------------------------------------------------------
-// UTF-8 conversion
-// ---------------------------------------------------------------------------
-
 /// Converts a byte buffer to a `String`, returning a [`CliError`] with the
 /// byte offset of the first invalid sequence on failure.
 fn bytes_to_string(bytes: &[u8], source_label: &str) -> Result<String, CliError> {
@@ -189,10 +169,6 @@ fn bytes_to_string(bytes: &[u8], source_label: &str) -> Result<String, CliError>
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -204,16 +180,12 @@ mod tests {
     use super::*;
     use crate::PathOrStdin;
 
-    // ── helpers ──────────────────────────────────────────────────────────────
-
     /// Creates a named temporary file with the given contents and returns its path.
     fn temp_file_with(contents: &[u8]) -> tempfile::NamedTempFile {
         let mut f = tempfile::NamedTempFile::new().expect("create temp file");
         f.write_all(contents).expect("write temp file");
         f
     }
-
-    // ── disk file: happy path ────────────────────────────────────────────────
 
     #[test]
     fn read_valid_utf8_file() {
@@ -232,14 +204,11 @@ mod tests {
         assert_eq!(result, "");
     }
 
-    // ── disk file: size limit ────────────────────────────────────────────────
-
     #[test]
     fn read_file_exactly_at_limit_succeeds() {
         let content = b"hello";
         let f = temp_file_with(content);
         let source = PathOrStdin::Path(f.path().to_path_buf());
-        // 5 bytes is exactly at the limit of 5.
         let result = read_input(&source, 5).expect("should succeed at limit");
         assert_eq!(result, "hello");
     }
@@ -260,7 +229,7 @@ mod tests {
 
     #[test]
     fn read_file_over_limit_reports_actual_size() {
-        let content = b"hello world"; // 11 bytes
+        let content = b"hello world";
         let f = temp_file_with(content);
         let source = PathOrStdin::Path(f.path().to_path_buf());
         let err = read_input(&source, 4).expect_err("should fail");
@@ -274,13 +243,10 @@ mod tests {
         }
     }
 
-    // ── disk file: UTF-8 validation ──────────────────────────────────────────
-
     #[test]
     fn read_invalid_utf8_returns_error_with_offset() {
-        // Valid ASCII up to byte 5, then an invalid byte sequence.
         let mut data = b"hello".to_vec();
-        data.push(0xFF); // invalid UTF-8 byte
+        data.push(0xFF);
         let f = temp_file_with(&data);
         let source = PathOrStdin::Path(f.path().to_path_buf());
         let err = read_input(&source, 1024).expect_err("should fail on bad UTF-8");
@@ -295,7 +261,7 @@ mod tests {
 
     #[test]
     fn read_invalid_utf8_at_start_offset_is_zero() {
-        let data = vec![0xFF, 0xFE]; // immediately invalid
+        let data = vec![0xFF, 0xFE];
         let f = temp_file_with(&data);
         let source = PathOrStdin::Path(f.path().to_path_buf());
         let err = read_input(&source, 1024).expect_err("should fail");
@@ -306,8 +272,6 @@ mod tests {
             other => panic!("expected InvalidUtf8, got {other:?}"),
         }
     }
-
-    // ── disk file: I/O errors ────────────────────────────────────────────────
 
     #[test]
     fn read_nonexistent_file_returns_file_not_found() {

@@ -16,10 +16,6 @@ use crate::OutputFormat;
 use crate::error::CliError;
 use crate::format::{FormatMode, FormatterConfig, write_diagnostic, write_summary};
 
-// ---------------------------------------------------------------------------
-// run
-// ---------------------------------------------------------------------------
-
 /// Runs the `validate` command.
 ///
 /// Parses `content` as an OMTSF file, runs the validation engine at the
@@ -42,18 +38,14 @@ pub fn run(
     verbose: bool,
     no_color: bool,
 ) -> Result<(), CliError> {
-    // --- Parse ---
     let file: OmtsFile = serde_json::from_str(content).map_err(|e| CliError::ParseFailed {
         detail: format!("line {}, column {}: {e}", e.line(), e.column()),
     })?;
 
-    // --- Build ValidationConfig from --level ---
     let config = config_for_level(level);
 
-    // --- Validate ---
     let result = validate(&file, &config, None);
 
-    // --- Emit diagnostics to stderr ---
     let mode = match format {
         OutputFormat::Human => FormatMode::Human,
         OutputFormat::Json => FormatMode::Json,
@@ -70,7 +62,6 @@ pub fn run(
         })?;
     }
 
-    // --- Summary line ---
     let error_count = result.errors().count();
     let warning_count = result.warnings().count();
     let info_count = result.infos().count();
@@ -88,17 +79,12 @@ pub fn run(
         detail: e.to_string(),
     })?;
 
-    // --- Exit code ---
     if result.has_errors() {
         Err(CliError::ValidationErrors)
     } else {
         Ok(())
     }
 }
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
 
 /// Builds a [`ValidationConfig`] from a `--level` value (1, 2, or 3).
 ///
@@ -116,7 +102,6 @@ fn config_for_level(level: u8) -> ValidationConfig {
             run_l2: true,
             run_l3: false,
         },
-        // level 3 (and any other value, though clap prevents values outside 1..=3)
         _ => ValidationConfig {
             run_l1: true,
             run_l2: true,
@@ -125,18 +110,12 @@ fn config_for_level(level: u8) -> ValidationConfig {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
     #![allow(clippy::panic)]
 
     use super::*;
-
-    // Minimal valid OMTS JSON — no nodes, no edges, clean file.
     const MINIMAL_VALID: &str = r#"{
         "omtsf_version": "1.0.0",
         "snapshot_date": "2026-02-19",
@@ -145,7 +124,6 @@ mod tests {
         "edges": []
     }"#;
 
-    // OMTS JSON with an edge referencing a non-existent target node (L1-GDM-03).
     const INVALID_EDGE_TARGET: &str = r#"{
         "omtsf_version": "1.0.0",
         "snapshot_date": "2026-02-19",
@@ -163,10 +141,7 @@ mod tests {
         ]
     }"#;
 
-    // Not valid JSON at all.
     const NOT_JSON: &str = "this is not json";
-
-    // ── config_for_level ──────────────────────────────────────────────────────
 
     #[test]
     fn config_level_1_runs_only_l1() {
@@ -192,15 +167,11 @@ mod tests {
         assert!(cfg.run_l3);
     }
 
-    // ── run: happy path ───────────────────────────────────────────────────────
-
     #[test]
     fn run_valid_file_returns_ok() {
         let result = run(MINIMAL_VALID, 2, &OutputFormat::Human, false, false, true);
         assert!(result.is_ok(), "expected Ok for clean file: {result:?}");
     }
-
-    // ── run: parse failure ────────────────────────────────────────────────────
 
     #[test]
     fn run_invalid_json_returns_parse_failed() {
@@ -220,7 +191,6 @@ mod tests {
 
     #[test]
     fn run_parse_error_message_includes_line_and_column() {
-        // Multi-line JSON with a syntax error on a known line.
         let bad_json = "{\n  \"omtsf_version\": !!bad\n}";
         let err = run(bad_json, 2, &OutputFormat::Human, false, false, true)
             .expect_err("should fail to parse");
@@ -231,8 +201,6 @@ mod tests {
             "message should contain 'column': {msg}"
         );
     }
-
-    // ── run: validation errors ────────────────────────────────────────────────
 
     #[test]
     fn run_invalid_edge_returns_validation_errors() {
@@ -264,8 +232,6 @@ mod tests {
         assert_eq!(err.exit_code(), 1);
     }
 
-    // ── run: level flag interaction ───────────────────────────────────────────
-
     #[test]
     fn run_level_1_returns_ok_for_clean_file() {
         let result = run(MINIMAL_VALID, 1, &OutputFormat::Human, false, false, true);
@@ -277,8 +243,6 @@ mod tests {
         let result = run(MINIMAL_VALID, 3, &OutputFormat::Human, false, false, true);
         assert!(result.is_ok());
     }
-
-    // ── run: JSON output format ───────────────────────────────────────────────
 
     #[test]
     fn run_json_format_valid_file_returns_ok() {

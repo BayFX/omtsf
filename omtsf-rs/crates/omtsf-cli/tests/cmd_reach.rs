@@ -23,10 +23,6 @@ fn fixture(name: &str) -> PathBuf {
     path
 }
 
-// ---------------------------------------------------------------------------
-// reach: human mode — basic reachability
-// ---------------------------------------------------------------------------
-
 #[test]
 fn reach_forward_from_root_exits_0() {
     let out = Command::new(omtsf_bin())
@@ -51,7 +47,6 @@ fn reach_forward_from_root_lists_all_reachable_nodes() {
         .output()
         .expect("run omtsf reach");
     let stdout = String::from_utf8_lossy(&out.stdout);
-    // org-a → org-b → org-c → org-d  and  org-a → org-e
     assert!(
         stdout.contains("org-b"),
         "org-b should be reachable: {stdout}"
@@ -68,7 +63,6 @@ fn reach_forward_from_root_lists_all_reachable_nodes() {
         stdout.contains("org-e"),
         "org-e should be reachable: {stdout}"
     );
-    // The start node itself is excluded.
     assert!(
         !stdout.contains("org-a"),
         "org-a (start) must not appear: {stdout}"
@@ -93,10 +87,6 @@ fn reach_forward_leaf_node_is_empty() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// reach: --depth flag
-// ---------------------------------------------------------------------------
-
 #[test]
 fn reach_with_depth_1_returns_direct_neighbours_only() {
     let out = Command::new(omtsf_bin())
@@ -111,7 +101,6 @@ fn reach_with_depth_1_returns_direct_neighbours_only() {
         .expect("run omtsf reach --depth 1");
     assert!(out.status.success(), "exit code: {:?}", out.status.code());
     let stdout = String::from_utf8_lossy(&out.stdout);
-    // Direct neighbours of org-a are org-b and org-e.
     assert!(
         stdout.contains("org-b"),
         "org-b is a direct neighbour: {stdout}"
@@ -120,7 +109,6 @@ fn reach_with_depth_1_returns_direct_neighbours_only() {
         stdout.contains("org-e"),
         "org-e is a direct neighbour: {stdout}"
     );
-    // org-c and org-d require more than 1 hop.
     assert!(
         !stdout.contains("org-c"),
         "org-c is 2 hops away, must not appear: {stdout}"
@@ -130,10 +118,6 @@ fn reach_with_depth_1_returns_direct_neighbours_only() {
         "org-d is 3 hops away, must not appear: {stdout}"
     );
 }
-
-// ---------------------------------------------------------------------------
-// reach: --direction flag
-// ---------------------------------------------------------------------------
 
 #[test]
 fn reach_incoming_direction_traverses_upstream() {
@@ -149,7 +133,6 @@ fn reach_incoming_direction_traverses_upstream() {
         .expect("run omtsf reach --direction incoming");
     assert!(out.status.success(), "exit code: {:?}", out.status.code());
     let stdout = String::from_utf8_lossy(&out.stdout);
-    // org-d is reachable backwards from org-a, org-b, org-c.
     assert!(
         stdout.contains("org-c"),
         "org-c is direct upstream of org-d: {stdout}"
@@ -178,7 +161,6 @@ fn reach_both_direction_finds_more_nodes() {
         .expect("run omtsf reach --direction both");
     assert!(out.status.success(), "exit code: {:?}", out.status.code());
     let stdout = String::from_utf8_lossy(&out.stdout);
-    // org-b can reach org-a backwards and org-c, org-d, org-e is reachable via org-a.
     assert!(
         stdout.contains("org-a"),
         "org-a is upstream (backward): {stdout}"
@@ -188,10 +170,6 @@ fn reach_both_direction_finds_more_nodes() {
         "org-c is downstream (forward): {stdout}"
     );
 }
-
-// ---------------------------------------------------------------------------
-// reach: JSON mode
-// ---------------------------------------------------------------------------
 
 #[test]
 fn reach_json_mode_exits_0() {
@@ -242,13 +220,8 @@ fn reach_json_mode_contains_node_ids_and_count() {
         serde_json::from_str(stdout.trim()).expect("valid JSON from reach");
     assert!(value.get("node_ids").is_some(), "missing node_ids field");
     assert!(value.get("count").is_some(), "missing count field");
-    // 4 reachable nodes: org-b, org-c, org-d, org-e
     assert_eq!(value["count"], 4, "expected count 4");
 }
-
-// ---------------------------------------------------------------------------
-// reach: error cases
-// ---------------------------------------------------------------------------
 
 #[test]
 fn reach_unknown_node_exits_1() {

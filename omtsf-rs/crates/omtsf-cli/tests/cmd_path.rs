@@ -23,10 +23,6 @@ fn fixture(name: &str) -> PathBuf {
     path
 }
 
-// ---------------------------------------------------------------------------
-// path: human mode — basic path finding
-// ---------------------------------------------------------------------------
-
 #[test]
 fn path_exists_exits_0() {
     let out = Command::new(omtsf_bin())
@@ -53,7 +49,6 @@ fn path_human_output_uses_arrow_separator() {
         .output()
         .expect("run omtsf path");
     let stdout = String::from_utf8_lossy(&out.stdout);
-    // At least one path must be present and use " -> " as separator.
     assert!(
         stdout.contains(" -> "),
         "human output should use ' -> ' separator: {stdout}"
@@ -80,7 +75,6 @@ fn path_includes_intermediate_nodes() {
         .output()
         .expect("run omtsf path");
     let stdout = String::from_utf8_lossy(&out.stdout);
-    // The only path from org-a to org-d is org-a -> org-b -> org-c -> org-d.
     assert!(
         stdout.contains("org-b"),
         "path should include org-b: {stdout}"
@@ -90,10 +84,6 @@ fn path_includes_intermediate_nodes() {
         "path should include org-c: {stdout}"
     );
 }
-
-// ---------------------------------------------------------------------------
-// path: --max-paths flag
-// ---------------------------------------------------------------------------
 
 #[test]
 fn path_max_paths_limits_output() {
@@ -116,10 +106,6 @@ fn path_max_paths_limits_output() {
     assert_eq!(line_count, 1, "expected exactly 1 path: {stdout}");
 }
 
-// ---------------------------------------------------------------------------
-// path: --max-depth flag
-// ---------------------------------------------------------------------------
-
 #[test]
 fn path_max_depth_too_short_exits_1() {
     // org-a to org-d requires 3 edges; max-depth=2 should find no path.
@@ -141,10 +127,6 @@ fn path_max_depth_too_short_exits_1() {
         out.status.code()
     );
 }
-
-// ---------------------------------------------------------------------------
-// path: JSON mode
-// ---------------------------------------------------------------------------
 
 #[test]
 fn path_json_mode_exits_0() {
@@ -198,7 +180,6 @@ fn path_json_contains_paths_and_count() {
         serde_json::from_str(stdout.trim()).expect("valid JSON from path");
     assert!(value.get("paths").is_some(), "missing paths field");
     assert!(value.get("count").is_some(), "missing count field");
-    // paths should be an array of arrays.
     let paths = value["paths"].as_array().expect("paths should be an array");
     assert!(!paths.is_empty(), "paths array should not be empty");
     let first_path = paths[0].as_array().expect("first path should be an array");
@@ -214,13 +195,8 @@ fn path_json_contains_paths_and_count() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// path: error cases
-// ---------------------------------------------------------------------------
-
 #[test]
 fn path_no_path_exits_1() {
-    // org-d → org-a is impossible in the forward direction.
     let out = Command::new(omtsf_bin())
         .args([
             "path",

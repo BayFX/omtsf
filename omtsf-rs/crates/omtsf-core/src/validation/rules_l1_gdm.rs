@@ -14,10 +14,6 @@ use crate::structures::Node;
 
 use super::{Diagnostic, Level, Location, RuleId, Severity, ValidationRule};
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 /// Build a map from node id string to the node reference.
 ///
 /// Used by multiple rules to avoid redundant iteration.
@@ -33,10 +29,6 @@ fn node_id_map(file: &OmtsFile) -> HashMap<&str, &Node> {
 fn is_extension_type(s: &str) -> bool {
     s.contains('.')
 }
-
-// ---------------------------------------------------------------------------
-// L1-GDM-01: Duplicate node ID detection
-// ---------------------------------------------------------------------------
 
 /// L1-GDM-01 — Every node has a non-empty `id`, unique within the file.
 ///
@@ -79,10 +71,6 @@ impl ValidationRule for GdmRule01 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// L1-GDM-02: Duplicate edge ID detection
-// ---------------------------------------------------------------------------
-
 /// L1-GDM-02 — Every edge has a non-empty `id`, unique within the file.
 ///
 /// The non-empty constraint is enforced by the [`crate::newtypes::NodeId`]
@@ -123,10 +111,6 @@ impl ValidationRule for GdmRule02 {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// L1-GDM-03: Dangling edge source/target references
-// ---------------------------------------------------------------------------
 
 /// L1-GDM-03 — Every edge `source` and `target` references an existing node `id`.
 ///
@@ -188,10 +172,6 @@ impl ValidationRule for GdmRule03 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// L1-GDM-04: Edge type validation
-// ---------------------------------------------------------------------------
-
 /// L1-GDM-04 — Edge `type` is a recognised core type, `same_as`, or
 /// reverse-domain extension.
 ///
@@ -217,9 +197,7 @@ impl ValidationRule for GdmRule04 {
     ) {
         for edge in &file.edges {
             match &edge.edge_type {
-                EdgeTypeTag::Known(_) => {
-                    // All known variants (including SameAs) are accepted.
-                }
+                EdgeTypeTag::Known(_) => {}
                 EdgeTypeTag::Extension(s) => {
                     if !is_extension_type(s) {
                         diags.push(Diagnostic::new(
@@ -237,16 +215,11 @@ impl ValidationRule for GdmRule04 {
                             ),
                         ));
                     }
-                    // Dot-containing strings are extension types: accepted.
                 }
             }
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// L1-GDM-05: reporting_entity references a valid organization node
-// ---------------------------------------------------------------------------
 
 /// L1-GDM-05 — `reporting_entity` if present references an existing
 /// `organization` node.
@@ -322,10 +295,6 @@ fn node_type_display(tag: &NodeTypeTag) -> String {
     }
 }
 
-// ---------------------------------------------------------------------------
-// L1-GDM-06: Edge source/target node type compatibility
-// ---------------------------------------------------------------------------
-
 /// L1-GDM-06 — Edge source/target node types match the permitted types table
 /// (SPEC-001 Section 9.5). Extension edges are exempt.
 ///
@@ -343,7 +312,6 @@ pub struct GdmRule06;
 fn permitted_types(edge_type: &EdgeType) -> Option<(TypeSet, TypeSet)> {
     use NodeType::{Attestation, Consignment, Facility, Good, Organization, Person};
 
-    // TypeSet is a small fixed-size slice reference; values live in static arrays.
     let org = &[Organization][..];
     let org_fac = &[Organization, Facility][..];
     let fac = &[Facility][..];
@@ -397,14 +365,12 @@ impl ValidationRule for GdmRule06 {
         for edge in &file.edges {
             let edge_id: &str = &edge.id;
 
-            // Extension edges are exempt from type-compatibility checks.
             let edge_type = match &edge.edge_type {
                 EdgeTypeTag::Extension(_) => continue,
                 EdgeTypeTag::Known(et) => et,
             };
 
             let Some((permitted_src, permitted_tgt)) = permitted_types(edge_type) else {
-                // `same_as` — no constraint.
                 continue;
             };
 
@@ -439,7 +405,6 @@ impl ValidationRule for GdmRule06 {
                         ));
                     }
                 }
-                // Extension node types are not constrained.
             }
 
             if let Some(tgt_node) = node_map.get(target_id) {
@@ -465,7 +430,6 @@ impl ValidationRule for GdmRule06 {
                         ));
                     }
                 }
-                // Extension node types are not constrained.
             }
         }
     }
@@ -502,10 +466,6 @@ fn format_type_set(types: &[NodeType]) -> String {
         .join(", ")
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -515,10 +475,6 @@ mod tests {
     use crate::file::OmtsFile;
     use crate::newtypes::{CalendarDate, EdgeId, FileSalt, NodeId, SemVer};
     use crate::structures::{Edge, EdgeProperties, Node};
-
-    // -----------------------------------------------------------------------
-    // Fixture helpers
-    // -----------------------------------------------------------------------
 
     const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
@@ -649,10 +605,6 @@ mod tests {
         diags.iter().map(|d| &d.rule_id).collect()
     }
 
-    // -----------------------------------------------------------------------
-    // L1-GDM-01 tests
-    // -----------------------------------------------------------------------
-
     #[test]
     fn gdm01_clean_no_diagnostics() {
         let file = make_file(
@@ -684,7 +636,6 @@ mod tests {
 
     #[test]
     fn gdm01_multiple_duplicates_all_collected() {
-        // Three nodes share the same id → two diagnostics (second and third occurrence).
         let file = make_file(
             vec![
                 node("same", NodeType::Organization),
@@ -705,10 +656,6 @@ mod tests {
         let diags = run_rule(&GdmRule01, &file);
         assert!(diags.is_empty());
     }
-
-    // -----------------------------------------------------------------------
-    // L1-GDM-02 tests
-    // -----------------------------------------------------------------------
 
     #[test]
     fn gdm02_clean_no_diagnostics() {
@@ -767,10 +714,6 @@ mod tests {
         let diags = run_rule(&GdmRule02, &file);
         assert!(diags.is_empty());
     }
-
-    // -----------------------------------------------------------------------
-    // L1-GDM-03 tests
-    // -----------------------------------------------------------------------
 
     #[test]
     fn gdm03_clean_no_diagnostics() {
@@ -844,13 +787,8 @@ mod tests {
             ],
         );
         let diags = run_rule(&GdmRule03, &file);
-        // e-1: 1 (target), e-2: 1 (source), e-3: 2 (both)
         assert_eq!(diags.len(), 4);
     }
-
-    // -----------------------------------------------------------------------
-    // L1-GDM-04 tests
-    // -----------------------------------------------------------------------
 
     #[test]
     fn gdm04_clean_all_known_types_no_diagnostics() {
@@ -919,10 +857,6 @@ mod tests {
         assert_eq!(diags.len(), 2);
     }
 
-    // -----------------------------------------------------------------------
-    // L1-GDM-05 tests
-    // -----------------------------------------------------------------------
-
     #[test]
     fn gdm05_no_reporting_entity_no_diagnostics() {
         let file = make_file(vec![], vec![]);
@@ -975,10 +909,6 @@ mod tests {
         assert_eq!(diags[0].rule_id, RuleId::L1Gdm05);
     }
 
-    // -----------------------------------------------------------------------
-    // L1-GDM-06 tests
-    // -----------------------------------------------------------------------
-
     #[test]
     fn gdm06_clean_supplies_org_to_org_no_diagnostics() {
         let file = make_file(
@@ -994,7 +924,6 @@ mod tests {
 
     #[test]
     fn gdm06_ownership_wrong_target_type_detected() {
-        // ownership: source=org, target=org — using a facility as target is invalid.
         let file = make_file(
             vec![
                 node("org-1", NodeType::Organization),
@@ -1032,7 +961,6 @@ mod tests {
 
     #[test]
     fn gdm06_beneficial_ownership_wrong_source_detected() {
-        // source must be person; org is not permitted.
         let file = make_file(
             vec![
                 node("org-1", NodeType::Organization),
@@ -1130,7 +1058,6 @@ mod tests {
 
     #[test]
     fn gdm06_same_as_any_types_accepted() {
-        // same_as accepts any source and target node type.
         let file = make_file(
             vec![
                 node("org-1", NodeType::Organization),
@@ -1147,7 +1074,6 @@ mod tests {
 
     #[test]
     fn gdm06_extension_edge_type_exempt() {
-        // Extension edge types bypass type-compatibility checks entirely.
         let file = make_file(
             vec![
                 node("org-1", NodeType::Organization),
@@ -1180,7 +1106,6 @@ mod tests {
 
     #[test]
     fn gdm06_extension_node_type_not_constrained() {
-        // A known edge type with an extension node type source: no GDM-06 diagnostic.
         let file = make_file(
             vec![
                 extension_node("ext-1", "com.example.custom"),
@@ -1197,7 +1122,6 @@ mod tests {
 
     #[test]
     fn gdm06_all_violations_collected_no_early_exit() {
-        // Two edges each with a wrong source type → two diagnostics.
         let file = make_file(
             vec![
                 node("fac-1", NodeType::Facility),
@@ -1205,9 +1129,7 @@ mod tests {
                 node("org-1", NodeType::Organization),
             ],
             vec![
-                // ownership expects org → org; facility source is wrong
                 edge("e-1", EdgeType::Ownership, "fac-1", "org-1"),
-                // ownership expects org → org; facility source is wrong
                 edge("e-2", EdgeType::Ownership, "fac-2", "org-1"),
             ],
         );
@@ -1244,7 +1166,6 @@ mod tests {
 
     #[test]
     fn gdm06_tolls_facility_source_accepted() {
-        // tolls permits organization or facility as source
         let file = make_file(
             vec![
                 node("fac-1", NodeType::Facility),

@@ -18,10 +18,6 @@ use omtsf_core::{DisclosureScope as CoreScope, OmtsFile, enums::NodeType, enums:
 use crate::DisclosureScope as CliScope;
 use crate::error::CliError;
 
-// ---------------------------------------------------------------------------
-// run
-// ---------------------------------------------------------------------------
-
 /// Runs the `redact` command.
 ///
 /// Parses `content` as an OMTSF file, checks that the target scope is at
@@ -35,13 +31,10 @@ use crate::error::CliError;
 /// - [`CliError::RedactionError`] — target scope is less restrictive than
 ///   the existing scope, or the engine produces an invalid output.
 pub fn run(content: &str, scope: &CliScope) -> Result<(), CliError> {
-    // --- Parse ---
     let file: OmtsFile = serde_json::from_str(content).map_err(|e| CliError::ParseFailed {
         detail: format!("line {}, column {}: {e}", e.line(), e.column()),
     })?;
 
-    // --- Scope compatibility check ---
-    // Target scope must be at least as restrictive as the existing disclosure_scope.
     let target_core = cli_scope_to_core(scope);
     if let Some(existing) = &file.disclosure_scope {
         if scope_is_less_restrictive(&target_core, existing) {
@@ -54,7 +47,6 @@ pub fn run(content: &str, scope: &CliScope) -> Result<(), CliError> {
         }
     }
 
-    // --- Gather statistics before redaction ---
     let total_nodes_before = file.nodes.len();
     let person_nodes_before = file
         .nodes
@@ -62,18 +54,12 @@ pub fn run(content: &str, scope: &CliScope) -> Result<(), CliError> {
         .filter(|n| matches!(&n.node_type, NodeTypeTag::Known(NodeType::Person)))
         .count();
 
-    // --- Apply redaction (retain all nodes, producer decides replacement) ---
-    // We pass an empty retain_ids set so that all non-omitted nodes are
-    // replaced with boundary_ref stubs, except for the subset the caller
-    // explicitly retains. The CLI's `redact` command uses the "retain none"
-    // policy (all nodes replaced) which is the minimal, safe default.
     let retain_ids = HashSet::new();
     let redacted =
         redact(&file, target_core, &retain_ids).map_err(|e| CliError::RedactionError {
             detail: e.to_string(),
         })?;
 
-    // --- Emit statistics to stderr ---
     let stderr = std::io::stderr();
     let mut err_out = stderr.lock();
 
@@ -96,7 +82,6 @@ pub fn run(content: &str, scope: &CliScope) -> Result<(), CliError> {
         detail: e.to_string(),
     })?;
 
-    // --- Write redacted file to stdout ---
     let json = serde_json::to_string_pretty(&redacted).map_err(|e| CliError::InternalError {
         detail: format!("JSON serialization of redacted output failed: {e}"),
     })?;
@@ -110,10 +95,6 @@ pub fn run(content: &str, scope: &CliScope) -> Result<(), CliError> {
 
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
 
 /// Converts a CLI [`crate::DisclosureScope`] to the core library [`CoreScope`].
 fn cli_scope_to_core(scope: &CliScope) -> CoreScope {
@@ -145,10 +126,6 @@ fn scope_level(scope: &CoreScope) -> u8 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -156,8 +133,6 @@ mod tests {
 
     use super::*;
     use crate::DisclosureScope as CliScope;
-
-    // Minimal valid OMTS JSON without a disclosure_scope.
     const MINIMAL: &str = r#"{
         "omtsf_version": "1.0.0",
         "snapshot_date": "2026-02-19",
@@ -166,7 +141,6 @@ mod tests {
         "edges": []
     }"#;
 
-    // File that already declares disclosure_scope = "public".
     const ALREADY_PUBLIC: &str = r#"{
         "omtsf_version": "1.0.0",
         "snapshot_date": "2026-02-19",
@@ -176,7 +150,6 @@ mod tests {
         "edges": []
     }"#;
 
-    // File that already declares disclosure_scope = "partner".
     const ALREADY_PARTNER: &str = r#"{
         "omtsf_version": "1.0.0",
         "snapshot_date": "2026-02-19",
@@ -186,18 +159,13 @@ mod tests {
         "edges": []
     }"#;
 
-    // Not valid JSON.
     const NOT_JSON: &str = "this is not json";
-
-    // ── scope_level ───────────────────────────────────────────────────────────
 
     #[test]
     fn scope_level_ordering() {
         assert!(scope_level(&CoreScope::Internal) < scope_level(&CoreScope::Partner));
         assert!(scope_level(&CoreScope::Partner) < scope_level(&CoreScope::Public));
     }
-
-    // ── scope_is_less_restrictive ────────────────────────────────────────────
 
     #[test]
     fn internal_is_less_restrictive_than_partner() {
@@ -255,16 +223,12 @@ mod tests {
         ));
     }
 
-    // ── cli_scope_to_core ────────────────────────────────────────────────────
-
     #[test]
     fn cli_scope_maps_to_core() {
         assert_eq!(cli_scope_to_core(&CliScope::Public), CoreScope::Public);
         assert_eq!(cli_scope_to_core(&CliScope::Partner), CoreScope::Partner);
         assert_eq!(cli_scope_to_core(&CliScope::Internal), CoreScope::Internal);
     }
-
-    // ── run: parse failure ────────────────────────────────────────────────────
 
     #[test]
     fn run_invalid_json_returns_parse_failed() {
@@ -281,8 +245,6 @@ mod tests {
         let err = result.expect_err("should fail");
         assert_eq!(err.exit_code(), 2);
     }
-
-    // ── run: scope compatibility ──────────────────────────────────────────────
 
     /// Redacting a `public` file to `partner` scope (less restrictive) → error.
     #[test]
@@ -317,8 +279,6 @@ mod tests {
         let result = run(ALREADY_PUBLIC, &CliScope::Public);
         assert!(result.is_ok(), "same scope should succeed: {result:?}");
     }
-
-    // ── run: happy path ───────────────────────────────────────────────────────
 
     /// Redacting a minimal file to public scope succeeds.
     #[test]
@@ -358,8 +318,6 @@ mod tests {
         let result = run(content, &CliScope::Public);
         assert!(result.is_ok(), "expected Ok: {result:?}");
     }
-
-    // ── RedactionError exit code ──────────────────────────────────────────────
 
     #[test]
     fn redaction_error_exit_code_is_1() {

@@ -30,10 +30,6 @@ use omtsf_core::{
     structures::{Edge, EdgeProperties, Node},
 };
 
-// ---------------------------------------------------------------------------
-// Helpers — no I/O, no platform-specific APIs
-// ---------------------------------------------------------------------------
-
 const SALT: &str = "cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe";
 
 fn semver() -> SemVer {
@@ -122,10 +118,6 @@ fn make_file(nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
     }
 }
 
-// ---------------------------------------------------------------------------
-// WASM-compat-01: Core types construct and round-trip without I/O
-// ---------------------------------------------------------------------------
-
 /// [`OmtsFile`] and its nested types can be constructed and serialised using
 /// only in-memory operations — no filesystem, network, or process APIs.
 ///
@@ -138,7 +130,6 @@ fn wasm_compat_core_types_no_io() {
         vec![supplies_edge("e-1", "org-a", "org-b")],
     );
 
-    // Serialise and deserialise using only in-memory buffers.
     let json = serde_json::to_string(&file).expect("serialise");
     let back: OmtsFile = serde_json::from_str(&json).expect("deserialise");
 
@@ -146,10 +137,6 @@ fn wasm_compat_core_types_no_io() {
     assert_eq!(back.nodes.len(), 2);
     assert_eq!(back.edges.len(), 1);
 }
-
-// ---------------------------------------------------------------------------
-// WASM-compat-02: Validation runs without I/O
-// ---------------------------------------------------------------------------
 
 /// [`omtsf_core::validate`] accepts and validates an [`OmtsFile`] using only
 /// in-memory data — compatible with a WASM sandbox that has no filesystem.
@@ -165,17 +152,12 @@ fn wasm_compat_validation_no_io() {
         run_l3: false,
     };
 
-    // validate() must not touch the filesystem.
     let result = validate(&file, &cfg, None);
     assert!(
         result.is_conformant(),
         "minimal file must pass L1 validation"
     );
 }
-
-// ---------------------------------------------------------------------------
-// WASM-compat-03: Redaction runs without I/O
-// ---------------------------------------------------------------------------
 
 /// [`omtsf_core::redact`] produces a redacted file using only in-memory
 /// operations — no filesystem access required.
@@ -195,12 +177,8 @@ fn wasm_compat_redaction_no_io() {
         omtsf_core::redact(&file, DisclosureScope::Partner, &retain).expect("redact must succeed");
 
     assert_eq!(output.disclosure_scope, Some(DisclosureScope::Partner));
-    assert_eq!(output.nodes.len(), 2); // org-pub retained, org-priv as boundary_ref
+    assert_eq!(output.nodes.len(), 2);
 }
-
-// ---------------------------------------------------------------------------
-// WASM-compat-04: SHA-2 hashing runs without I/O
-// ---------------------------------------------------------------------------
 
 /// The [`omtsf_core::boundary_ref_value`] function uses `sha2` under the hood.
 /// `sha2` compiles for WASM32 and requires no platform entropy — it is a pure
@@ -213,7 +191,6 @@ fn wasm_compat_sha2_no_io() {
     let file_salt = salt();
     let salt_bytes = decode_salt(&file_salt).expect("decode_salt must succeed");
 
-    // Use a non-empty canonical id list to exercise the deterministic SHA-256 path.
     let id = omtsf_core::types::Identifier {
         scheme: "lei".to_owned(),
         value: "5493006MHB84DD0ZWV18".to_owned(),
@@ -240,7 +217,6 @@ fn wasm_compat_sha2_no_io() {
         "hash must be lowercase hex"
     );
 
-    // Determinism: same inputs produce same output.
     let hash2 = boundary_ref_value(&[canonical_id], &salt_bytes).expect("second call ok");
     assert_eq!(hash, hash2, "SHA-256 must be deterministic");
 }

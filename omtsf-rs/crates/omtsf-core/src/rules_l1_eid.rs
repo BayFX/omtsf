@@ -15,12 +15,6 @@ use crate::check_digits::{gs1_mod10, mod97_10};
 use crate::file::OmtsFile;
 use crate::validation::{Diagnostic, Level, Location, RuleId, Severity, ValidationRule};
 
-// ---------------------------------------------------------------------------
-// Compiled regex patterns
-//
-// These are static to avoid recompiling on every call to check().
-// ---------------------------------------------------------------------------
-
 /// LEI format: 18 uppercase alphanumeric characters followed by 2 digits.
 static LEI_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^[A-Z0-9]{18}[0-9]{2}$")
@@ -54,10 +48,6 @@ fn requires_authority(scheme: &str) -> bool {
     matches!(scheme, "nat-reg" | "vat" | "internal")
 }
 
-// ---------------------------------------------------------------------------
-// Helper: emit a diagnostic for a specific identifier field
-// ---------------------------------------------------------------------------
-
 fn eid_diag(
     rule_id: RuleId,
     node_id: &str,
@@ -76,10 +66,6 @@ fn eid_diag(
         message,
     )
 }
-
-// ---------------------------------------------------------------------------
-// L1-EID-01: Every identifier has a non-empty `scheme`
-// ---------------------------------------------------------------------------
 
 /// Every identifier record MUST have a non-empty `scheme` field (SPEC-002 L1-EID-01).
 pub struct L1Eid01;
@@ -118,10 +104,6 @@ impl ValidationRule for L1Eid01 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// L1-EID-02: Every identifier has a non-empty `value`
-// ---------------------------------------------------------------------------
-
 /// Every identifier record MUST have a non-empty `value` field (SPEC-002 L1-EID-02).
 pub struct L1Eid02;
 
@@ -158,10 +140,6 @@ impl ValidationRule for L1Eid02 {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// L1-EID-03: `authority` is present when scheme is `nat-reg`, `vat`, or `internal`
-// ---------------------------------------------------------------------------
 
 /// For schemes requiring `authority` (`nat-reg`, `vat`, `internal`), the
 /// `authority` field MUST be present and non-empty (SPEC-002 L1-EID-03).
@@ -210,10 +188,6 @@ impl ValidationRule for L1Eid03 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// L1-EID-04: `scheme` is a core scheme or reverse-domain extension
-// ---------------------------------------------------------------------------
-
 /// `scheme` MUST be either a core scheme code or a valid extension scheme
 /// code (reverse-domain notation) (SPEC-002 L1-EID-04).
 ///
@@ -241,7 +215,6 @@ impl ValidationRule for L1Eid04 {
                 continue;
             };
             for (idx, ident) in identifiers.iter().enumerate() {
-                // Skip empty schemes — that is L1-EID-01's concern.
                 if ident.scheme.is_empty() {
                     continue;
                 }
@@ -261,10 +234,6 @@ impl ValidationRule for L1Eid04 {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// L1-EID-05: LEI format + MOD 97-10 check digit
-// ---------------------------------------------------------------------------
 
 /// For `lei` scheme: `value` MUST match `^[A-Z0-9]{18}[0-9]{2}$` and MUST
 /// pass MOD 97-10 check digit verification (SPEC-002 L1-EID-05).
@@ -321,10 +290,6 @@ impl ValidationRule for L1Eid05 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// L1-EID-06: DUNS format
-// ---------------------------------------------------------------------------
-
 /// For `duns` scheme: `value` MUST match `^[0-9]{9}$` (SPEC-002 L1-EID-06).
 pub struct L1Eid06;
 
@@ -364,10 +329,6 @@ impl ValidationRule for L1Eid06 {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// L1-EID-07: GLN format + GS1 mod-10 check digit
-// ---------------------------------------------------------------------------
 
 /// For `gln` scheme: `value` MUST match `^[0-9]{13}$` and MUST pass GS1
 /// mod-10 check digit verification (SPEC-002 L1-EID-07).
@@ -421,10 +382,6 @@ impl ValidationRule for L1Eid07 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// L1-EID-08: `valid_from` / `valid_to` are valid ISO 8601 dates
-// ---------------------------------------------------------------------------
-
 /// `valid_from` and `valid_to`, if present, MUST be valid ISO 8601 date
 /// strings in `YYYY-MM-DD` format (SPEC-002 L1-EID-08).
 ///
@@ -440,7 +397,6 @@ pub struct L1Eid08;
 fn is_calendar_date_valid(s: &str) -> bool {
     // CalendarDate guarantees the regex YYYY-MM-DD matched, so we can index directly.
     let bytes = s.as_bytes();
-    // Parse year, month, day without allocating.
     let year = parse_u32_fixed(&bytes[0..4]);
     let month = parse_u32_fixed(&bytes[5..7]);
     let day = parse_u32_fixed(&bytes[8..10]);
@@ -513,7 +469,6 @@ impl ValidationRule for L1Eid08 {
                         ));
                     }
                 }
-                // valid_to: None = absent, Some(None) = null (no expiry), Some(Some(d)) = date
                 if let Some(Some(vt)) = &ident.valid_to {
                     if !is_calendar_date_valid(vt.as_ref()) {
                         diags.push(eid_diag(
@@ -529,10 +484,6 @@ impl ValidationRule for L1Eid08 {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// L1-EID-09: `valid_from` <= `valid_to` when both present
-// ---------------------------------------------------------------------------
 
 /// If both `valid_from` and `valid_to` are present, `valid_from` MUST be
 /// less than or equal to `valid_to` (SPEC-002 L1-EID-09).
@@ -584,10 +535,6 @@ impl ValidationRule for L1Eid09 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// L1-EID-10: `sensitivity` if present is a valid enum value
-// ---------------------------------------------------------------------------
-
 /// `sensitivity`, if present, MUST be one of `public`, `restricted`, or
 /// `confidential` (SPEC-002 L1-EID-10).
 ///
@@ -630,10 +577,6 @@ impl ValidationRule for L1Eid10 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// L1-EID-11: No duplicate {scheme, value, authority} tuples on the same node
-// ---------------------------------------------------------------------------
-
 /// No two identifier records on the same node may have identical `scheme`,
 /// `value`, and `authority` (SPEC-002 L1-EID-11).
 pub struct L1Eid11;
@@ -658,8 +601,6 @@ impl ValidationRule for L1Eid11 {
                 continue;
             };
 
-            // Collect (scheme, value, authority) tuples to detect duplicates.
-            // We report every duplicate index that produces a collision.
             let mut seen: HashSet<(&str, &str, Option<&str>)> = HashSet::new();
 
             for (idx, ident) in identifiers.iter().enumerate() {
@@ -685,10 +626,6 @@ impl ValidationRule for L1Eid11 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -701,10 +638,6 @@ mod tests {
     use crate::validation::{ValidationConfig, build_registry, validate};
 
     const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
-
-    // -----------------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------------
 
     fn minimal_file() -> OmtsFile {
         OmtsFile {
@@ -800,10 +733,6 @@ mod tests {
         diags
     }
 
-    // -----------------------------------------------------------------------
-    // Registry integration: L1-EID rules are included when run_l1 = true
-    // -----------------------------------------------------------------------
-
     #[test]
     fn registry_includes_l1_eid_rules_when_run_l1() {
         let cfg = ValidationConfig::default();
@@ -831,10 +760,6 @@ mod tests {
         assert!(!ids.contains(&RuleId::L1Eid01));
         assert!(!ids.contains(&RuleId::L1Eid11));
     }
-
-    // -----------------------------------------------------------------------
-    // L1-EID-01
-    // -----------------------------------------------------------------------
 
     #[test]
     fn l1_eid_01_pass_non_empty_scheme() {
@@ -865,10 +790,6 @@ mod tests {
         assert!(check_rule(&rule, &file).is_empty());
     }
 
-    // -----------------------------------------------------------------------
-    // L1-EID-02
-    // -----------------------------------------------------------------------
-
     #[test]
     fn l1_eid_02_pass_non_empty_value() {
         let rule = L1Eid02;
@@ -890,10 +811,6 @@ mod tests {
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].rule_id, RuleId::L1Eid02);
     }
-
-    // -----------------------------------------------------------------------
-    // L1-EID-03
-    // -----------------------------------------------------------------------
 
     #[test]
     fn l1_eid_03_pass_nat_reg_with_authority() {
@@ -966,10 +883,6 @@ mod tests {
         assert!(check_rule(&rule, &file).is_empty());
     }
 
-    // -----------------------------------------------------------------------
-    // L1-EID-04
-    // -----------------------------------------------------------------------
-
     #[test]
     fn l1_eid_04_pass_core_scheme() {
         let rule = L1Eid04;
@@ -1001,10 +914,6 @@ mod tests {
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].rule_id, RuleId::L1Eid04);
     }
-
-    // -----------------------------------------------------------------------
-    // L1-EID-05
-    // -----------------------------------------------------------------------
 
     #[test]
     fn l1_eid_05_pass_valid_lei() {
@@ -1054,10 +963,6 @@ mod tests {
         assert!(check_rule(&rule, &file).is_empty());
     }
 
-    // -----------------------------------------------------------------------
-    // L1-EID-06
-    // -----------------------------------------------------------------------
-
     #[test]
     fn l1_eid_06_pass_valid_duns() {
         let rule = L1Eid06;
@@ -1091,10 +996,6 @@ mod tests {
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].rule_id, RuleId::L1Eid06);
     }
-
-    // -----------------------------------------------------------------------
-    // L1-EID-07
-    // -----------------------------------------------------------------------
 
     #[test]
     fn l1_eid_07_pass_valid_gln() {
@@ -1131,10 +1032,6 @@ mod tests {
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].rule_id, RuleId::L1Eid07);
     }
-
-    // -----------------------------------------------------------------------
-    // L1-EID-08
-    // -----------------------------------------------------------------------
 
     #[test]
     fn l1_eid_08_pass_valid_dates() {
@@ -1228,10 +1125,6 @@ mod tests {
         assert_eq!(diags[0].rule_id, RuleId::L1Eid08);
     }
 
-    // -----------------------------------------------------------------------
-    // L1-EID-09
-    // -----------------------------------------------------------------------
-
     #[test]
     fn l1_eid_09_pass_from_before_to() {
         let rule = L1Eid09;
@@ -1294,10 +1187,6 @@ mod tests {
         assert!(check_rule(&rule, &file).is_empty());
     }
 
-    // -----------------------------------------------------------------------
-    // L1-EID-10
-    // -----------------------------------------------------------------------
-
     #[test]
     fn l1_eid_10_pass_valid_sensitivity() {
         let rule = L1Eid10;
@@ -1324,10 +1213,6 @@ mod tests {
         file.nodes.push(node);
         assert!(check_rule(&rule, &file).is_empty());
     }
-
-    // -----------------------------------------------------------------------
-    // L1-EID-11
-    // -----------------------------------------------------------------------
 
     #[test]
     fn l1_eid_11_pass_unique_tuples() {
@@ -1386,10 +1271,6 @@ mod tests {
         assert_eq!(diags[0].rule_id, RuleId::L1Eid11);
     }
 
-    // -----------------------------------------------------------------------
-    // End-to-end via validate()
-    // -----------------------------------------------------------------------
-
     #[test]
     fn validate_clean_file_no_eid_errors() {
         let mut file = minimal_file();
@@ -1445,10 +1326,6 @@ mod tests {
         assert!(ids.contains(&&RuleId::L1Eid02));
         assert!(ids.contains(&&RuleId::L1Eid03));
     }
-
-    // -----------------------------------------------------------------------
-    // Calendar date helper unit tests
-    // -----------------------------------------------------------------------
 
     #[test]
     fn is_leap_year_examples() {

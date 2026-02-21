@@ -25,10 +25,6 @@ use petgraph::visit::{EdgeRef, IntoEdgeReferences};
 use crate::enums::EdgeTypeTag;
 use crate::graph::OmtsGraph;
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
 /// Detects cycles in the edge-type-filtered subgraph of `graph`.
 ///
 /// Uses Kahn's algorithm (BFS-based topological sort) to identify nodes that
@@ -54,33 +50,18 @@ use crate::graph::OmtsGraph;
 pub fn detect_cycles(graph: &OmtsGraph, edge_types: &HashSet<EdgeTypeTag>) -> Vec<Vec<NodeIndex>> {
     let g = graph.graph();
 
-    // Collect the node indices that participate in the filtered subgraph
-    // (i.e. nodes that have at least one in- or out-edge of the specified
-    // type, plus any isolated nodes that form self-loops or are connected
-    // only via filtered edges). We use all graph nodes but track in-degrees
-    // only for the filtered edge set.
-    //
-    // For simplicity, track all nodes in the graph but only count
-    // filtered-edge in-degrees. Nodes with no filtered edges will reach
-    // in-degree zero immediately and be consumed first; they don't appear
-    // in cycles.
-
-    // Build in-degree map for every node (with respect to filtered edges).
     let mut in_degree: HashMap<NodeIndex, usize> = HashMap::new();
 
-    // Initialise every node to zero so isolated nodes are included.
     for node_idx in g.node_indices() {
         in_degree.entry(node_idx).or_insert(0);
     }
 
-    // Accumulate in-degrees from the filtered edge set.
     for edge_ref in g.edge_references() {
         if edge_types.contains(&edge_ref.weight().edge_type) {
             *in_degree.entry(edge_ref.target()).or_insert(0) += 1;
         }
     }
 
-    // Seed BFS queue with nodes whose in-degree is zero.
     let mut queue: VecDeque<NodeIndex> = in_degree
         .iter()
         .filter(|&(_, &deg)| deg == 0)
@@ -90,7 +71,6 @@ pub fn detect_cycles(graph: &OmtsGraph, edge_types: &HashSet<EdgeTypeTag>) -> Ve
     let mut visited_count: usize = 0;
     let total_nodes = in_degree.len();
 
-    // Kahn's BFS: remove zero-in-degree nodes, decrement successors.
     while let Some(node) = queue.pop_front() {
         visited_count += 1;
 
@@ -111,24 +91,17 @@ pub fn detect_cycles(graph: &OmtsGraph, edge_types: &HashSet<EdgeTypeTag>) -> Ve
     }
 
     if visited_count == total_nodes {
-        // All nodes were consumed: the subgraph is acyclic.
         return Vec::new();
     }
 
-    // Collect the nodes that were NOT consumed — they are in cycles.
     let cyclic_nodes: HashSet<NodeIndex> = in_degree
         .iter()
         .filter(|&(_, &deg)| deg > 0)
         .map(|(&idx, _)| idx)
         .collect();
 
-    // Extract individual cycles from the set of cyclic nodes via DFS.
     extract_cycles(graph, &cyclic_nodes, edge_types)
 }
-
-// ---------------------------------------------------------------------------
-// Internal: individual cycle extraction
-// ---------------------------------------------------------------------------
 
 /// Extracts individual cycles from a set of nodes known to be in cycles.
 ///
@@ -153,13 +126,9 @@ fn extract_cycles(
             continue;
         }
 
-        // Iterative DFS with explicit stack.
-        // Each stack entry: (node, index_into_children).
-        // `path` tracks the current DFS path; `on_path` is the corresponding set.
         let mut path: Vec<NodeIndex> = Vec::new();
         let mut on_path: HashSet<NodeIndex> = HashSet::new();
 
-        // Stack entry: (node, pre-computed filtered successors, next child index).
         let mut stack: Vec<(NodeIndex, Vec<NodeIndex>, usize)> = Vec::new();
 
         let start_children = filtered_successors(g, start, cyclic_nodes, edge_types);
@@ -172,7 +141,6 @@ fn extract_cycles(
             let node = *node;
 
             if *child_idx >= children.len() {
-                // All children of this node have been explored: backtrack.
                 stack.pop();
                 path.pop();
                 on_path.remove(&node);
@@ -184,14 +152,11 @@ fn extract_cycles(
             *child_idx += 1;
 
             if on_path.contains(&child) {
-                // Back-edge found: extract the cycle from `child` to current position.
                 if let Some(cycle_start_pos) = path.iter().position(|&n| n == child) {
                     let mut cycle: Vec<NodeIndex> = path[cycle_start_pos..].to_vec();
-                    // Close the cycle by repeating the starting node.
                     cycle.push(child);
                     all_cycles.push(cycle);
                 }
-                // Do not recurse into `child` here; it is already on the path.
                 continue;
             }
 
@@ -199,7 +164,6 @@ fn extract_cycles(
                 continue;
             }
 
-            // Push child onto the DFS path and stack.
             let child_children = filtered_successors(g, child, cyclic_nodes, edge_types);
             path.push(child);
             on_path.insert(child);
@@ -228,10 +192,6 @@ fn filtered_successors(
         .collect()
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -246,10 +206,6 @@ mod tests {
     use crate::graph::build_graph;
     use crate::newtypes::{CalendarDate, EdgeId, FileSalt, NodeId, SemVer};
     use crate::structures::{Edge, EdgeProperties, Node};
-
-    // -----------------------------------------------------------------------
-    // Fixture helpers
-    // -----------------------------------------------------------------------
 
     const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
@@ -361,10 +317,6 @@ mod tests {
         *graph.node_index(id).expect("node must exist")
     }
 
-    // -----------------------------------------------------------------------
-    // Test: DAG (no cycles)
-    // -----------------------------------------------------------------------
-
     /// A directed acyclic graph produces an empty cycle list.
     ///
     /// Graph: a → b → c → d (linear chain, `legal_parentage` edges)
@@ -422,10 +374,6 @@ mod tests {
         assert!(cycles.is_empty());
     }
 
-    // -----------------------------------------------------------------------
-    // Test: simple cycle
-    // -----------------------------------------------------------------------
-
     /// A three-node cycle is detected.
     ///
     /// Graph: a → b → c → a
@@ -442,7 +390,6 @@ mod tests {
 
         assert!(!cycles.is_empty(), "should detect a cycle");
 
-        // Every cycle must form a closed loop: first == last node.
         for cycle in &cycles {
             assert!(cycle.len() >= 2, "cycle must have at least 2 entries");
             assert_eq!(
@@ -452,7 +399,6 @@ mod tests {
             );
         }
 
-        // All three cycle nodes must appear in the detected cycles.
         let cycle_node_set: HashSet<NodeIndex> =
             cycles.iter().flat_map(|c| c.iter().copied()).collect();
         assert!(cycle_node_set.contains(&idx(&g, "a")));
@@ -494,10 +440,6 @@ mod tests {
         assert!(cycle_node_set.contains(&idx(&g, "b")));
     }
 
-    // -----------------------------------------------------------------------
-    // Test: multiple disjoint cycles
-    // -----------------------------------------------------------------------
-
     /// Two separate disjoint cycles are both detected.
     ///
     /// Cycle 1: a → b → a
@@ -512,10 +454,8 @@ mod tests {
             org_node("e"),
         ];
         let edges = vec![
-            // Cycle 1
             legal_parentage_edge("e-ab", "a", "b"),
             legal_parentage_edge("e-ba", "b", "a"),
-            // Cycle 2
             legal_parentage_edge("e-cd", "c", "d"),
             legal_parentage_edge("e-de", "d", "e"),
             legal_parentage_edge("e-ec", "e", "c"),
@@ -525,11 +465,9 @@ mod tests {
 
         assert!(!cycles.is_empty(), "should detect at least one cycle");
 
-        // Collect all nodes mentioned in cycles.
         let cycle_node_set: HashSet<NodeIndex> =
             cycles.iter().flat_map(|c| c.iter().copied()).collect();
 
-        // All five nodes should be identified as participants in cycles.
         for id in ["a", "b", "c", "d", "e"] {
             assert!(
                 cycle_node_set.contains(&idx(&g, id)),
@@ -578,10 +516,6 @@ mod tests {
             );
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Test: mixed acyclic/cyclic graph
-    // -----------------------------------------------------------------------
 
     /// A graph where some edges form a cycle and others form a DAG.
     ///
@@ -656,14 +590,12 @@ mod tests {
         ];
         let g = build_graph(&minimal_file(nodes, edges)).expect("builds");
 
-        // No cycles in legal_parentage subgraph.
         let lp_cycles = detect_cycles(&g, &filter(EdgeType::LegalParentage));
         assert!(
             lp_cycles.is_empty(),
             "legal_parentage subgraph is acyclic; got {lp_cycles:?}"
         );
 
-        // Cycles exist in supplies subgraph.
         let sup_cycles = detect_cycles(&g, &filter(EdgeType::Supplies));
         assert!(
             !sup_cycles.is_empty(),
@@ -671,14 +603,9 @@ mod tests {
         );
     }
 
-    // -----------------------------------------------------------------------
-    // Test: edge-type filtering
-    // -----------------------------------------------------------------------
-
     /// Filtering by a type absent from the graph returns no cycles.
     #[test]
     fn test_filter_absent_edge_type_no_cycles() {
-        // Graph has only legal_parentage edges in a cycle.
         let nodes = vec![org_node("a"), org_node("b")];
         let edges = vec![
             legal_parentage_edge("e-ab", "a", "b"),
@@ -686,7 +613,6 @@ mod tests {
         ];
         let g = build_graph(&minimal_file(nodes, edges)).expect("builds");
 
-        // Filtering for supplies only — no supplies edges exist.
         let cycles = detect_cycles(&g, &filter(EdgeType::Supplies));
         assert!(
             cycles.is_empty(),
@@ -705,7 +631,6 @@ mod tests {
         ];
         let g = build_graph(&minimal_file(nodes, edges)).expect("builds");
 
-        // Cycle only closes when traversing both legal_parentage AND supplies.
         let full_filter: HashSet<EdgeTypeTag> = [
             EdgeTypeTag::Known(EdgeType::LegalParentage),
             EdgeTypeTag::Known(EdgeType::Supplies),
@@ -716,7 +641,6 @@ mod tests {
         let cycles = detect_cycles(&g, &full_filter);
         assert!(!cycles.is_empty(), "cycle spans both edge types");
 
-        // Filtering by legal_parentage only: a→b and c→a, but no b→c edge.
         let lp_only = detect_cycles(&g, &filter(EdgeType::LegalParentage));
         assert!(
             lp_only.is_empty(),

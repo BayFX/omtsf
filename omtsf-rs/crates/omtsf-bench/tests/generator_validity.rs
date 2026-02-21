@@ -65,7 +65,6 @@ fn generated_xlarge_hits_target_size() {
     let file = generate_supply_chain(&SizeTier::XLarge.config(42));
     let json = serde_json::to_string_pretty(&file).expect("serialize");
     let size_mb = json.len() as f64 / (1024.0 * 1024.0);
-    // Should be roughly 2-8 MB
     assert!(size_mb > 1.0, "XLarge should be > 1MB, got {size_mb:.2}MB");
 }
 
@@ -119,10 +118,6 @@ fn cyclic_variant_generates_cycles() {
     assert!(!file.nodes.is_empty());
     let _ = cycles; // Cycles may or may not be present depending on random topology
 }
-
-// -----------------------------------------------------------------------
-// Property-based tests
-// -----------------------------------------------------------------------
 
 mod proptest_tests {
     use super::*;

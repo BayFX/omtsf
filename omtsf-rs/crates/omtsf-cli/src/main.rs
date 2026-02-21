@@ -7,8 +7,6 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
-// ── PathOrStdin ──────────────────────────────────────────────────────────────
-
 /// A CLI argument that is either a filesystem path or the stdin sentinel `"-"`.
 ///
 /// Parsing `"-"` yields [`PathOrStdin::Stdin`]; anything else yields
@@ -34,8 +32,6 @@ impl std::str::FromStr for PathOrStdin {
     }
 }
 
-// ── OutputFormat ─────────────────────────────────────────────────────────────
-
 /// Output format for CLI commands.
 ///
 /// `Human` emits colored, tabular output to stderr and plain text to stdout.
@@ -49,8 +45,6 @@ pub enum OutputFormat {
     Json,
 }
 
-// ── MergeStrategy ────────────────────────────────────────────────────────────
-
 /// Strategy controlling how non-overlapping nodes are handled during a merge.
 #[derive(Clone, Debug, ValueEnum)]
 pub enum MergeStrategy {
@@ -59,8 +53,6 @@ pub enum MergeStrategy {
     /// Include only nodes present in all inputs.
     Intersect,
 }
-
-// ── DisclosureScope ──────────────────────────────────────────────────────────
 
 /// Target disclosure scope for a redaction operation.
 #[derive(Clone, Debug, ValueEnum)]
@@ -73,8 +65,6 @@ pub enum DisclosureScope {
     Internal,
 }
 
-// ── Direction ────────────────────────────────────────────────────────────────
-
 /// Graph traversal direction for the `reach` subcommand.
 #[derive(Clone, Debug, ValueEnum)]
 pub enum Direction {
@@ -85,8 +75,6 @@ pub enum Direction {
     /// Follow edges in both directions.
     Both,
 }
-
-// ── Command enum ─────────────────────────────────────────────────────────────
 
 /// All top-level subcommands exposed by the `omtsf` binary.
 #[derive(Subcommand)]
@@ -279,8 +267,6 @@ pub enum Command {
     },
 }
 
-// ── Root Cli struct ──────────────────────────────────────────────────────────
-
 /// Root CLI struct for the `omtsf` binary.
 ///
 /// All global flags are defined here and marked `global = true` so that clap
@@ -333,12 +319,7 @@ pub struct Cli {
     pub no_color: bool,
 }
 
-// ── Entry point ──────────────────────────────────────────────────────────────
-
 fn main() {
-    // On Unix, reset SIGPIPE to its default disposition so that writing to a
-    // closed pipe (e.g. `omtsf validate file.omts | head`) silently exits 0
-    // rather than crashing with a Broken Pipe error message.
     #[cfg(unix)]
     install_sigpipe_default();
 
@@ -492,8 +473,6 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
     }
 }
 
-// ── SIGPIPE handler ───────────────────────────────────────────────────────────
-
 /// Resets `SIGPIPE` to its default disposition (`SIG_DFL`).
 ///
 /// Rust's runtime ignores `SIGPIPE` by default, which causes programs that
@@ -519,14 +498,11 @@ fn install_sigpipe_default() {
     // scope of the unsafe block is as narrow as possible.
     #[allow(unsafe_code)]
     {
-        // SAFETY: See above.
         unsafe {
             libc::signal(libc::SIGPIPE, libc::SIG_DFL);
         }
     }
 }
-
-// ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -537,8 +513,6 @@ mod tests {
     use clap::CommandFactory;
 
     use super::*;
-
-    // ── Help structure ──────────────────────────────────────────────────────
 
     /// The root help output must contain all top-level subcommand names.
     #[test]
@@ -590,8 +564,6 @@ mod tests {
             );
         }
     }
-
-    // ── Subcommand help ─────────────────────────────────────────────────────
 
     /// `omtsf validate --help` must mention `--level` and `FILE`.
     #[test]
@@ -746,8 +718,6 @@ mod tests {
             "init help should mention --example"
         );
     }
-
-    // ── Argument parsing ────────────────────────────────────────────────────
 
     /// Parsing `validate -` should produce `PathOrStdin::Stdin`.
     #[test]
@@ -954,8 +924,6 @@ mod tests {
         Cli::command().debug_assert();
     }
 
-    // ── query subcommand ─────────────────────────────────────────────────────
-
     /// `omtsf query --help` must mention `--node-type`, `--edge-type`, and `--count`.
     #[test]
     fn test_query_help() {
@@ -1053,8 +1021,6 @@ mod tests {
             _ => panic!("expected Query subcommand"),
         }
     }
-
-    // ── extract-subchain subcommand ──────────────────────────────────────────
 
     /// `omtsf extract-subchain --help` must mention `--expand` and selector flags.
     #[test]

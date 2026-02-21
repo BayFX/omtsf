@@ -14,17 +14,9 @@ use omtsf_core::{
 use proptest::prelude::*;
 use sha2::{Digest, Sha256};
 
-// ---------------------------------------------------------------------------
-// Fixed salts (64 lowercase hex chars each)
-// ---------------------------------------------------------------------------
-
 const SALT_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const SALT_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const SALT_C: &str = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
-
-// ---------------------------------------------------------------------------
-// Deterministic helper constructors (no Result propagation in strategies)
-// ---------------------------------------------------------------------------
 
 fn semver_1_0_0() -> SemVer {
     SemVer::try_from("1.0.0").expect("valid SemVer")
@@ -131,10 +123,6 @@ fn build_file(salt_str: &str, nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
     }
 }
 
-// ---------------------------------------------------------------------------
-// SHA-256 of deterministic JSON serialization
-// ---------------------------------------------------------------------------
-
 /// Serialise `file` to JSON (using the stable `serde_json` field ordering) and
 /// return the SHA-256 digest as a hex string.
 ///
@@ -144,16 +132,13 @@ fn build_file(salt_str: &str, nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
 /// We therefore strip the `file_salt` and `merge_metadata.timestamp` before
 /// hashing to make the digest stable for comparison.
 fn stable_hash(file: &OmtsFile) -> String {
-    // Serialize to a Value, then blank out non-deterministic fields.
     let mut v = serde_json::to_value(file).expect("serialize to Value");
 
-    // Zero out the file_salt (generated fresh on every merge call).
     if let Some(obj) = v.as_object_mut() {
         obj.insert(
             "file_salt".to_owned(),
             serde_json::Value::String("0".repeat(64)),
         );
-        // Blank out timestamp inside merge_metadata (wall-clock dependent).
         if let Some(meta) = obj
             .get_mut("merge_metadata")
             .and_then(|m| m.as_object_mut())
@@ -170,10 +155,6 @@ fn stable_hash(file: &OmtsFile) -> String {
     hex::encode(digest)
 }
 
-// ---------------------------------------------------------------------------
-// hex encoding helper (avoid pulling in the `hex` crate by encoding manually)
-// ---------------------------------------------------------------------------
-
 mod hex {
     use std::fmt::Write as _;
 
@@ -187,10 +168,6 @@ mod hex {
         })
     }
 }
-
-// ---------------------------------------------------------------------------
-// Identifier pool — shared across all generated files to ensure overlap
-// ---------------------------------------------------------------------------
 
 /// The shared identifier pool.  Each entry is `(scheme, value)`.
 /// Files draw subsets of this pool so merge candidates can arise.
@@ -213,10 +190,6 @@ const ID_POOL: &[(&str, &str)] = &[
     ("duns", "300000001"),
 ];
 
-// ---------------------------------------------------------------------------
-// proptest strategies
-// ---------------------------------------------------------------------------
-
 /// Strategy: generate a single small [`OmtsFile`].
 ///
 /// The strategy is designed so that:
@@ -235,12 +208,10 @@ const ID_POOL: &[(&str, &str)] = &[
 fn arb_omts_file() -> impl Strategy<Value = OmtsFile> {
     let salt_strategy = prop::sample::select(vec![SALT_A, SALT_B, SALT_C]);
 
-    // Node count is at most pool size so every node can have a unique primary id.
     let pool_len = ID_POOL.len();
     (1usize..=pool_len.min(6), salt_strategy)
         .prop_flat_map(move |(node_count, file_salt)| {
             let max_nodes = node_count;
-            // Generate (src, tgt) pairs; we'll deduplicate them later.
             let edges_strat = prop::collection::vec(
                 (0usize..max_nodes, 0usize..max_nodes),
                 0..=20usize.min(node_count * node_count),
@@ -249,7 +220,6 @@ fn arb_omts_file() -> impl Strategy<Value = OmtsFile> {
             (edges_strat, Just(node_count), Just(file_salt))
         })
         .prop_map(|(raw_pairs, node_count, file_salt)| {
-            // Each node i gets pool slot i (0..node_count), giving disjoint ids.
             let nodes = (0..node_count)
                 .map(|i| {
                     let (scheme, value) = ID_POOL[i];
@@ -258,7 +228,6 @@ fn arb_omts_file() -> impl Strategy<Value = OmtsFile> {
                 })
                 .collect::<Vec<_>>();
 
-            // Deduplicate edges by (src, tgt) and exclude self-loops.
             let mut seen = std::collections::HashSet::new();
             let edges = raw_pairs
                 .into_iter()
@@ -270,10 +239,6 @@ fn arb_omts_file() -> impl Strategy<Value = OmtsFile> {
             build_file(file_salt, nodes, edges)
         })
 }
-
-// ---------------------------------------------------------------------------
-// Algebraic property tests
-// ---------------------------------------------------------------------------
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(50))]
@@ -321,10 +286,6 @@ proptest! {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Structural equality for idempotency check
-// ---------------------------------------------------------------------------
-
 /// Build a map from graph-local `NodeId` string to the sorted canonical identifier
 /// string set for that node.  Used to resolve edge endpoints to canonical form.
 fn node_canonical_map(
@@ -361,9 +322,6 @@ fn node_canonical_map(
 /// Graph-local `id` values are NOT compared because the merge engine
 /// reassigns them deterministically.  Merge metadata in `extra` is ignored.
 fn assert_structurally_equal(original: &OmtsFile, merged: &OmtsFile) {
-    // --- Node partition check ------------------------------------------------
-
-    // Collect canonical identifier sets from original nodes.
     let mut orig_id_sets: Vec<std::collections::BTreeSet<String>> = original
         .nodes
         .iter()
@@ -384,7 +342,6 @@ fn assert_structurally_equal(original: &OmtsFile, merged: &OmtsFile) {
         a_min.cmp(b_min)
     });
 
-    // Collect canonical identifier sets from merged nodes.
     let mut merged_id_sets: Vec<std::collections::BTreeSet<String>> = merged
         .nodes
         .iter()
@@ -413,13 +370,9 @@ fn assert_structurally_equal(original: &OmtsFile, merged: &OmtsFile) {
         "merge(A,A) must produce the same node identifier-set partition as A"
     );
 
-    // --- Edge connectivity check ---------------------------------------------
-
-    // Build node-id → cid-set maps for both files.
     let orig_node_map = node_canonical_map(original);
     let merged_node_map = node_canonical_map(merged);
 
-    // Represent each edge as (src_cid_set, tgt_cid_set, type_str).
     type EdgeTriple = (
         std::collections::BTreeSet<String>,
         std::collections::BTreeSet<String>,
@@ -436,10 +389,6 @@ fn assert_structurally_equal(original: &OmtsFile, merged: &OmtsFile) {
             Some((src_cids, tgt_cids, type_str))
         };
 
-    // Collect as sets to compare without regard to order, and also to
-    // deduplicate (the merge engine collapses duplicate edges; the original
-    // file is generated without duplicate (src,tgt) pairs, so this is a no-op
-    // in practice, but dedup guards against any accidental generator overlap).
     let orig_edges: std::collections::BTreeSet<(String, String, String)> = original
         .edges
         .iter()

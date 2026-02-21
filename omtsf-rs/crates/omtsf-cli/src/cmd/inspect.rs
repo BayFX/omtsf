@@ -22,10 +22,6 @@ use serde_json;
 use crate::OutputFormat;
 use crate::error::CliError;
 
-// ---------------------------------------------------------------------------
-// InspectStats
-// ---------------------------------------------------------------------------
-
 /// Statistics gathered from a parsed [`OmtsFile`].
 pub struct InspectStats {
     /// Total number of nodes.
@@ -110,10 +106,6 @@ impl InspectStats {
     }
 }
 
-// ---------------------------------------------------------------------------
-// run
-// ---------------------------------------------------------------------------
-
 /// Runs the `inspect` command.
 ///
 /// Parses `content` as an OMTSF file, computes statistics, and writes them
@@ -142,10 +134,6 @@ pub fn run(content: &str, format: &OutputFormat) -> Result<(), CliError> {
     })
 }
 
-// ---------------------------------------------------------------------------
-// Human output
-// ---------------------------------------------------------------------------
-
 /// Writes inspect statistics in human-readable aligned format.
 fn print_human<W: std::io::Write>(w: &mut W, stats: &InspectStats) -> std::io::Result<()> {
     writeln!(w, "version:        {}", stats.version)?;
@@ -170,10 +158,6 @@ fn print_human<W: std::io::Write>(w: &mut W, stats: &InspectStats) -> std::io::R
     }
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// JSON output
-// ---------------------------------------------------------------------------
 
 /// Writes inspect statistics as a single JSON object to stdout.
 fn print_json<W: std::io::Write>(w: &mut W, stats: &InspectStats) -> std::io::Result<()> {
@@ -250,10 +234,6 @@ fn print_json<W: std::io::Write>(w: &mut W, stats: &InspectStats) -> std::io::Re
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
     writeln!(w, "{json}")
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /// Returns the JSON string representation of a [`NodeTypeTag`].
 fn node_type_tag_to_str(tag: &NodeTypeTag) -> String {

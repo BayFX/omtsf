@@ -37,9 +37,7 @@ where
     T: Deserialize<'de>,
     D: Deserializer<'de>,
 {
-    // `Option<T>` deserializes as None for null, Some(v) for a value.
     let inner: Option<T> = Option::deserialize(deserializer)?;
-    // Wrap in the outer Some to signal "field was present".
     Ok(Some(inner))
 }
 
@@ -51,7 +49,6 @@ mod tests {
 
     use crate::newtypes::CalendarDate;
 
-    // A minimal struct that exercises the helper.
     #[derive(Debug, PartialEq, Serialize, Deserialize)]
     struct Holder {
         #[serde(

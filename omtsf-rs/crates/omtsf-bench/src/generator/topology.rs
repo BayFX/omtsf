@@ -21,7 +21,6 @@ pub fn build_supply_chain(config: &GeneratorConfig, rng: &mut StdRng) -> OmtsFil
     let mut id_counter: usize = 0;
     let mut edge_counter: usize = 0;
 
-    // Phase 1: Build all nodes
     let mut org_ids: Vec<NodeId> = Vec::new();
     for i in 0..config.num_organizations {
         let node = nodes::build_organization(
@@ -37,7 +36,6 @@ pub fn build_supply_chain(config: &GeneratorConfig, rng: &mut StdRng) -> OmtsFil
 
     let mut fac_ids: Vec<NodeId> = Vec::new();
     for i in 0..config.num_facilities {
-        // Assign a random org as operator
         let operator = if org_ids.is_empty() {
             None
         } else {
@@ -120,16 +118,9 @@ pub fn build_supply_chain(config: &GeneratorConfig, rng: &mut StdRng) -> OmtsFil
         all_nodes.push(node);
     }
 
-    // Phase 2: Build supply chain tree (supplies edges)
     build_supplier_tree(rng, &org_ids, config, &mut all_edges, &mut edge_counter);
-
-    // Phase 3: Build operates edges (org → facility)
     build_operates_edges(rng, &org_ids, &fac_ids, &mut all_edges, &mut edge_counter);
-
-    // Phase 4: Build produces edges (facility → good)
     build_produces_edges(rng, &fac_ids, &good_ids, &mut all_edges, &mut edge_counter);
-
-    // Phase 5: Build attested_by edges (facility/org → attestation)
     build_attested_by_edges(
         rng,
         &org_ids,
@@ -140,7 +131,6 @@ pub fn build_supply_chain(config: &GeneratorConfig, rng: &mut StdRng) -> OmtsFil
         &mut edge_counter,
     );
 
-    // Phase 6: Build composed_of edges (good → consignment)
     build_composed_of_edges(
         rng,
         &good_ids,
@@ -150,10 +140,7 @@ pub fn build_supply_chain(config: &GeneratorConfig, rng: &mut StdRng) -> OmtsFil
         &mut edge_counter,
     );
 
-    // Phase 7: Build ownership hierarchy
     build_ownership_hierarchy(rng, &org_ids, config, &mut all_edges, &mut edge_counter);
-
-    // Phase 8: Build beneficial_ownership edges (person → org)
     build_beneficial_ownership_edges(
         rng,
         &person_ids,
@@ -163,15 +150,12 @@ pub fn build_supply_chain(config: &GeneratorConfig, rng: &mut StdRng) -> OmtsFil
         &mut edge_counter,
     );
 
-    // Phase 9: Build mesh overlay (sells_to, brokers, distributes, subcontracts)
     build_mesh_overlay(rng, &org_ids, config, &mut all_edges, &mut edge_counter);
 
-    // Phase 10: Optional cycle injection for cycle detection benchmarks
     if config.inject_cycles && org_ids.len() >= 4 {
         inject_cycles(rng, &org_ids, &mut all_edges, &mut edge_counter);
     }
 
-    // Build file
     let salt = gen_file_salt(rng);
     let version = SemVer::try_from("1.0.0").unwrap_or_else(|_| unreachable!());
     let date = CalendarDate::try_from("2026-01-15").unwrap_or_else(|_| unreachable!());
@@ -202,7 +186,6 @@ fn build_supplier_tree(
         return;
     }
 
-    // Root buyer is org[0]. Assign remaining orgs to tiers.
     let remaining = org_ids.len().saturating_sub(1);
     if remaining == 0 {
         return;
@@ -210,7 +193,6 @@ fn build_supplier_tree(
 
     let depth = config.supply_chain_depth.max(1);
 
-    // Distribute orgs across tiers
     let per_tier = (remaining / depth).max(1);
     let mut tiers: Vec<Vec<usize>> = Vec::new();
 
@@ -228,7 +210,6 @@ fn build_supplier_tree(
         }
     }
 
-    // Remaining orgs go to last tier
     if org_idx <= remaining {
         let last: Vec<usize> = (org_idx..=remaining).collect();
         if let Some(t) = tiers.last_mut() {
@@ -238,7 +219,6 @@ fn build_supplier_tree(
         }
     }
 
-    // Connect tier 0 orgs to root (org[0])
     if let Some(first_tier) = tiers.first() {
         for &supplier_idx in first_tier {
             let edge = edges::build_supplies(
@@ -253,7 +233,6 @@ fn build_supplier_tree(
         }
     }
 
-    // Connect subsequent tiers: each org in tier[n] supplies a random org in tier[n-1]
     for tier_idx in 1..tiers.len() {
         let prev_tier = &tiers[tier_idx - 1];
         let current_tier = &tiers[tier_idx];
@@ -323,7 +302,6 @@ fn build_attested_by_edges(
     if att_ids.is_empty() {
         return;
     }
-    // Pool of possible source nodes (orgs + facilities)
     let mut sources: Vec<NodeId> = Vec::new();
     sources.extend(org_ids.iter().cloned());
     sources.extend(fac_ids.iter().cloned());
@@ -384,7 +362,6 @@ fn build_ownership_hierarchy(
         return;
     }
 
-    // Build a simple tree: org[0] is holding company, others are subsidiaries
     let depth = config.ownership_depth.max(1);
     let per_level = ((org_ids.len() - 1) / depth).max(1);
 
@@ -402,7 +379,6 @@ fn build_ownership_hierarchy(
                 break;
             }
             let parent = rng.gen_range(parent_start..parent_end);
-            // ownership edge
             let edge = edges::build_ownership(
                 rng,
                 *edge_counter,
@@ -413,7 +389,6 @@ fn build_ownership_hierarchy(
             *edge_counter += 1;
             edges_out.push(edge);
 
-            // legal_parentage edge
             let lp_edge =
                 edges::build_legal_parentage(*edge_counter, &org_ids[parent], &org_ids[child_idx]);
             *edge_counter += 1;
@@ -439,7 +414,6 @@ fn build_beneficial_ownership_edges(
         return;
     }
     for person_id in person_ids {
-        // Each person has beneficial ownership in 1-3 orgs
         let count = rng.gen_range(1..=min(3, org_ids.len()));
         for _ in 0..count {
             let org_idx = rng.gen_range(0..org_ids.len());
@@ -469,7 +443,6 @@ fn build_mesh_overlay(
         return;
     }
 
-    // Number of mesh edges based on mesh_density × num_organizations
     let mesh_count = (config.mesh_density * config.num_organizations as f64).round() as usize;
 
     for _ in 0..mesh_count {
@@ -519,7 +492,6 @@ fn inject_cycles(
 ) {
     let num_cycles = rng.gen_range(1..=3);
     for _ in 0..num_cycles {
-        // Create a back-edge from a deeper org to a shallower org
         let a = rng.gen_range(0..org_ids.len());
         let mut b = rng.gen_range(0..org_ids.len());
         while b == a {

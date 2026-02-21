@@ -24,10 +24,8 @@ fn setup(tier: SizeTier) -> Setup {
 
     let root_id = file.nodes[0].id.to_string();
 
-    // Find a leaf: pick last node
     let leaf_id = file.nodes[file.nodes.len() - 1].id.to_string();
 
-    // Pick a mid-distance node
     let mid_idx = file.nodes.len() / 2;
     let mid_id = file.nodes[mid_idx].id.to_string();
 
@@ -108,7 +106,6 @@ fn bench_shortest_path(c: &mut Criterion) {
     ] {
         let s = setup(tier);
 
-        // Root to leaf (likely longest path)
         group.bench_function(BenchmarkId::new("root_to_leaf", name), |b| {
             b.iter(|| {
                 let _ = queries::shortest_path(
@@ -122,7 +119,6 @@ fn bench_shortest_path(c: &mut Criterion) {
             });
         });
 
-        // Root to mid
         group.bench_function(BenchmarkId::new("root_to_mid", name), |b| {
             b.iter(|| {
                 let _ = queries::shortest_path(
@@ -136,7 +132,6 @@ fn bench_shortest_path(c: &mut Criterion) {
             });
         });
 
-        // No-path case (leaf to root in forward direction)
         group.bench_function(BenchmarkId::new("no_path", name), |b| {
             b.iter(|| {
                 let _ = queries::shortest_path(
@@ -155,13 +150,11 @@ fn bench_shortest_path(c: &mut Criterion) {
 
 fn bench_all_paths(c: &mut Criterion) {
     let mut group = c.benchmark_group("all_paths");
-    // Only S/M sizes — exponential on dense graphs
     group.sample_size(20);
 
     for (name, tier) in [("S", SizeTier::Small), ("M", SizeTier::Medium)] {
         let s = setup(tier);
 
-        // Find a reachable target for the root
         let reachable =
             queries::reachable_from(&s.graph, &s.root_id, Direction::Forward, None).expect("works");
         if let Some(&target_idx) = reachable.iter().next() {

@@ -26,10 +26,6 @@ use crate::structures::{Edge, EdgeProperties, Node};
 use crate::types::Identifier;
 use crate::validation::{ValidationConfig, validate};
 
-// ---------------------------------------------------------------------------
-// NodeAction
-// ---------------------------------------------------------------------------
-
 /// The disposition assigned to a node during redaction.
 ///
 /// Classification follows the table in redaction.md Section 5 crossed with the
@@ -49,10 +45,6 @@ pub enum NodeAction {
     Omit,
 }
 
-// ---------------------------------------------------------------------------
-// EdgeAction
-// ---------------------------------------------------------------------------
-
 /// The disposition assigned to an edge during redaction.
 ///
 /// Derived from the actions of the source and target nodes plus the edge type
@@ -64,10 +56,6 @@ pub enum EdgeAction {
     /// Edge is removed entirely.
     Omit,
 }
-
-// ---------------------------------------------------------------------------
-// Node classification (Section 5)
-// ---------------------------------------------------------------------------
 
 /// Classifies a node into a [`NodeAction`] based on its type and the target
 /// disclosure scope.
@@ -97,16 +85,8 @@ pub enum EdgeAction {
 /// * `target_scope` — the disclosure scope being targeted.
 pub fn classify_node(node: &Node, target_scope: &DisclosureScope) -> NodeAction {
     match target_scope {
-        DisclosureScope::Internal => {
-            // No-op path: all nodes are retained as-is.
-            NodeAction::Retain
-        }
-        DisclosureScope::Partner => {
-            // Person nodes are retained with filtered identifiers.
-            // All other nodes are retained (producer may promote to Replace).
-            // boundary_ref nodes pass through.
-            NodeAction::Retain
-        }
+        DisclosureScope::Internal => NodeAction::Retain,
+        DisclosureScope::Partner => NodeAction::Retain,
         DisclosureScope::Public => match &node.node_type {
             NodeTypeTag::Known(NodeType::Person) => NodeAction::Omit,
             NodeTypeTag::Known(NodeType::Organization)
@@ -119,10 +99,6 @@ pub fn classify_node(node: &Node, target_scope: &DisclosureScope) -> NodeAction 
         },
     }
 }
-
-// ---------------------------------------------------------------------------
-// Identifier filtering (Sections 3.1 and 3.2)
-// ---------------------------------------------------------------------------
 
 /// Filters an identifier list to retain only identifiers within the sensitivity
 /// threshold of the target scope.
@@ -180,10 +156,6 @@ fn sensitivity_allowed(sensitivity: &Sensitivity, scope: &DisclosureScope) -> bo
     }
 }
 
-// ---------------------------------------------------------------------------
-// Edge property filtering (Section 6.5)
-// ---------------------------------------------------------------------------
-
 /// Filters edge properties based on the target scope's sensitivity threshold.
 ///
 /// Rules (redaction.md Section 6.5):
@@ -208,13 +180,11 @@ pub fn filter_edge_properties(edge: &Edge, target_scope: &DisclosureScope) -> Ed
 
     let props = &edge.properties;
 
-    // Helper closure: returns true if this named property should be retained.
     let keep = |name: &str| -> bool {
         let s = effective_property_sensitivity(edge, name);
         sensitivity_allowed(&s, target_scope)
     };
 
-    // Filter each named field.
     let percentage = if keep("percentage") {
         props.percentage
     } else {
@@ -242,7 +212,6 @@ pub fn filter_edge_properties(edge: &Edge, target_scope: &DisclosureScope) -> Ed
         None
     };
 
-    // Fields with default Public sensitivity — always kept unless overridden.
     let data_quality = if keep("data_quality") {
         props.data_quality.clone()
     } else {
@@ -321,7 +290,6 @@ pub fn filter_edge_properties(edge: &Edge, target_scope: &DisclosureScope) -> Ed
         None
     };
 
-    // Filter extra fields.
     let mut extra = serde_json::Map::new();
     for (key, value) in &props.extra {
         if key == "_property_sensitivity" {
@@ -329,7 +297,6 @@ pub fn filter_edge_properties(edge: &Edge, target_scope: &DisclosureScope) -> Ed
             if matches!(target_scope, DisclosureScope::Partner) {
                 extra.insert(key.clone(), value.clone());
             }
-            // For `public`, skip this key entirely.
             continue;
         }
         if keep(key.as_str()) {
@@ -364,10 +331,6 @@ pub fn filter_edge_properties(edge: &Edge, target_scope: &DisclosureScope) -> Ed
         extra,
     }
 }
-
-// ---------------------------------------------------------------------------
-// Edge classification (Sections 6.1–6.4)
-// ---------------------------------------------------------------------------
 
 /// Classifies an edge into an [`EdgeAction`] based on the actions of its
 /// source and target nodes and the target scope.
@@ -417,10 +380,6 @@ pub fn classify_edge(
     EdgeAction::Retain
 }
 
-// ---------------------------------------------------------------------------
-// RedactError
-// ---------------------------------------------------------------------------
-
 /// Errors that can occur during redaction.
 #[derive(Debug)]
 pub enum RedactError {
@@ -454,10 +413,6 @@ impl From<BoundaryHashError> for RedactError {
         Self::BoundaryHash(e)
     }
 }
-
-// ---------------------------------------------------------------------------
-// redact — top-level pipeline
-// ---------------------------------------------------------------------------
 
 /// Redacts an [`OmtsFile`] to the given `scope`, retaining nodes in
 /// `retain_ids` and replacing all other non-person nodes with
@@ -503,31 +458,14 @@ pub fn redact(
     scope: DisclosureScope,
     retain_ids: &HashSet<NodeId>,
 ) -> Result<OmtsFile, RedactError> {
-    // ------------------------------------------------------------------
-    // 1. Internal scope: no-op path.
-    // ------------------------------------------------------------------
     if matches!(scope, DisclosureScope::Internal) {
         let mut out = file.clone();
         out.disclosure_scope = Some(DisclosureScope::Internal);
         return Ok(out);
     }
 
-    // ------------------------------------------------------------------
-    // 2. Decode file salt for boundary hash computation.
-    // ------------------------------------------------------------------
     let salt = decode_salt(&file.file_salt)?;
 
-    // ------------------------------------------------------------------
-    // 3. Classify every node.
-    //
-    // Base classification from classify_node:
-    //   - Omit: person in public scope.
-    //   - Retain: everything else (boundary_ref pass-through, etc.)
-    //
-    // Then apply producer choice: nodes NOT in retain_ids that have a
-    // base classification of Retain are promoted to Replace, UNLESS they
-    // are boundary_ref nodes (those pass through unconditionally).
-    // ------------------------------------------------------------------
     let mut node_actions: HashMap<NodeId, NodeAction> = HashMap::new();
     for node in &file.nodes {
         let base = classify_node(node, &scope);
@@ -547,16 +485,12 @@ pub fn redact(
         node_actions.insert(node.id.clone(), action);
     }
 
-    // ------------------------------------------------------------------
-    // 4. Compute one boundary-ref value per replaced node (deduplicated).
-    // ------------------------------------------------------------------
     let mut boundary_ref_values: HashMap<NodeId, String> = HashMap::new();
     for node in &file.nodes {
         let action = node_actions.get(&node.id);
         if !matches!(action, Some(NodeAction::Replace)) {
             continue;
         }
-        // Collect public identifiers for the hash.
         let public_ids: Vec<CanonicalId> = node
             .identifiers
             .as_deref()
@@ -575,20 +509,14 @@ pub fn redact(
         boundary_ref_values.insert(node.id.clone(), hash);
     }
 
-    // ------------------------------------------------------------------
-    // 5. Build output nodes.
-    // ------------------------------------------------------------------
     let mut output_nodes: Vec<Node> = Vec::with_capacity(file.nodes.len());
     for node in &file.nodes {
         let Some(action) = node_actions.get(&node.id) else {
             continue;
         };
         match action {
-            NodeAction::Omit => {
-                // Drop entirely.
-            }
+            NodeAction::Omit => {}
             NodeAction::Replace => {
-                // Build a minimal boundary_ref stub.
                 let opaque_value = match boundary_ref_values.get(&node.id) {
                     Some(v) => v.clone(),
                     None => continue,
@@ -597,7 +525,6 @@ pub fn redact(
                 output_nodes.push(stub);
             }
             NodeAction::Retain => {
-                // Emit the node with filtered identifiers.
                 let filtered_ids = filter_identifiers(
                     node.identifiers.as_deref().unwrap_or(&[]),
                     &node.node_type,
@@ -618,12 +545,8 @@ pub fn redact(
         }
     }
 
-    // ------------------------------------------------------------------
-    // 6. Build output edges.
-    // ------------------------------------------------------------------
     let mut output_edges: Vec<Edge> = Vec::with_capacity(file.edges.len());
     for edge in &file.edges {
-        // Look up source and target actions; default to Omit for unknown nodes.
         let source_action = node_actions.get(&edge.source).unwrap_or(&NodeAction::Omit);
         let target_action = node_actions.get(&edge.target).unwrap_or(&NodeAction::Omit);
 
@@ -632,15 +555,11 @@ pub fn redact(
             continue;
         }
 
-        // Retain: strip properties per scope threshold.
         let mut retained_edge = edge.clone();
         retained_edge.properties = filter_edge_properties(edge, &scope);
         output_edges.push(retained_edge);
     }
 
-    // ------------------------------------------------------------------
-    // 7. Assemble output file.
-    // ------------------------------------------------------------------
     let output = OmtsFile {
         omtsf_version: file.omtsf_version.clone(),
         snapshot_date: file.snapshot_date.clone(),
@@ -654,9 +573,6 @@ pub fn redact(
         extra: file.extra.clone(),
     };
 
-    // ------------------------------------------------------------------
-    // 8. Post-redaction L1 validation.
-    // ------------------------------------------------------------------
     let config = ValidationConfig {
         run_l1: true,
         run_l2: false,
@@ -673,10 +589,6 @@ pub fn redact(
 
     Ok(output)
 }
-
-// ---------------------------------------------------------------------------
-// Helper: build a boundary_ref stub node
-// ---------------------------------------------------------------------------
 
 /// Constructs a minimal `boundary_ref` node with a single `opaque` identifier.
 ///
@@ -732,10 +644,6 @@ fn build_boundary_ref_node(id: NodeId, opaque_value: String) -> Node {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -745,10 +653,6 @@ mod tests {
     use crate::newtypes::{EdgeId, NodeId};
     use crate::structures::{Edge, EdgeProperties};
     use crate::types::Identifier;
-
-    // -----------------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------------
 
     fn org_node(id: &str) -> Node {
         make_node(id, NodeTypeTag::Known(NodeType::Organization), None)
@@ -847,10 +751,6 @@ mod tests {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // classify_node — partner scope
-    // -----------------------------------------------------------------------
-
     #[test]
     fn classify_org_partner_scope_retain() {
         let node = org_node("org-1");
@@ -927,10 +827,6 @@ mod tests {
             NodeAction::Retain
         );
     }
-
-    // -----------------------------------------------------------------------
-    // classify_node — public scope
-    // -----------------------------------------------------------------------
 
     #[test]
     fn classify_org_public_scope_retain() {
@@ -1009,10 +905,6 @@ mod tests {
         );
     }
 
-    // -----------------------------------------------------------------------
-    // classify_node — internal scope
-    // -----------------------------------------------------------------------
-
     #[test]
     fn classify_all_node_types_internal_scope_retain() {
         let nodes = vec![
@@ -1033,10 +925,6 @@ mod tests {
             );
         }
     }
-
-    // -----------------------------------------------------------------------
-    // filter_identifiers — partner scope
-    // -----------------------------------------------------------------------
 
     #[test]
     fn filter_partner_retains_public_identifiers() {
@@ -1120,10 +1008,6 @@ mod tests {
         );
         assert_eq!(result.len(), 2);
     }
-
-    // -----------------------------------------------------------------------
-    // filter_identifiers — public scope
-    // -----------------------------------------------------------------------
 
     #[test]
     fn filter_public_retains_public_identifiers() {
@@ -1214,10 +1098,6 @@ mod tests {
         assert_eq!(result.len(), 2);
     }
 
-    // -----------------------------------------------------------------------
-    // filter_identifiers — internal scope
-    // -----------------------------------------------------------------------
-
     #[test]
     fn filter_internal_retains_all_identifiers() {
         let ids = vec![
@@ -1232,10 +1112,6 @@ mod tests {
         );
         assert_eq!(result.len(), 3);
     }
-
-    // -----------------------------------------------------------------------
-    // filter_edge_properties — partner scope
-    // -----------------------------------------------------------------------
 
     #[test]
     fn filter_edge_props_partner_removes_confidential_percentage_on_beneficial_ownership() {
@@ -1289,10 +1165,6 @@ mod tests {
         let result = filter_edge_properties(&edge, &DisclosureScope::Partner);
         assert!(result.extra.contains_key("_property_sensitivity"));
     }
-
-    // -----------------------------------------------------------------------
-    // filter_edge_properties — public scope
-    // -----------------------------------------------------------------------
 
     #[test]
     fn filter_edge_props_public_removes_restricted_contract_ref() {
@@ -1356,10 +1228,6 @@ mod tests {
         assert!(result.percentage.is_none());
     }
 
-    // -----------------------------------------------------------------------
-    // filter_edge_properties — internal scope
-    // -----------------------------------------------------------------------
-
     #[test]
     fn filter_edge_props_internal_no_change() {
         let mut edge = make_edge(EdgeType::Supplies, "src", "tgt");
@@ -1371,10 +1239,6 @@ mod tests {
         assert_eq!(result.volume, Some(5000.0));
         assert_eq!(result.percentage, Some(10.0));
     }
-
-    // -----------------------------------------------------------------------
-    // classify_edge
-    // -----------------------------------------------------------------------
 
     #[test]
     fn classify_edge_both_retain_is_retain() {
@@ -1542,10 +1406,6 @@ mod tests {
         );
         assert_eq!(action, EdgeAction::Retain);
     }
-
-    // -----------------------------------------------------------------------
-    // sensitivity_allowed — sanity checks
-    // -----------------------------------------------------------------------
 
     #[test]
     fn sensitivity_allowed_internal_allows_all() {

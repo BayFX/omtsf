@@ -18,10 +18,6 @@ use crate::PathOrStdin;
 use crate::error::CliError;
 use crate::io::read_input;
 
-// ---------------------------------------------------------------------------
-// run
-// ---------------------------------------------------------------------------
-
 /// Runs the `merge` command.
 ///
 /// Reads each path in `files`, runs L1 validation on each, runs the merge
@@ -38,7 +34,6 @@ pub fn run(
     strategy: &MergeStrategy,
     max_file_size: u64,
 ) -> Result<(), CliError> {
-    // --- Reject unimplemented strategy variants ---
     if matches!(strategy, MergeStrategy::Intersect) {
         eprintln!("error: intersect strategy is not yet implemented");
         return Err(CliError::MergeConflict {
@@ -46,7 +41,6 @@ pub fn run(
         });
     }
 
-    // --- Read, parse, and L1-validate each file ---
     let l1_config = ValidationConfig {
         run_l1: true,
         run_l2: false,
@@ -62,7 +56,6 @@ pub fn run(
             detail: format!("line {}, column {}: {e}", e.line(), e.column()),
         })?;
 
-        // Run L1 validation on each input file before merging.
         let validation_result = validate(&file, &l1_config, None);
         if validation_result.has_errors() {
             for diag in validation_result.errors() {
@@ -82,12 +75,10 @@ pub fn run(
         parsed.push(file);
     }
 
-    // --- Run merge engine ---
     let output = merge(&parsed).map_err(|e| CliError::MergeConflict {
         detail: e.to_string(),
     })?;
 
-    // --- Emit warnings to stderr ---
     for warning in &output.warnings {
         writeln!(err_out, "warning: {warning}").map_err(|e| CliError::IoError {
             source: "stderr".to_owned(),
@@ -107,29 +98,19 @@ pub fn run(
         })?;
     }
 
-    // --- Write merged file to stdout ---
     let json = serde_json::to_string_pretty(&output.file).map_err(|e| CliError::InternalError {
         detail: format!("JSON serialization of merged output failed: {e}"),
     })?;
 
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
-    writeln!(out, "{json}").map_err(|_| {
-        // Broken pipe is treated as silent exit 0 (standard Unix behavior).
-        // We return IoError here but the SIGPIPE handler will have already
-        // terminated the process in normal pipe-break scenarios.
-        CliError::IoError {
-            source: "stdout".to_owned(),
-            detail: "write failed".to_owned(),
-        }
+    writeln!(out, "{json}").map_err(|_| CliError::IoError {
+        source: "stdout".to_owned(),
+        detail: "write failed".to_owned(),
     })?;
 
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -137,8 +118,6 @@ mod tests {
     #![allow(clippy::panic)]
 
     use super::*;
-
-    // Minimal valid OMTS JSON (no nodes, no edges).
     const MINIMAL_A: &str = r#"{
         "omtsf_version": "1.0.0",
         "snapshot_date": "2026-02-19",
@@ -155,16 +134,11 @@ mod tests {
         "edges": []
     }"#;
 
-    // Invalid JSON for parse failure tests.
     const NOT_JSON: &str = "this is not json";
-
-    // ── parse helpers ─────────────────────────────────────────────────────────
 
     fn parse_file(s: &str) -> OmtsFile {
         serde_json::from_str(s).expect("valid OMTS JSON")
     }
-
-    // ── merge engine integration ──────────────────────────────────────────────
 
     /// Two empty files can be merged without error.
     #[test]

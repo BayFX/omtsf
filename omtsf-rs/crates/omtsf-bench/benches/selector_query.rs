@@ -25,10 +25,6 @@ fn setup(tier: SizeTier) -> Setup {
     Setup { file, graph }
 }
 
-// ---------------------------------------------------------------------------
-// Group A: selector_match (scan only)
-// ---------------------------------------------------------------------------
-
 fn bench_selector_match_label(c: &mut Criterion) {
     let mut group = c.benchmark_group("selector_match/label");
 
@@ -42,7 +38,6 @@ fn bench_selector_match_label(c: &mut Criterion) {
         let element_count = (s.file.nodes.len() + s.file.edges.len()) as u64;
         group.throughput(Throughput::Elements(element_count));
 
-        // Label-only selector: --label certified
         let ss = SelectorSet::from_selectors(vec![Selector::LabelKey("certified".to_owned())]);
 
         group.bench_function(BenchmarkId::from_parameter(name), |b| {
@@ -67,7 +62,6 @@ fn bench_selector_match_node_type(c: &mut Criterion) {
         let element_count = (s.file.nodes.len() + s.file.edges.len()) as u64;
         group.throughput(Throughput::Elements(element_count));
 
-        // Node-type selector: --node-type organization
         let ss = SelectorSet::from_selectors(vec![Selector::NodeType(NodeTypeTag::Known(
             NodeType::Organization,
         ))]);
@@ -97,7 +91,6 @@ fn bench_selector_match_multi_selector(c: &mut Criterion) {
         let element_count = (s.file.nodes.len() + s.file.edges.len()) as u64;
         group.throughput(Throughput::Elements(element_count));
 
-        // Combined selectors: type=organization AND label=certified AND (jurisdiction=DE OR FR)
         let ss = SelectorSet::from_selectors(vec![
             Selector::NodeType(NodeTypeTag::Known(NodeType::Organization)),
             Selector::LabelKey("certified".to_owned()),
@@ -114,10 +107,6 @@ fn bench_selector_match_multi_selector(c: &mut Criterion) {
     group.finish();
 }
 
-// ---------------------------------------------------------------------------
-// Group B: selector_subgraph (full pipeline)
-// ---------------------------------------------------------------------------
-
 fn bench_selector_subgraph_narrow(c: &mut Criterion) {
     let mut group = c.benchmark_group("selector_subgraph/narrow");
 
@@ -128,12 +117,10 @@ fn bench_selector_subgraph_narrow(c: &mut Criterion) {
     ] {
         let s = setup(tier);
 
-        // Narrow: ~5-10% match rate — attestation nodes only
         let ss = SelectorSet::from_selectors(vec![Selector::NodeType(NodeTypeTag::Known(
             NodeType::Attestation,
         ))]);
 
-        // Pre-run to measure output size for throughput.
         let output =
             extraction::selector_subgraph(&s.graph, &s.file, &ss, 0).expect("attestations exist");
         let output_nodes = output.nodes.len() as u64;
@@ -158,7 +145,6 @@ fn bench_selector_subgraph_broad(c: &mut Criterion) {
     ] {
         let s = setup(tier);
 
-        // Broad: ~45% match rate — organization nodes only
         let ss = SelectorSet::from_selectors(vec![Selector::NodeType(NodeTypeTag::Known(
             NodeType::Organization,
         ))]);
@@ -187,7 +173,6 @@ fn bench_selector_subgraph_expand_1(c: &mut Criterion) {
     ] {
         let s = setup(tier);
 
-        // Seed: attestation nodes; expand 1 hop
         let ss = SelectorSet::from_selectors(vec![Selector::NodeType(NodeTypeTag::Known(
             NodeType::Attestation,
         ))]);
@@ -216,7 +201,6 @@ fn bench_selector_subgraph_expand_3(c: &mut Criterion) {
     ] {
         let s = setup(tier);
 
-        // Seed: attestation nodes; expand 3 hops
         let ss = SelectorSet::from_selectors(vec![Selector::NodeType(NodeTypeTag::Known(
             NodeType::Attestation,
         ))]);

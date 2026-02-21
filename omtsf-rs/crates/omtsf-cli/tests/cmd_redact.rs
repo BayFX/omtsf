@@ -24,10 +24,6 @@ fn fixture(name: &str) -> PathBuf {
     path
 }
 
-// ---------------------------------------------------------------------------
-// redact: public scope on internal fixture (exit 0)
-// ---------------------------------------------------------------------------
-
 #[test]
 fn redact_to_public_exits_0() {
     let out = Command::new(omtsf_bin())
@@ -159,16 +155,11 @@ fn redact_to_public_emits_statistics_to_stderr() {
         .expect("run omtsf redact --scope public");
 
     let stderr = String::from_utf8_lossy(&out.stderr);
-    // Should mention scope in the stats line.
     assert!(
         stderr.contains("Public") || stderr.contains("public") || stderr.contains("scope"),
         "stderr should contain redaction statistics; stderr: {stderr}"
     );
 }
-
-// ---------------------------------------------------------------------------
-// redact: partner scope (exit 0)
-// ---------------------------------------------------------------------------
 
 #[test]
 fn redact_to_partner_exits_0() {
@@ -206,45 +197,13 @@ fn redact_to_partner_does_not_remove_person_nodes() {
     let value: serde_json::Value =
         serde_json::from_str(stdout.trim()).expect("valid JSON from redact partner");
 
-    // The redact engine uses retain_ids=empty, so person nodes are retained
-    // (partner scope retains them with filtered identifiers, they are not
-    // replaced with boundary_ref in the partner no-retain scenario — person
-    // nodes are Retain in partner scope, but since retain_ids is empty they
-    // become Replace. Person nodes are NOT promoted to Replace — they are
-    // Retain with filtered ids in partner scope).
-    //
-    // Actually: classify_node returns Retain for person in partner scope.
-    // Then since is_bref=false and person-001 not in retain_ids, the action
-    // becomes Replace (boundary_ref stub). This is correct per the spec —
-    // the redact CLI uses retain_ids=empty (all non-person nodes replaced).
-    // Person nodes are still present but as boundary_ref stubs.
-    // The key property is that they are not "type": "person" in output.
-    //
-    // Wait — let's re-read the logic:
-    // In redact.rs (core): for partner scope, classify_node returns Retain.
-    // Then the code checks: if is_bref || retain_ids.contains(&node.id) → Retain
-    //                       else → Replace
-    // person-001 is not boundary_ref and not in retain_ids → Replace
-    // Replace = boundary_ref stub.
-    //
-    // So person nodes become boundary_ref stubs in partner scope when
-    // retain_ids is empty. That is fine — the test just verifies the output
-    // is valid JSON and exits 0. We cannot assert the person node is present
-    // as "person" type in the output with the empty retain_ids policy.
-    //
-    // Just verify the output is a valid OMTS-like structure.
     assert!(value["nodes"].is_array(), "nodes must be an array");
     assert!(value["edges"].is_array(), "edges must be an array");
 }
 
-// ---------------------------------------------------------------------------
-// redact: scope error (exit 1)
-// ---------------------------------------------------------------------------
-
-/// Trying to redact a "public" file to "partner" scope (less restrictive) → exit 1.
+/// Trying to redact a "public" file to "partner" scope (less restrictive) exits 1.
 #[test]
 fn redact_less_restrictive_scope_exits_1() {
-    // Create a temp file with disclosure_scope = "public".
     let content = r#"{
         "omtsf_version": "1.0.0",
         "snapshot_date": "2026-02-19",
@@ -271,10 +230,6 @@ fn redact_less_restrictive_scope_exits_1() {
         "expected exit 1 for less-restrictive scope"
     );
 }
-
-// ---------------------------------------------------------------------------
-// redact: parse failure (exit 2)
-// ---------------------------------------------------------------------------
 
 #[test]
 fn redact_invalid_json_exits_2() {
@@ -309,10 +264,6 @@ fn redact_nonexistent_file_exits_2() {
         "expected exit 2 for nonexistent file"
     );
 }
-
-// ---------------------------------------------------------------------------
-// redact: validate the redacted output
-// ---------------------------------------------------------------------------
 
 #[test]
 fn redact_to_public_output_passes_validate() {
@@ -375,10 +326,6 @@ fn redact_to_public_preserves_file_salt() {
         "file_salt must be preserved in redacted output"
     );
 }
-
-// ---------------------------------------------------------------------------
-// redact: stdin support
-// ---------------------------------------------------------------------------
 
 #[test]
 fn redact_stdin_exits_0() {

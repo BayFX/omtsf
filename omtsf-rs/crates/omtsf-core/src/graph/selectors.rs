@@ -22,10 +22,6 @@ use crate::enums::{EdgeTypeTag, NodeTypeTag};
 use crate::newtypes::CountryCode;
 use crate::structures::{Edge, Node};
 
-// ---------------------------------------------------------------------------
-// Selector
-// ---------------------------------------------------------------------------
-
 /// A single predicate that matches nodes, edges, or both.
 ///
 /// See `query.md` Section 2.1 for the full semantics of each variant.
@@ -48,10 +44,6 @@ pub enum Selector {
     /// Case-insensitive substring match on the node `name` field.
     Name(String),
 }
-
-// ---------------------------------------------------------------------------
-// SelectorSet
-// ---------------------------------------------------------------------------
 
 /// Grouped selectors with AND-across-groups / OR-within-group composition.
 ///
@@ -168,12 +160,10 @@ impl SelectorSet {
     /// 6. `jurisdictions` — node's jurisdiction must match at least one entry.
     /// 7. `names` — node's name must contain at least one entry as a case-insensitive substring.
     pub fn matches_node(&self, node: &Node) -> bool {
-        // Group 1: node_types (OR)
         if !self.node_types.is_empty() && !self.node_types.contains(&node.node_type) {
             return false;
         }
 
-        // Group 2: label_keys (OR) — check node.labels
         if !self.label_keys.is_empty() {
             let has_match = node.labels.as_ref().is_some_and(|labels| {
                 labels
@@ -185,7 +175,6 @@ impl SelectorSet {
             }
         }
 
-        // Group 3: label_key_values (OR)
         if !self.label_key_values.is_empty() {
             let has_match = node.labels.as_ref().is_some_and(|labels| {
                 labels.iter().any(|lbl| {
@@ -199,7 +188,6 @@ impl SelectorSet {
             }
         }
 
-        // Group 4: identifier_schemes (OR) — node-only
         if !self.identifier_schemes.is_empty() {
             let has_match = node.identifiers.as_ref().is_some_and(|ids| {
                 ids.iter()
@@ -210,7 +198,6 @@ impl SelectorSet {
             }
         }
 
-        // Group 5: identifier_scheme_values (OR) — node-only
         if !self.identifier_scheme_values.is_empty() {
             let has_match = node.identifiers.as_ref().is_some_and(|ids| {
                 ids.iter().any(|id| {
@@ -224,7 +211,6 @@ impl SelectorSet {
             }
         }
 
-        // Group 6: jurisdictions (OR) — node-only
         if !self.jurisdictions.is_empty() {
             let has_match = node
                 .jurisdiction
@@ -235,7 +221,6 @@ impl SelectorSet {
             }
         }
 
-        // Group 7: names (OR, case-insensitive substring) — node-only
         if !self.names.is_empty() {
             let has_match = node.name.as_ref().is_some_and(|name| {
                 let name_lower = name.to_lowercase();
@@ -262,12 +247,10 @@ impl SelectorSet {
     /// 2. `label_keys` — edge must have a label whose key matches any entry.
     /// 3. `label_key_values` — edge must have a label matching any (key, value) pair.
     pub fn matches_edge(&self, edge: &Edge) -> bool {
-        // Group 1: edge_types (OR)
         if !self.edge_types.is_empty() && !self.edge_types.contains(&edge.edge_type) {
             return false;
         }
 
-        // Group 2: label_keys (OR) — check edge.properties.labels
         if !self.label_keys.is_empty() {
             let has_match = edge.properties.labels.as_ref().is_some_and(|labels| {
                 labels
@@ -279,7 +262,6 @@ impl SelectorSet {
             }
         }
 
-        // Group 3: label_key_values (OR)
         if !self.label_key_values.is_empty() {
             let has_match = edge.properties.labels.as_ref().is_some_and(|labels| {
                 labels.iter().any(|lbl| {
@@ -297,10 +279,6 @@ impl SelectorSet {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -310,10 +288,6 @@ mod tests {
     use crate::newtypes::{EdgeId, NodeId};
     use crate::structures::{Edge, EdgeProperties, Node};
     use crate::types::{Identifier, Label};
-
-    // -----------------------------------------------------------------------
-    // Fixture helpers
-    // -----------------------------------------------------------------------
 
     fn node_id(s: &str) -> NodeId {
         NodeId::try_from(s).expect("valid NodeId")
@@ -420,10 +394,6 @@ mod tests {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // SelectorSet::is_empty
-    // -----------------------------------------------------------------------
-
     /// A default `SelectorSet` is empty.
     #[test]
     fn test_selector_set_default_is_empty() {
@@ -439,10 +409,6 @@ mod tests {
         ))]);
         assert!(!ss.is_empty());
     }
-
-    // -----------------------------------------------------------------------
-    // SelectorSet::from_selectors
-    // -----------------------------------------------------------------------
 
     /// `from_selectors` distributes each variant into the correct field.
     #[test]
@@ -467,10 +433,6 @@ mod tests {
         assert_eq!(ss.jurisdictions.len(), 1);
         assert_eq!(ss.names.len(), 1);
     }
-
-    // -----------------------------------------------------------------------
-    // matches_node: NodeType selector
-    // -----------------------------------------------------------------------
 
     /// A matching node type passes the `NodeType` selector.
     #[test]
@@ -503,10 +465,6 @@ mod tests {
         assert!(ss.matches_node(&facility_node("n2")));
         assert!(!ss.matches_node(&bare_node("n3", NodeTypeTag::Known(NodeType::Good))));
     }
-
-    // -----------------------------------------------------------------------
-    // matches_node: LabelKey selector
-    // -----------------------------------------------------------------------
 
     /// Node with matching label key passes `LabelKey` selector.
     #[test]
@@ -546,10 +504,6 @@ mod tests {
         assert!(ss.matches_node(&node));
     }
 
-    // -----------------------------------------------------------------------
-    // matches_node: LabelKeyValue selector
-    // -----------------------------------------------------------------------
-
     /// Node with matching (key, value) label pair passes `LabelKeyValue` selector.
     #[test]
     fn test_matches_node_label_key_value_match() {
@@ -582,14 +536,9 @@ mod tests {
             "yes".to_owned(),
         )]);
         let mut node = org_node("n1");
-        // label with no value (boolean flag)
         node.labels = Some(vec![label("certified", None)]);
         assert!(!ss.matches_node(&node));
     }
-
-    // -----------------------------------------------------------------------
-    // matches_node: IdentifierScheme selector
-    // -----------------------------------------------------------------------
 
     /// Node with matching identifier scheme passes `IdentifierScheme` selector.
     #[test]
@@ -620,10 +569,6 @@ mod tests {
         assert!(ss.matches_node(&node));
     }
 
-    // -----------------------------------------------------------------------
-    // matches_node: IdentifierSchemeValue selector
-    // -----------------------------------------------------------------------
-
     /// Node with matching (scheme, value) identifier passes `IdentifierSchemeValue`.
     #[test]
     fn test_matches_node_identifier_scheme_value_match() {
@@ -647,10 +592,6 @@ mod tests {
         node.identifiers = Some(vec![identifier("duns", "999999999")]);
         assert!(!ss.matches_node(&node));
     }
-
-    // -----------------------------------------------------------------------
-    // matches_node: Jurisdiction selector
-    // -----------------------------------------------------------------------
 
     /// Node with matching jurisdiction passes `Jurisdiction` selector.
     #[test]
@@ -690,10 +631,6 @@ mod tests {
         assert!(ss.matches_node(&node));
     }
 
-    // -----------------------------------------------------------------------
-    // matches_node: Name selector
-    // -----------------------------------------------------------------------
-
     /// Node with name containing the pattern (case-insensitive) passes `Name` selector.
     #[test]
     fn test_matches_node_name_substring_match() {
@@ -729,10 +666,6 @@ mod tests {
         assert!(!ss.matches_node(&node));
     }
 
-    // -----------------------------------------------------------------------
-    // matches_node: AND composition across groups
-    // -----------------------------------------------------------------------
-
     /// `NodeType` AND `Jurisdiction`: both groups must pass.
     #[test]
     fn test_matches_node_and_across_groups_both_pass() {
@@ -757,10 +690,6 @@ mod tests {
         assert!(!ss.matches_node(&node));
     }
 
-    // -----------------------------------------------------------------------
-    // matches_node: empty SelectorSet
-    // -----------------------------------------------------------------------
-
     /// An empty `SelectorSet` matches every node (no constraints).
     #[test]
     fn test_matches_node_empty_selector_set_matches_all() {
@@ -768,10 +697,6 @@ mod tests {
         assert!(ss.matches_node(&org_node("n1")));
         assert!(ss.matches_node(&facility_node("n2")));
     }
-
-    // -----------------------------------------------------------------------
-    // matches_edge: EdgeType selector
-    // -----------------------------------------------------------------------
 
     /// Matching edge type passes `EdgeType` selector.
     #[test]
@@ -804,18 +729,12 @@ mod tests {
         assert!(ss.matches_edge(&ownership_edge("e2", "a", "b")));
     }
 
-    // -----------------------------------------------------------------------
-    // matches_edge: node-only selectors are skipped
-    // -----------------------------------------------------------------------
-
     /// `NodeType` selector is ignored when evaluating an edge.
     #[test]
     fn test_matches_edge_node_type_selector_is_skipped() {
         let ss = SelectorSet::from_selectors(vec![Selector::NodeType(NodeTypeTag::Known(
             NodeType::Organization,
         ))]);
-        // A selector set with only node-only selectors should match all edges
-        // (no edge-applicable constraints).
         let edge = supplies_edge("e1", "a", "b");
         assert!(ss.matches_edge(&edge));
     }
@@ -844,10 +763,6 @@ mod tests {
         assert!(ss.matches_edge(&edge));
     }
 
-    // -----------------------------------------------------------------------
-    // matches_edge: LabelKey on edge properties
-    // -----------------------------------------------------------------------
-
     /// Edge with matching label key in properties passes `LabelKey` selector.
     #[test]
     fn test_matches_edge_label_key_match() {
@@ -864,10 +779,6 @@ mod tests {
         let edge = supplies_edge("e1", "a", "b");
         assert!(!ss.matches_edge(&edge));
     }
-
-    // -----------------------------------------------------------------------
-    // matches_edge: LabelKeyValue on edge properties
-    // -----------------------------------------------------------------------
 
     /// Edge with matching (key, value) label in properties passes `LabelKeyValue`.
     #[test]
@@ -892,10 +803,6 @@ mod tests {
         edge.properties.labels = Some(vec![label("tier", Some("2"))]);
         assert!(!ss.matches_edge(&edge));
     }
-
-    // -----------------------------------------------------------------------
-    // matches_edge: empty SelectorSet
-    // -----------------------------------------------------------------------
 
     /// An empty `SelectorSet` matches every edge (no constraints).
     #[test]

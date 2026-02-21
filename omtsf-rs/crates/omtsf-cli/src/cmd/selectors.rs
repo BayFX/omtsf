@@ -24,10 +24,6 @@ use omtsf_core::{CountryCode, EdgeTypeTag, NodeTypeTag};
 
 use crate::error::CliError;
 
-// ---------------------------------------------------------------------------
-// build_selector_set
-// ---------------------------------------------------------------------------
-
 /// Builds a [`SelectorSet`] from the raw flag vectors collected by clap.
 ///
 /// Each argument vector corresponds to one repeatable CLI flag. The function
@@ -50,21 +46,16 @@ pub fn build_selector_set(
 ) -> Result<SelectorSet, CliError> {
     let mut selectors: Vec<Selector> = Vec::new();
 
-    // --node-type: deserialize via the NodeTypeTag serde deserializer so that
-    // known snake_case strings map to Known variants and unknown strings become
-    // Extension variants — matching the same round-trip used in .omts files.
     for s in node_types {
         let tag = parse_node_type_tag(s)?;
         selectors.push(Selector::NodeType(tag));
     }
 
-    // --edge-type: same pattern as node-type.
     for s in edge_types {
         let tag = parse_edge_type_tag(s)?;
         selectors.push(Selector::EdgeType(tag));
     }
 
-    // --label: `key` or `key=value`
     for s in labels {
         if let Some((k, v)) = s.split_once('=') {
             selectors.push(Selector::LabelKeyValue(k.to_owned(), v.to_owned()));
@@ -73,7 +64,6 @@ pub fn build_selector_set(
         }
     }
 
-    // --identifier: `scheme` or `scheme:value`
     for s in identifiers {
         if let Some((scheme, value)) = s.split_once(':') {
             selectors.push(Selector::IdentifierSchemeValue(
@@ -85,7 +75,6 @@ pub fn build_selector_set(
         }
     }
 
-    // --jurisdiction: validated CountryCode
     for s in jurisdictions {
         let cc = CountryCode::try_from(s.as_str()).map_err(|e| CliError::InvalidArgument {
             detail: format!("--jurisdiction: {e}"),
@@ -93,7 +82,6 @@ pub fn build_selector_set(
         selectors.push(Selector::Jurisdiction(cc));
     }
 
-    // --name
     for s in names {
         selectors.push(Selector::Name(s.clone()));
     }
@@ -110,10 +98,6 @@ pub fn build_selector_set(
 
     Ok(set)
 }
-
-// ---------------------------------------------------------------------------
-// Type-tag parsing helpers
-// ---------------------------------------------------------------------------
 
 /// Parses a string into a [`NodeTypeTag`] using serde deserialization.
 ///
@@ -147,10 +131,6 @@ fn parse_edge_type_tag(s: &str) -> Result<EdgeTypeTag, CliError> {
     })
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -168,8 +148,6 @@ mod tests {
         v.iter().map(std::string::ToString::to_string).collect()
     }
 
-    // ── empty selector set ───────────────────────────────────────────────────
-
     /// No selector flags → error with exit code 2.
     #[test]
     fn test_empty_selectors_returns_error() {
@@ -182,8 +160,6 @@ mod tests {
             err.message()
         );
     }
-
-    // ── --label parsing ──────────────────────────────────────────────────────
 
     /// `--label key` produces `LabelKey`.
     #[test]
@@ -238,8 +214,6 @@ mod tests {
         );
     }
 
-    // ── --identifier parsing ─────────────────────────────────────────────────
-
     /// `--identifier scheme` produces `IdentifierScheme`.
     #[test]
     fn test_identifier_scheme_only() {
@@ -274,8 +248,6 @@ mod tests {
             vec![("duns".to_owned(), "123456789".to_owned())]
         );
     }
-
-    // ── --node-type parsing ──────────────────────────────────────────────────
 
     /// Known node type string maps to `NodeTypeTag::Known`.
     #[test]
@@ -337,8 +309,6 @@ mod tests {
         }
     }
 
-    // ── --edge-type parsing ──────────────────────────────────────────────────
-
     /// Known edge type string maps to `EdgeTypeTag::Known`.
     #[test]
     fn test_edge_type_known() {
@@ -372,8 +342,6 @@ mod tests {
         );
     }
 
-    // ── --jurisdiction parsing ────────────────────────────────────────────────
-
     /// Valid country code parses successfully.
     #[test]
     fn test_jurisdiction_valid() {
@@ -405,8 +373,6 @@ mod tests {
         assert_eq!(err.exit_code(), 2);
     }
 
-    // ── --name parsing ────────────────────────────────────────────────────────
-
     /// `--name pattern` produces `Name` selector.
     #[test]
     fn test_name_selector() {
@@ -421,8 +387,6 @@ mod tests {
         .expect("should parse --name");
         assert_eq!(ss.names, vec!["acme"]);
     }
-
-    // ── multiple flags combined ───────────────────────────────────────────────
 
     /// Multiple flags of different types produce a combined `SelectorSet`.
     #[test]
@@ -455,8 +419,6 @@ mod tests {
         .expect("should accept multiple --node-type values");
         assert_eq!(ss.node_types.len(), 2);
     }
-
-    // ── SelectorSet::is_empty invariant ──────────────────────────────────────
 
     /// The returned `SelectorSet` is never empty (function errors before that).
     #[test]

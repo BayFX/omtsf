@@ -5,10 +5,6 @@
 /// variant.
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
-// ---------------------------------------------------------------------------
-// § 4.1  Disclosure scope
-// ---------------------------------------------------------------------------
-
 /// File-level disclosure scope declaration (SPEC-001 Section 2, SPEC-004 Section 3).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -20,10 +16,6 @@ pub enum DisclosureScope {
     /// No restrictions on sharing.
     Public,
 }
-
-// ---------------------------------------------------------------------------
-// § 4.2  Node type
-// ---------------------------------------------------------------------------
 
 /// Known node types defined by the OMTSF core specification (SPEC-001 Section 4).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -70,7 +62,6 @@ impl Serialize for NodeTypeTag {
 impl<'de> Deserialize<'de> for NodeTypeTag {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
-        // Try known variants first; fall back to Extension without error.
         let str_de: de::value::StrDeserializer<de::value::Error> =
             de::IntoDeserializer::into_deserializer(s.as_str());
         match NodeType::deserialize(str_de) {
@@ -80,11 +71,7 @@ impl<'de> Deserialize<'de> for NodeTypeTag {
     }
 }
 
-// ---------------------------------------------------------------------------
-// § 4.3  Edge type
-// ---------------------------------------------------------------------------
-
-/// Known edge types defined by the OMTSF core specification (SPEC-001 Sections 5–7).
+/// Known edge types defined by the OMTSF core specification (SPEC-001 Sections 5-7).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EdgeType {
@@ -154,10 +141,6 @@ impl<'de> Deserialize<'de> for EdgeTypeTag {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// § 4.4  Property-level enums
-// ---------------------------------------------------------------------------
 
 /// Type of attestation record (SPEC-001 Section 4.5).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -361,17 +344,11 @@ pub enum ServiceType {
     Other,
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
 
     use super::*;
-
-    // --- helpers ---
 
     fn to_json<T: Serialize>(v: &T) -> String {
         serde_json::to_string(v).expect("serialize")
@@ -391,8 +368,6 @@ mod tests {
         back
     }
 
-    // --- DisclosureScope ---
-
     #[test]
     fn disclosure_scope_round_trip() {
         assert_eq!(to_json(&DisclosureScope::Internal), r#""internal""#);
@@ -402,8 +377,6 @@ mod tests {
         round_trip(&DisclosureScope::Partner);
         round_trip(&DisclosureScope::Public);
     }
-
-    // --- NodeType ---
 
     #[test]
     fn node_type_round_trip() {
@@ -417,8 +390,6 @@ mod tests {
         round_trip(&NodeType::Organization);
         round_trip(&NodeType::BoundaryRef);
     }
-
-    // --- NodeTypeTag: known variants ---
 
     #[test]
     fn node_type_tag_known_round_trip() {
@@ -448,8 +419,6 @@ mod tests {
         }
     }
 
-    // --- NodeTypeTag: extension strings ---
-
     #[test]
     fn node_type_tag_extension_dot_notation() {
         let json = r#""com.example.custom_node""#;
@@ -463,14 +432,11 @@ mod tests {
 
     #[test]
     fn node_type_tag_extension_unknown_no_dot() {
-        // Unknown strings without dots are also accepted as Extension.
         let json = r#""mystery_type""#;
         let tag: NodeTypeTag = from_json(json);
         assert_eq!(tag, NodeTypeTag::Extension("mystery_type".to_owned()));
         assert_eq!(to_json(&tag), json);
     }
-
-    // --- EdgeType ---
 
     #[test]
     fn edge_type_round_trip() {
@@ -499,8 +465,6 @@ mod tests {
         round_trip(&EdgeType::Ownership);
         round_trip(&EdgeType::SameAs);
     }
-
-    // --- EdgeTypeTag: known variants ---
 
     #[test]
     fn edge_type_tag_known_round_trip() {
@@ -539,8 +503,6 @@ mod tests {
         }
     }
 
-    // --- EdgeTypeTag: extension strings ---
-
     #[test]
     fn edge_type_tag_extension_round_trip() {
         let json = r#""com.acme.custom_relationship""#;
@@ -551,8 +513,6 @@ mod tests {
         );
         assert_eq!(to_json(&tag), json);
     }
-
-    // --- Property enums ---
 
     #[test]
     fn attestation_type_round_trip() {

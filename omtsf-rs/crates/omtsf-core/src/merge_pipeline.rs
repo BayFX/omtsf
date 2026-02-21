@@ -29,10 +29,6 @@ use crate::types::Identifier;
 use crate::union_find::UnionFind;
 use crate::validation::{ValidationConfig, validate};
 
-// ---------------------------------------------------------------------------
-// MergeError
-// ---------------------------------------------------------------------------
-
 /// Errors that can occur during the merge pipeline.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MergeError {
@@ -68,10 +64,6 @@ impl std::fmt::Display for MergeError {
 
 impl std::error::Error for MergeError {}
 
-// ---------------------------------------------------------------------------
-// MergeWarning
-// ---------------------------------------------------------------------------
-
 /// Non-fatal warning produced during the merge pipeline.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MergeWarning {
@@ -105,10 +97,6 @@ impl std::fmt::Display for MergeWarning {
     }
 }
 
-// ---------------------------------------------------------------------------
-// MergeConfig
-// ---------------------------------------------------------------------------
-
 /// Configuration for the merge pipeline.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MergeConfig {
@@ -139,10 +127,6 @@ impl Default for MergeConfig {
     }
 }
 
-// ---------------------------------------------------------------------------
-// MergeOutput
-// ---------------------------------------------------------------------------
-
 /// The result of a successful merge operation.
 #[derive(Debug, Clone)]
 pub struct MergeOutput {
@@ -155,10 +139,6 @@ pub struct MergeOutput {
     /// Total number of conflict records across all merged nodes and edges.
     pub conflict_count: usize,
 }
-
-// ---------------------------------------------------------------------------
-// Public entry point
-// ---------------------------------------------------------------------------
 
 /// Merges two or more OMTSF files into a single deduplicated file.
 ///
@@ -188,17 +168,12 @@ pub fn merge_with_config(
         return Err(MergeError::NoInputFiles);
     }
 
-    // Source file labels: use index as fallback since OmtsFile has no path field.
     let source_labels: Vec<String> = files
         .iter()
         .enumerate()
         .map(|(i, _)| format!("file_{i}"))
         .collect();
 
-    // -----------------------------------------------------------------------
-    // Step 1: Concatenate all nodes and build a flat node slice with provenance.
-    // -----------------------------------------------------------------------
-    // node_origins[i] = index into `files` for the file that contributed node i.
     let mut all_nodes: Vec<Node> = Vec::new();
     let mut node_origins: Vec<usize> = Vec::new();
 
@@ -211,10 +186,6 @@ pub fn merge_with_config(
 
     let total_nodes = all_nodes.len();
 
-    // -----------------------------------------------------------------------
-    // Step 2: Build identifier index, filtering out internal and ANNULLED LEIs.
-    // -----------------------------------------------------------------------
-    // We build a filtered index that skips ANNULLED LEIs.
     let mut id_index: HashMap<CanonicalId, Vec<usize>> = HashMap::new();
     for (node_idx, node) in all_nodes.iter().enumerate() {
         let Some(identifiers) = node.identifiers.as_ref() else {
@@ -232,24 +203,18 @@ pub fn merge_with_config(
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Step 3: Run union-find over identifier matches.
-    // -----------------------------------------------------------------------
     let mut uf = UnionFind::new(total_nodes);
 
     for node_indices in id_index.values() {
         if node_indices.len() < 2 {
             continue;
         }
-        // Evaluate pairwise identity predicate; union matching pairs.
         for i in 0..node_indices.len() {
             for j in (i + 1)..node_indices.len() {
                 let idx_a = node_indices[i];
                 let idx_b = node_indices[j];
                 let node_a = &all_nodes[idx_a];
                 let node_b = &all_nodes[idx_b];
-                // Check if any identifier from node_a matches any from node_b
-                // sharing this canonical key.
                 let ids_a = node_a.identifiers.as_deref().unwrap_or(&[]);
                 let ids_b = node_b.identifiers.as_deref().unwrap_or(&[]);
                 let mut matched = false;
@@ -268,14 +233,9 @@ pub fn merge_with_config(
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Step 4: Concatenate all edges and apply same_as edges to union-find.
-    // -----------------------------------------------------------------------
     let mut all_edges: Vec<Edge> = Vec::new();
     let mut edge_origins: Vec<usize> = Vec::new();
 
-    // Build a node-id → ordinal map for same_as edge processing.
-    // We need per-file offset to correctly map node ids within each file.
     let mut file_node_offsets: Vec<usize> = Vec::with_capacity(files.len());
     {
         let mut offset = 0usize;
@@ -285,10 +245,6 @@ pub fn merge_with_config(
         }
     }
 
-    // Build a combined map: for each file, map (file_idx, node_id_str) → ordinal.
-    // For same_as edge resolution we need per-file lookups.
-    // We'll build a per-file node_id → ordinal map for same_as processing,
-    // then concatenate edges.
     let mut per_file_id_maps: Vec<HashMap<&str, usize>> = Vec::with_capacity(files.len());
     for (file_idx, file) in files.iter().enumerate() {
         let offset = file_node_offsets[file_idx];
@@ -299,7 +255,6 @@ pub fn merge_with_config(
         per_file_id_maps.push(map);
     }
 
-    // Concatenate all edges.
     for (file_idx, file) in files.iter().enumerate() {
         for edge in &file.edges {
             all_edges.push(edge.clone());
@@ -307,9 +262,6 @@ pub fn merge_with_config(
         }
     }
 
-    // Apply same_as edges per file (same_as edges only reference nodes in
-    // their own file, since IDs are file-local).
-    // We process same_as edges from all_edges using file-specific lookups.
     for (edge_idx, edge) in all_edges.iter().enumerate() {
         let is_same_as = matches!(&edge.edge_type, EdgeTypeTag::Known(EdgeType::SameAs));
         if !is_same_as {
@@ -340,19 +292,14 @@ pub fn merge_with_config(
         uf.union(src_ord, tgt_ord);
     }
 
-    // -----------------------------------------------------------------------
-    // Step 5: Compute merge groups and check size limits.
-    // -----------------------------------------------------------------------
     let mut warnings: Vec<MergeWarning> = Vec::new();
 
     if total_nodes > 0 {
-        // Count group sizes.
         let mut group_sizes: HashMap<usize, usize> = HashMap::new();
         for i in 0..total_nodes {
             let rep = uf.find(i);
             *group_sizes.entry(rep).or_insert(0) += 1;
         }
-        // Sort by representative for deterministic warning order.
         let mut reps: Vec<usize> = group_sizes.keys().copied().collect();
         reps.sort_unstable();
         for rep in reps {
@@ -367,24 +314,12 @@ pub fn merge_with_config(
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Step 6: Merge node groups → output nodes.
-    // -----------------------------------------------------------------------
-    // Collect each group's node ordinals.
     let mut groups: HashMap<usize, Vec<usize>> = HashMap::new();
     for i in 0..total_nodes {
         let rep = uf.find(i);
         groups.entry(rep).or_default().push(i);
     }
 
-    // For each group, determine the canonical ordering key (lowest canonical id
-    // among all external identifiers of nodes in the group, or the merged node's
-    // assigned id if no external identifiers exist).
-    // We assign new sequential IDs: "n-0", "n-1", ... after sorting groups.
-
-    // Build a sorted list of (sort_key, group_representative) pairs.
-    // sort_key: lowest canonical identifier string among group members,
-    //           or "" if no external identifiers (sorts last, then by rep).
     let mut group_sort_keys: Vec<(String, usize)> = groups
         .iter()
         .map(|(&rep, member_ordinals)| {
@@ -405,14 +340,12 @@ pub fn merge_with_config(
         })
         .collect();
 
-    // Sort by (canonical_key, representative) for determinism.
     group_sort_keys.sort_unstable_by(|(key_a, rep_a), (key_b, rep_b)| {
         key_a.cmp(key_b).then_with(|| rep_a.cmp(rep_b))
     });
 
-    // Map from representative ordinal → new NodeId string.
     let mut rep_to_new_id: HashMap<usize, NodeId> = HashMap::new();
-    let mut merged_nodes: Vec<(NodeId, usize)> = Vec::new(); // (new_id, rep)
+    let mut merged_nodes: Vec<(NodeId, usize)> = Vec::new();
 
     let mut conflict_count = 0usize;
 
@@ -424,33 +357,28 @@ pub fn merge_with_config(
         merged_nodes.push((new_id, *rep));
     }
 
-    // Now build the merged Node for each group.
     let mut output_nodes: Vec<Node> = Vec::new();
 
     for (new_id, rep) in &merged_nodes {
         let member_ordinals = &groups[rep];
 
-        // Collect source labels for this group.
         let src_labels_for_group: Vec<&str> = member_ordinals
             .iter()
             .map(|&ord| source_labels[node_origins[ord]].as_str())
             .collect();
 
-        // Merge identifiers (set union, sorted by canonical string).
         let id_slices: Vec<Option<&[Identifier]>> = member_ordinals
             .iter()
             .map(|&ord| all_nodes[ord].identifiers.as_deref())
             .collect();
         let merged_ids = merge_identifiers(&id_slices);
 
-        // Merge labels.
         let label_slices: Vec<Option<&[crate::types::Label]>> = member_ordinals
             .iter()
             .map(|&ord| all_nodes[ord].labels.as_deref())
             .collect();
         let merged_labels = merge_labels(&label_slices);
 
-        // Merge scalar: name.
         let name_inputs: Vec<(Option<String>, &str)> = member_ordinals
             .iter()
             .zip(src_labels_for_group.iter())
@@ -458,11 +386,8 @@ pub fn merge_with_config(
             .collect();
         let (merged_name, name_conflict) = resolve_scalar_merge(&name_inputs, "name");
 
-        // Merge scalar: node_type — use the first encountered (they should all
-        // agree after identity resolution; if not, take the representative's).
         let node_type = all_nodes[member_ordinals[0]].node_type.clone();
 
-        // Merge scalar: jurisdiction.
         let jurisdiction_inputs: Vec<(Option<crate::newtypes::CountryCode>, &str)> =
             member_ordinals
                 .iter()
@@ -472,7 +397,6 @@ pub fn merge_with_config(
         let (merged_jurisdiction, jurisdiction_conflict) =
             resolve_scalar_merge(&jurisdiction_inputs, "jurisdiction");
 
-        // Merge scalar: status.
         let status_inputs: Vec<(Option<crate::enums::OrganizationStatus>, &str)> = member_ordinals
             .iter()
             .zip(src_labels_for_group.iter())
@@ -480,7 +404,6 @@ pub fn merge_with_config(
             .collect();
         let (merged_status, status_conflict) = resolve_scalar_merge(&status_inputs, "status");
 
-        // Collect all conflicts for this node.
         let mut node_conflicts: Vec<Conflict> = Vec::new();
         if let Some(c) = name_conflict {
             node_conflicts.push(c);
@@ -493,13 +416,11 @@ pub fn merge_with_config(
         }
         conflict_count += node_conflicts.len();
 
-        // Build extra map with _conflicts if any.
         let mut extra = serde_json::Map::new();
         if let Some(conflicts_val) = build_conflicts_value(node_conflicts) {
             extra.insert("_conflicts".to_owned(), conflicts_val);
         }
 
-        // Build the merged node.
         let mut merged_node = Node {
             id: new_id.clone(),
             node_type,
@@ -545,7 +466,6 @@ pub fn merge_with_config(
             extra,
         };
 
-        // Merge additional scalar fields from the representative node (first in group).
         let rep_node = &all_nodes[member_ordinals[0]];
         merged_node.governance_structure = rep_node.governance_structure.clone();
         merged_node.operator = rep_node.operator.clone();
@@ -576,30 +496,13 @@ pub fn merge_with_config(
         output_nodes.push(merged_node);
     }
 
-    // -----------------------------------------------------------------------
-    // Step 7: Merge edges.
-    // -----------------------------------------------------------------------
-    // Node IDs are file-local: two files can both have a node named "org-1"
-    // that refer to entirely different entities.  We must resolve each edge's
-    // source/target through the id-map of the file that owns that edge, not
-    // through a global map that would silently clobber later files' entries.
-    //
-    // `edge_node_ordinal(edge_idx, id_str)` performs that per-file lookup.
-
-    // Pre-compute a snapshot of union-find representatives for all node ordinals.
-    // We need this as a plain Vec (not &mut uf) so we can call it from closures.
     let node_representatives: Vec<usize> = (0..total_nodes).map(|i| uf.find(i)).collect();
 
-    // Per-file node ordinal lookup: resolves an id string to a global ordinal
-    // using the file that owns edge `edge_idx`.
     let edge_node_ordinal = |edge_idx: usize, id: &str| -> Option<usize> {
         let file_idx = edge_origins[edge_idx];
         per_file_id_maps[file_idx].get(id).copied()
     };
 
-    // Build the edge candidate index using per-file resolution.
-    // We inline the logic from `build_edge_candidate_index` so we can pass
-    // the edge index to the node-ordinal lookup.
     let edge_candidate_index = {
         use crate::identity::{EdgeCompositeKey, edge_composite_key};
         let mut index: HashMap<EdgeCompositeKey, Vec<usize>> = HashMap::new();
@@ -613,7 +516,6 @@ pub fn merge_with_config(
             let src_rep = node_representatives[src_ord];
             let tgt_rep = node_representatives[tgt_ord];
             let Some(key) = edge_composite_key(src_rep, tgt_rep, edge) else {
-                // same_as — skip
                 continue;
             };
             index.entry(key).or_default().push(edge_idx);
@@ -621,8 +523,6 @@ pub fn merge_with_config(
         index
     };
 
-    // For each bucket in the edge candidate index, run pairwise edges_match
-    // and build merge groups using a second union-find for edges.
     let total_edges = all_edges.len();
     let mut edge_uf = UnionFind::new(total_edges);
 
@@ -637,7 +537,6 @@ pub fn merge_with_config(
                 let edge_a = &all_edges[ei];
                 let edge_b = &all_edges[ej];
 
-                // Resolve representatives using per-file maps.
                 let src_rep_a = edge_node_ordinal(ei, edge_a.source.as_ref())
                     .map(|o| node_representatives[o])
                     .unwrap_or(usize::MAX);
@@ -658,19 +557,12 @@ pub fn merge_with_config(
         }
     }
 
-    // Collect edge groups.
     let mut edge_groups: HashMap<usize, Vec<usize>> = HashMap::new();
     for i in 0..total_edges {
         let rep = edge_uf.find(i);
         edge_groups.entry(rep).or_default().push(i);
     }
 
-    // For edge output ordering: sort by
-    // (source_canonical, target_canonical, type, lowest_edge_canonical).
-    // source_canonical = lowest canonical id of the merged source node group.
-    // target_canonical = lowest canonical id of the merged target node group.
-
-    // Build rep_ordinal → lowest canonical id for node groups (for edge sorting).
     let mut node_rep_to_canonical: HashMap<usize, String> = HashMap::new();
     for (idx, node) in all_nodes.iter().enumerate() {
         let rep = uf.find(idx);
@@ -692,8 +584,6 @@ pub fn merge_with_config(
         }
     }
 
-    // Build sort key for each edge group representative.
-    // key = (src_canonical, tgt_canonical, type_str, lowest_edge_canonical)
     let edge_type_str = |et: &EdgeTypeTag| -> String {
         match et {
             EdgeTypeTag::Known(t) => format!("{t:?}"),
@@ -745,19 +635,16 @@ pub fn merge_with_config(
             .then_with(|| a.4.cmp(&b.4))
     });
 
-    // Build merged edges.
     let mut output_edges: Vec<Edge> = Vec::new();
     let mut edge_new_id_counter = 0usize;
 
     for (_src_cid, _tgt_cid, _type_str, _edge_cid, rep) in &edge_group_sort_keys {
         let member_ordinals = &edge_groups[rep];
 
-        // Retain same_as edges as-is (one per source edge, rewriting IDs).
         let first_edge = &all_edges[member_ordinals[0]];
         let is_same_as = matches!(&first_edge.edge_type, EdgeTypeTag::Known(EdgeType::SameAs));
 
         if is_same_as {
-            // same_as edges are never merged; retain each one with rewritten endpoints.
             for &ord in member_ordinals {
                 let edge = &all_edges[ord];
                 let file_idx = edge_origins[ord];
@@ -801,23 +688,18 @@ pub fn merge_with_config(
             continue;
         }
 
-        // Merge non-same_as edge group.
-
-        // Merged identifiers.
         let id_slices: Vec<Option<&[Identifier]>> = member_ordinals
             .iter()
             .map(|&ord| all_edges[ord].identifiers.as_deref())
             .collect();
         let merged_ids = merge_identifiers(&id_slices);
 
-        // Merged labels (from properties).
         let label_slices: Vec<Option<&[crate::types::Label]>> = member_ordinals
             .iter()
             .map(|&ord| all_edges[ord].properties.labels.as_deref())
             .collect();
         let merged_labels = merge_labels(&label_slices);
 
-        // Rewrite source and target to new merged node IDs.
         let file_idx_0 = edge_origins[member_ordinals[0]];
         let file_map_0 = &per_file_id_maps[file_idx_0];
 
@@ -837,11 +719,9 @@ pub fn merge_with_config(
             });
 
         let (Some(new_src), Some(new_tgt)) = (new_src_id, new_tgt_id) else {
-            // Dangling edge — skip.
             continue;
         };
 
-        // Build merged properties from the representative edge.
         let rep_props = &all_edges[member_ordinals[0]].properties;
         let mut merged_props = EdgeProperties {
             data_quality: rep_props.data_quality.clone(),
@@ -874,11 +754,6 @@ pub fn merge_with_config(
             extra: serde_json::Map::new(),
         };
 
-        // Edge-level conflict recording is minimal in this implementation:
-        // we take the representative edge's scalar properties and do not
-        // compare across group members beyond identifier merging.
-        // build_conflicts_value returns None for an empty vec, so no key
-        // is written when there are no conflicts.
         let edge_conflicts: Vec<Conflict> = Vec::new();
         conflict_count += edge_conflicts.len();
         if let Some(conflicts_val) = build_conflicts_value(edge_conflicts) {
@@ -908,11 +783,6 @@ pub fn merge_with_config(
         });
     }
 
-    // -----------------------------------------------------------------------
-    // Step 8: Build output file.
-    // -----------------------------------------------------------------------
-
-    // Collect reporting_entity values from all source files.
     let mut reporting_entities: Vec<String> = files
         .iter()
         .filter_map(|f| f.reporting_entity.as_ref().map(ToString::to_string))
@@ -920,14 +790,12 @@ pub fn merge_with_config(
     reporting_entities.sort();
     reporting_entities.dedup();
 
-    // Output reporting_entity: set only if all files agree.
     let output_reporting_entity: Option<NodeId> = if reporting_entities.len() == 1 {
         NodeId::try_from(reporting_entities[0].as_str()).ok()
     } else {
         None
     };
 
-    // Snapshot date: use the latest among all source files.
     let latest_date: Option<CalendarDate> = files.iter().map(|f| f.snapshot_date.clone()).max();
 
     let snapshot_date = match latest_date {
@@ -936,14 +804,11 @@ pub fn merge_with_config(
             .map_err(|e| MergeError::InternalDataError(e.to_string()))?,
     };
 
-    // Use the version from the first file.
     let omtsf_version = files[0].omtsf_version.clone();
 
-    // Generate a fresh file salt.
     let file_salt =
         generate_file_salt().map_err(|e| MergeError::SaltGenerationFailed(e.to_string()))?;
 
-    // Source files list for metadata.
     let mut source_files = source_labels.clone();
     source_files.sort();
     source_files.dedup();
@@ -957,7 +822,6 @@ pub fn merge_with_config(
         conflict_count,
     };
 
-    // Build extra map with merge_metadata.
     let mut file_extra = serde_json::Map::new();
     if let Ok(meta_val) = serde_json::to_value(&metadata) {
         file_extra.insert("merge_metadata".to_owned(), meta_val);
@@ -976,9 +840,6 @@ pub fn merge_with_config(
         extra: file_extra,
     };
 
-    // -----------------------------------------------------------------------
-    // Step 9: Post-merge L1 validation.
-    // -----------------------------------------------------------------------
     let l1_only_config = ValidationConfig {
         run_l1: true,
         run_l2: false,
@@ -1002,10 +863,6 @@ pub fn merge_with_config(
     })
 }
 
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
 /// Merges N optional scalar values using [`merge_scalars`], returning the
 /// agreed value and an optional [`Conflict`] record.
 fn resolve_scalar_merge<T>(
@@ -1026,10 +883,6 @@ where
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -1141,19 +994,11 @@ mod tests {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Test: empty input
-    // -----------------------------------------------------------------------
-
     #[test]
     fn merge_empty_input_returns_error() {
         let result = merge(&[]);
         assert!(matches!(result, Err(MergeError::NoInputFiles)));
     }
-
-    // -----------------------------------------------------------------------
-    // Test: single file passthrough
-    // -----------------------------------------------------------------------
 
     #[test]
     fn merge_single_file_passthrough() {
@@ -1164,10 +1009,6 @@ mod tests {
         assert_eq!(output.file.edges.len(), 0);
         assert_eq!(output.warnings.len(), 0);
     }
-
-    // -----------------------------------------------------------------------
-    // Test: disjoint merge (no overlapping identifiers)
-    // -----------------------------------------------------------------------
 
     #[test]
     fn merge_disjoint_graphs() {
@@ -1181,8 +1022,6 @@ mod tests {
             Some("Beta Ltd"),
             Some(vec![make_identifier("duns", "012345678")]),
         );
-
-        // (No edges in this test — we only check that disjoint nodes stay separate.)
 
         let file_a = minimal_file(SALT_A, vec![node_a], vec![]);
         let file_b = minimal_file(SALT_B, vec![node_b], vec![]);
@@ -1198,10 +1037,6 @@ mod tests {
         assert_eq!(output.conflict_count, 0);
         assert_eq!(output.warnings.len(), 0);
     }
-
-    // -----------------------------------------------------------------------
-    // Test: full overlap (identical files)
-    // -----------------------------------------------------------------------
 
     #[test]
     fn merge_full_overlap_identical_files() {
@@ -1224,10 +1059,6 @@ mod tests {
         );
         assert_eq!(output.warnings.len(), 0);
     }
-
-    // -----------------------------------------------------------------------
-    // Test: partial overlap with name conflict
-    // -----------------------------------------------------------------------
 
     #[test]
     fn merge_partial_overlap_with_conflict() {
@@ -1263,10 +1094,6 @@ mod tests {
         );
     }
 
-    // -----------------------------------------------------------------------
-    // Test: three-file merge
-    // -----------------------------------------------------------------------
-
     #[test]
     fn merge_three_files() {
         let lei = make_identifier("lei", "TESTLEITHREETEST0059");
@@ -1296,10 +1123,6 @@ mod tests {
         );
         assert_eq!(output.conflict_count, 0, "no conflicts when names agree");
     }
-
-    // -----------------------------------------------------------------------
-    // Test: merge preserves edges with rewritten endpoints
-    // -----------------------------------------------------------------------
 
     #[test]
     fn merge_rewrites_edge_endpoints() {
@@ -1340,10 +1163,6 @@ mod tests {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Test: oversized group warning
-    // -----------------------------------------------------------------------
-
     #[test]
     fn merge_oversized_group_emits_warning() {
         // Create many nodes sharing the same LEI to trigger group size warning.
@@ -1382,10 +1201,6 @@ mod tests {
         ));
     }
 
-    // -----------------------------------------------------------------------
-    // Test: post-merge output passes L1 validation
-    // -----------------------------------------------------------------------
-
     #[test]
     fn merge_output_passes_l1_validation() {
         let node_a = make_org_node(
@@ -1399,7 +1214,6 @@ mod tests {
         let file = minimal_file(SALT_A, vec![node_a, node_b], vec![edge]);
         let output = merge(&[file]).expect("single file merge should succeed");
 
-        // Validate the output.
         let cfg = ValidationConfig {
             run_l1: true,
             run_l2: false,
@@ -1412,10 +1226,6 @@ mod tests {
             result.errors().collect::<Vec<_>>()
         );
     }
-
-    // -----------------------------------------------------------------------
-    // Test: merge metadata written to output
-    // -----------------------------------------------------------------------
 
     #[test]
     fn merge_metadata_in_output() {
@@ -1430,10 +1240,6 @@ mod tests {
         );
         assert_eq!(output.metadata.source_files.len(), 2);
     }
-
-    // -----------------------------------------------------------------------
-    // Test: colliding node IDs across files are treated as distinct entities
-    // -----------------------------------------------------------------------
 
     /// Two files each have a node named "org-1", but they refer to different
     /// real-world entities (different names, no shared external identifiers).

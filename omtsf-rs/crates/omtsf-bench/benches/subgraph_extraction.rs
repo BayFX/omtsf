@@ -30,7 +30,6 @@ fn bench_induced_subgraph(c: &mut Criterion) {
         let all_ids: Vec<&str> = s.file.nodes.iter().map(|n| n.id.as_ref()).collect();
         let n = all_ids.len();
 
-        // 10% of nodes
         let pct10: Vec<&str> = all_ids[..n / 10].to_vec();
         group.bench_function(BenchmarkId::new("10pct", name), |b| {
             b.iter(|| {
@@ -38,7 +37,6 @@ fn bench_induced_subgraph(c: &mut Criterion) {
             });
         });
 
-        // 25% of nodes
         let pct25: Vec<&str> = all_ids[..n / 4].to_vec();
         group.bench_function(BenchmarkId::new("25pct", name), |b| {
             b.iter(|| {
@@ -46,7 +44,6 @@ fn bench_induced_subgraph(c: &mut Criterion) {
             });
         });
 
-        // 50% of nodes
         let pct50: Vec<&str> = all_ids[..n / 2].to_vec();
         group.bench_function(BenchmarkId::new("50pct", name), |b| {
             b.iter(|| {
@@ -54,7 +51,6 @@ fn bench_induced_subgraph(c: &mut Criterion) {
             });
         });
 
-        // 100% of nodes
         group.bench_function(BenchmarkId::new("100pct", name), |b| {
             b.iter(|| {
                 let _ = extraction::induced_subgraph(&s.graph, &s.file, &all_ids).expect("works");

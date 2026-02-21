@@ -15,10 +15,6 @@ fn omtsf_bin() -> PathBuf {
     path
 }
 
-// ---------------------------------------------------------------------------
-// init: minimal (no --example)
-// ---------------------------------------------------------------------------
-
 #[test]
 fn init_exits_0() {
     let out = Command::new(omtsf_bin())
@@ -106,7 +102,6 @@ fn init_snapshot_date_is_today() {
     let date = value["snapshot_date"]
         .as_str()
         .expect("snapshot_date is string");
-    // Today's date from the system clock (same algorithm as init).
     let today = today_string();
     assert_eq!(date, today, "snapshot_date should be today: {date}");
 }
@@ -156,10 +151,6 @@ fn init_version_is_semver() {
             .expect("each version component should be numeric");
     }
 }
-
-// ---------------------------------------------------------------------------
-// init: --example flag
-// ---------------------------------------------------------------------------
 
 #[test]
 fn init_example_exits_0() {
@@ -252,10 +243,6 @@ fn init_example_edge_references_valid_nodes() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// init: output is accepted by inspect
-// ---------------------------------------------------------------------------
-
 #[test]
 fn init_output_parseable_by_inspect() {
     use std::io::Write as _;
@@ -270,7 +257,6 @@ fn init_output_parseable_by_inspect() {
         init_out.status.code()
     );
 
-    // Write init output to a temp file, then inspect it.
     let mut tmp = tempfile::NamedTempFile::new().expect("temp file");
     tmp.write_all(&init_out.stdout).expect("write tmp");
 
@@ -312,10 +298,6 @@ fn init_example_output_parseable_by_inspect() {
         inspect_out.status.code()
     );
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /// Returns today's date as `YYYY-MM-DD`, mirroring the `init` command's logic.
 fn today_string() -> String {

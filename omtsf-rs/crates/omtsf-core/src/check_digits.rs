@@ -10,10 +10,6 @@
 //! - MOD 97-10 (ISO 7064) for LEI — validation.md Section 5.1
 //! - GS1 Mod-10 for GLN — validation.md Section 5.2
 
-// ---------------------------------------------------------------------------
-// MOD 97-10 (ISO 7064) — used for LEI
-// ---------------------------------------------------------------------------
-
 /// Verifies the ISO 7064 MOD 97-10 check digit for a Legal Entity Identifier.
 ///
 /// **Pre-condition:** The caller MUST have already confirmed that `lei` matches
@@ -54,20 +50,13 @@ pub fn mod97_10(lei: &str) -> bool {
             }
             b'A'..=b'Z' => {
                 let value = u64::from(byte - b'A') + 10;
-                // Letters expand to two-digit numerics (10–35): multiply by 100.
                 remainder = (remainder * 100 + value) % 97;
             }
-            // Characters outside [A-Z0-9] are ignored; the pre-check ensures
-            // the LEI only contains valid characters.
             _ => {}
         }
     }
     remainder == 1
 }
-
-// ---------------------------------------------------------------------------
-// GS1 Mod-10 — used for GLN
-// ---------------------------------------------------------------------------
 
 /// Verifies the GS1 Mod-10 check digit for a Global Location Number.
 ///
@@ -107,14 +96,8 @@ pub fn gs1_mod10(gln: &str) -> bool {
     }
 
     let mut sum: u32 = 0;
-    // Process positions 1–12 (indices 0–11).
     for (i, byte) in bytes[..12].iter().enumerate() {
         let digit = u32::from(byte - b'0');
-        // Position index from the right for the non-check digits:
-        // index 11 (position 12) → distance 1 from check → weight 3
-        // index 10 (position 11) → distance 2 from check → weight 1
-        // ...
-        // weight is 3 when (11 - i) is even, i.e., when i is odd
         let weight: u32 = if i % 2 == 1 { 3 } else { 1 };
         sum += digit * weight;
     }
@@ -124,17 +107,11 @@ pub fn gs1_mod10(gln: &str) -> bool {
     expected_check == actual_check
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
 
     use super::*;
-
-    // --- mod97_10 ---
 
     /// Known-valid LEI from the GLEIF public database.
     /// `5493006MHB84DD0ZWV18` is the LEI for the Bank for International Settlements.
@@ -158,14 +135,12 @@ mod tests {
     /// Corrupting the last check digit must invalidate the LEI.
     #[test]
     fn mod97_10_invalid_corrupt_check_digit() {
-        // Change '8' → '9' in the last position.
         assert!(!mod97_10("5493006MHB84DD0ZWV19"));
     }
 
     /// Corrupting a middle character must invalidate the LEI.
     #[test]
     fn mod97_10_invalid_corrupt_body() {
-        // Change '6' → '7' in position 5.
         assert!(!mod97_10("5493007MHB84DD0ZWV18"));
     }
 
@@ -178,11 +153,8 @@ mod tests {
     /// Flipping two adjacent characters should almost always invalidate the LEI.
     #[test]
     fn mod97_10_invalid_transposition() {
-        // Swap characters at positions 4 and 5: "5493006" → "5493060"
         assert!(!mod97_10("5493060MHB84DD0ZWV18"));
     }
-
-    // --- gs1_mod10 ---
 
     /// Known-valid GLN from the GS1 specification example.
     /// `0614141000418` is a standard GS1 example GLN.
@@ -201,8 +173,6 @@ mod tests {
     /// A third known-valid GLN (all-zero prefix with valid check digit 0).
     #[test]
     fn gs1_mod10_valid_third_example() {
-        // Compute by hand: weights [1,3,1,3,1,3,1,3,1,3,1,3] applied to
-        // [4,0,0,0,0,0,0,0,0,0,0,0] = 4*1 = 4; check = (10-4%10)%10 = 6.
         assert!(gs1_mod10("4000000000006"));
     }
 

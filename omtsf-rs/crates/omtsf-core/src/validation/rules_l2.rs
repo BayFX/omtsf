@@ -14,20 +14,11 @@ use crate::file::OmtsFile;
 
 use super::{Diagnostic, Level, Location, RuleId, Severity, ValidationRule};
 
-// ---------------------------------------------------------------------------
-// Static ISO 3166-1 alpha-2 country code table
-//
-// Embedded to keep the dependency tree light and WASM-compatible.
-// Source: ISO 3166-1 alpha-2 list (249 codes as of 2026-01-01).
-// ---------------------------------------------------------------------------
-
 /// Returns `true` if `code` is a valid ISO 3166-1 alpha-2 country code.
 ///
 /// The list is a static snapshot embedded at compile time. Codes are the
 /// 249 officially assigned alpha-2 codes per ISO 3166 Maintenance Agency.
 pub fn is_valid_iso3166_alpha2(code: &str) -> bool {
-    // 249 officially assigned ISO 3166-1 alpha-2 codes (uppercase, 2 ASCII letters).
-    // Sorted for readability; membership tested via binary search below.
     const CODES: &[&str] = &[
         "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AS", "AT", "AU", "AW", "AX",
         "AZ", "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ",
@@ -50,18 +41,12 @@ pub fn is_valid_iso3166_alpha2(code: &str) -> bool {
     CODES.binary_search(&code).is_ok()
 }
 
-// ---------------------------------------------------------------------------
-// Helper: collect IDs of organisation nodes that are referenced by edges
-// connecting a facility to an org (operates, operational_control, tolls target).
-// ---------------------------------------------------------------------------
-
 /// Returns the set of facility node IDs that have at least one edge connecting
 /// them to an organisation node, either via an `operates` or `operational_control`
 /// edge (where the facility is the target) or via the `Node::operator` field.
 ///
 /// Used by [`L2Gdm01`] to detect isolated facilities.
 fn facility_ids_with_org_connection<'a>(file: &'a OmtsFile) -> HashSet<&'a str> {
-    // Collect all organisation node IDs for quick lookup.
     let org_ids: HashSet<&str> = file
         .nodes
         .iter()
@@ -69,7 +54,6 @@ fn facility_ids_with_org_connection<'a>(file: &'a OmtsFile) -> HashSet<&'a str> 
         .map(|n| n.id.as_ref() as &str)
         .collect();
 
-    // Collect all facility node IDs for quick lookup (mirrors org_ids above).
     let facility_ids: HashSet<&str> = file
         .nodes
         .iter()
@@ -79,7 +63,6 @@ fn facility_ids_with_org_connection<'a>(file: &'a OmtsFile) -> HashSet<&'a str> 
 
     let mut connected: HashSet<&'a str> = HashSet::new();
 
-    // Check the `operator` property on facility nodes.
     for node in &file.nodes {
         if node.node_type != NodeTypeTag::Known(NodeType::Facility) {
             continue;
@@ -92,7 +75,6 @@ fn facility_ids_with_org_connection<'a>(file: &'a OmtsFile) -> HashSet<&'a str> 
         }
     }
 
-    // Check edges that connect a facility to an organisation.
     for edge in &file.edges {
         let edge_type = match &edge.edge_type {
             EdgeTypeTag::Known(et) => et,
@@ -103,13 +85,9 @@ fn facility_ids_with_org_connection<'a>(file: &'a OmtsFile) -> HashSet<&'a str> 
         let tgt: &str = edge.target.as_ref() as &str;
 
         let (facility_side, org_side): (&str, &str) = match edge_type {
-            // operates: source=org, target=facility
             EdgeType::Operates => (tgt, src),
-            // operational_control: source=org, target=org|facility
             EdgeType::OperationalControl => (tgt, src),
-            // tolls: source=org|facility, target=org — facility can be source
             EdgeType::Tolls => (src, tgt),
-            // For other edge types we do not count as connecting facility↔org.
             EdgeType::Ownership
             | EdgeType::LegalParentage
             | EdgeType::FormerIdentity
@@ -125,8 +103,6 @@ fn facility_ids_with_org_connection<'a>(file: &'a OmtsFile) -> HashSet<&'a str> 
             | EdgeType::SameAs => continue,
         };
 
-        // Only count the connection when the "org side" is actually an organisation
-        // and the "facility side" is actually a facility.
         if facility_ids.contains(facility_side) && org_ids.contains(org_side) {
             connected.insert(facility_side);
         }
@@ -134,10 +110,6 @@ fn facility_ids_with_org_connection<'a>(file: &'a OmtsFile) -> HashSet<&'a str> 
 
     connected
 }
-
-// ---------------------------------------------------------------------------
-// L2-GDM-01: Facility with no edge connecting it to an organisation
-// ---------------------------------------------------------------------------
 
 /// L2-GDM-01 — Every `facility` node SHOULD be connected to an `organization`
 /// node via an edge or the `operator` property (SPEC-001 Section 9.2).
@@ -188,10 +160,6 @@ impl ValidationRule for L2Gdm01 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// L2-GDM-02: Ownership edge missing valid_from
-// ---------------------------------------------------------------------------
-
 /// L2-GDM-02 — `ownership` edges SHOULD have `valid_from` set
 /// (SPEC-001 Section 9.2).
 ///
@@ -237,10 +205,6 @@ impl ValidationRule for L2Gdm02 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// L2-GDM-03: Organisation/facility/supply edges SHOULD carry data_quality
-// ---------------------------------------------------------------------------
-
 /// L2-GDM-03 — Every `organization` and `facility` node, and every `supplies`,
 /// `subcontracts`, and `tolls` edge, SHOULD carry a `data_quality` object
 /// (SPEC-001 Section 9.2).
@@ -264,7 +228,6 @@ impl ValidationRule for L2Gdm03 {
         diags: &mut Vec<Diagnostic>,
         _external_data: Option<&dyn super::external::ExternalDataSource>,
     ) {
-        // Check organization and facility nodes.
         for node in &file.nodes {
             let should_check = matches!(
                 &node.node_type,
@@ -278,7 +241,6 @@ impl ValidationRule for L2Gdm03 {
                 let type_str = match &node.node_type {
                     NodeTypeTag::Known(NodeType::Organization) => "organization",
                     NodeTypeTag::Known(NodeType::Facility) => "facility",
-                    // Unreachable due to the `should_check` guard above.
                     NodeTypeTag::Known(NodeType::Good)
                     | NodeTypeTag::Known(NodeType::Person)
                     | NodeTypeTag::Known(NodeType::Attestation)
@@ -301,7 +263,6 @@ impl ValidationRule for L2Gdm03 {
             }
         }
 
-        // Check supplies, subcontracts, and tolls edges.
         for edge in &file.edges {
             let should_check = matches!(
                 &edge.edge_type,
@@ -318,7 +279,6 @@ impl ValidationRule for L2Gdm03 {
                     EdgeTypeTag::Known(EdgeType::Supplies) => "supplies",
                     EdgeTypeTag::Known(EdgeType::Subcontracts) => "subcontracts",
                     EdgeTypeTag::Known(EdgeType::Tolls) => "tolls",
-                    // Unreachable due to should_check guard.
                     EdgeTypeTag::Known(EdgeType::Ownership)
                     | EdgeTypeTag::Known(EdgeType::OperationalControl)
                     | EdgeTypeTag::Known(EdgeType::LegalParentage)
@@ -351,10 +311,6 @@ impl ValidationRule for L2Gdm03 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// L2-GDM-04: supplies edges with tier but no reporting_entity
-// ---------------------------------------------------------------------------
-
 /// L2-GDM-04 — If any `supplies` edge carries a `tier` property, the file
 /// SHOULD declare `reporting_entity` in the file header (SPEC-001 Section 9.2).
 ///
@@ -377,7 +333,6 @@ impl ValidationRule for L2Gdm04 {
         diags: &mut Vec<Diagnostic>,
         _external_data: Option<&dyn super::external::ExternalDataSource>,
     ) {
-        // If reporting_entity is present, all tier values are well-anchored.
         if file.reporting_entity.is_some() {
             return;
         }
@@ -404,10 +359,6 @@ impl ValidationRule for L2Gdm04 {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// L2-EID-01: Organisation node with no external identifiers
-// ---------------------------------------------------------------------------
 
 /// L2-EID-01 — Every `organization` node SHOULD have at least one external
 /// identifier (scheme other than `internal`) (SPEC-002 Section 6.2).
@@ -460,10 +411,6 @@ impl ValidationRule for L2Eid01 {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// L2-EID-04: vat authority not a valid ISO 3166-1 alpha-2 country code
-// ---------------------------------------------------------------------------
 
 /// L2-EID-04 — `vat` authority values SHOULD be valid ISO 3166-1 alpha-2
 /// country codes (SPEC-002 Section 6.2).
@@ -522,10 +469,6 @@ impl ValidationRule for L2Eid04 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -536,10 +479,6 @@ mod tests {
     use crate::newtypes::{CalendarDate, EdgeId, FileSalt, NodeId, SemVer};
     use crate::structures::{Edge, EdgeProperties, Node};
     use crate::types::{DataQuality, Identifier};
-
-    // -----------------------------------------------------------------------
-    // Fixture helpers
-    // -----------------------------------------------------------------------
 
     const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
@@ -675,10 +614,6 @@ mod tests {
         diags
     }
 
-    // -----------------------------------------------------------------------
-    // iso3166 helper tests
-    // -----------------------------------------------------------------------
-
     #[test]
     fn iso3166_known_codes_accepted() {
         assert!(is_valid_iso3166_alpha2("DE"));
@@ -700,10 +635,6 @@ mod tests {
         assert!(!is_valid_iso3166_alpha2("1A")); // digit prefix
         assert!(!is_valid_iso3166_alpha2("EU")); // political union, not ISO 3166-1
     }
-
-    // -----------------------------------------------------------------------
-    // L2-GDM-01 tests
-    // -----------------------------------------------------------------------
 
     #[test]
     fn gdm01_facility_with_operates_edge_passes() {
@@ -793,10 +724,6 @@ mod tests {
         assert!(diags.is_empty());
     }
 
-    // -----------------------------------------------------------------------
-    // L2-GDM-02 tests
-    // -----------------------------------------------------------------------
-
     #[test]
     fn gdm02_ownership_with_valid_from_passes() {
         let file = make_file(
@@ -833,7 +760,6 @@ mod tests {
 
     #[test]
     fn gdm02_non_ownership_edge_without_valid_from_not_warned() {
-        // supplies edges do not require valid_from under GDM-02.
         let file = make_file(
             vec![
                 node("org-1", NodeType::Organization),
@@ -867,10 +793,6 @@ mod tests {
         let diags = run_rule(&L2Gdm02, &file);
         assert!(diags.is_empty());
     }
-
-    // -----------------------------------------------------------------------
-    // L2-GDM-03 tests
-    // -----------------------------------------------------------------------
 
     #[test]
     fn gdm03_org_with_data_quality_passes() {
@@ -948,7 +870,6 @@ mod tests {
 
     #[test]
     fn gdm03_ownership_edge_without_data_quality_not_warned() {
-        // GDM-03 only covers supplies, subcontracts, tolls edges.
         let file = make_file(
             vec![
                 node("org-1", NodeType::Organization),
@@ -962,10 +883,6 @@ mod tests {
             .collect();
         assert!(edge_diags.is_empty());
     }
-
-    // -----------------------------------------------------------------------
-    // L2-GDM-04 tests
-    // -----------------------------------------------------------------------
 
     #[test]
     fn gdm04_supplies_tier_with_reporting_entity_passes() {
@@ -1027,10 +944,6 @@ mod tests {
         assert_eq!(diags.len(), 2);
     }
 
-    // -----------------------------------------------------------------------
-    // L2-EID-01 tests
-    // -----------------------------------------------------------------------
-
     #[test]
     fn eid01_org_with_external_identifier_passes() {
         let file = make_file(
@@ -1073,7 +986,6 @@ mod tests {
 
     #[test]
     fn eid01_org_with_mixed_identifiers_passes() {
-        // Has both internal and external → passes.
         let file = make_file(
             vec![node_with_identifiers(
                 "org-1",
@@ -1091,7 +1003,6 @@ mod tests {
 
     #[test]
     fn eid01_facility_node_not_subject_to_rule() {
-        // L2-EID-01 only applies to organization nodes.
         let file = make_file(vec![node("fac-1", NodeType::Facility)], vec![]);
         let diags = run_rule(&L2Eid01, &file);
         assert!(diags.is_empty(), "facility nodes are not subject to EID-01");
@@ -1109,10 +1020,6 @@ mod tests {
         let diags = run_rule(&L2Eid01, &file);
         assert_eq!(diags.len(), 2);
     }
-
-    // -----------------------------------------------------------------------
-    // L2-EID-04 tests
-    // -----------------------------------------------------------------------
 
     #[test]
     fn eid04_valid_vat_authority_passes() {
@@ -1147,7 +1054,6 @@ mod tests {
 
     #[test]
     fn eid04_missing_vat_authority_not_warned_here() {
-        // L1-EID-03 handles missing authority; L2-EID-04 skips missing authority.
         let file = make_file(
             vec![node_with_identifiers(
                 "org-1",
@@ -1162,7 +1068,6 @@ mod tests {
 
     #[test]
     fn eid04_non_vat_scheme_not_warned() {
-        // nat-reg authority is a GLEIF RA code, not an ISO 3166 code.
         let file = make_file(
             vec![node_with_identifiers(
                 "org-1",
@@ -1194,7 +1099,6 @@ mod tests {
 
     #[test]
     fn eid04_lowercase_country_code_warns() {
-        // "de" is not a valid ISO 3166-1 alpha-2 code (must be uppercase "DE").
         let file = make_file(
             vec![node_with_identifiers(
                 "org-1",
@@ -1206,10 +1110,6 @@ mod tests {
         let diags = run_rule(&L2Eid04, &file);
         assert_eq!(diags.len(), 1);
     }
-
-    // -----------------------------------------------------------------------
-    // Severity invariant: all L2 rules produce Warning, never Error or Info
-    // -----------------------------------------------------------------------
 
     #[test]
     fn all_l2_rules_produce_warnings_only() {
@@ -1247,7 +1147,6 @@ mod tests {
             }
         }
 
-        // L2-EID-04 triggered separately with a vat identifier.
         let file_eid04 = make_file(
             vec![node_with_identifiers(
                 "org-2",

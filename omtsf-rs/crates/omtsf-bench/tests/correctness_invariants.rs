@@ -14,20 +14,12 @@ fn medium_file() -> omtsf_core::OmtsFile {
     generate_supply_chain(&SizeTier::Medium.config(42))
 }
 
-// -----------------------------------------------------------------------
-// Graph construction invariants
-// -----------------------------------------------------------------------
-
 #[test]
 fn graph_construction_invariants() {
     let file = medium_file();
     let graph = build_graph(&file).expect("builds");
     correctness::check_graph_invariants(&file, &graph).expect("graph invariants hold");
 }
-
-// -----------------------------------------------------------------------
-// Query operation invariants
-// -----------------------------------------------------------------------
 
 #[test]
 fn reachable_from_excludes_start() {
@@ -63,9 +55,7 @@ fn shortest_path_invariants() {
     let file = medium_file();
     let graph = build_graph(&file).expect("builds");
 
-    // Try to find a path between first and last org nodes
     let from = file.nodes[0].id.to_string();
-    // Pick a node that's likely reachable
     let reachable =
         queries::reachable_from(&graph, &from, Direction::Forward, None).expect("works");
 
@@ -110,16 +100,11 @@ fn all_paths_invariants() {
     }
 }
 
-// -----------------------------------------------------------------------
-// Subgraph extraction invariants
-// -----------------------------------------------------------------------
-
 #[test]
 fn induced_subgraph_invariants() {
     let file = medium_file();
     let graph = build_graph(&file).expect("builds");
 
-    // Extract 25% of nodes
     let count = file.nodes.len() / 4;
     let node_ids: Vec<&str> = file.nodes[..count].iter().map(|n| n.id.as_ref()).collect();
 
@@ -138,8 +123,6 @@ fn ego_graph_returns_valid_subgraph() {
     let ego = omtsf_core::graph::extraction::ego_graph(&graph, &file, &center, 2, Direction::Both)
         .expect("ego graph succeeds");
 
-    // Ego graph output should be a valid file
-    // All edges should have both endpoints in the ego graph
     let node_set: HashSet<String> = ego.nodes.iter().map(|n| n.id.to_string()).collect();
     for edge in &ego.edges {
         assert!(
@@ -153,10 +136,6 @@ fn ego_graph_returns_valid_subgraph() {
     }
 }
 
-// -----------------------------------------------------------------------
-// Merge invariants
-// -----------------------------------------------------------------------
-
 #[test]
 fn merge_self_is_idempotent() {
     let file = generate_supply_chain(&SizeTier::Small.config(42));
@@ -164,7 +143,6 @@ fn merge_self_is_idempotent() {
 
     correctness::check_merge(&[&file, &file], &result.file).expect("merge invariants hold");
 
-    // L1 validation of merge output
     let config = ValidationConfig {
         run_l1: true,
         run_l2: false,
@@ -199,10 +177,6 @@ fn merge_disjoint_files() {
     );
 }
 
-// -----------------------------------------------------------------------
-// Redaction invariants
-// -----------------------------------------------------------------------
-
 #[test]
 fn redact_to_partner_scope() {
     let file = generate_supply_chain(&SizeTier::Small.config(42));
@@ -234,10 +208,6 @@ fn redact_to_public_scope_removes_persons() {
     correctness::check_redaction(&redacted, &DisclosureScope::Public)
         .expect("redaction invariants hold");
 }
-
-// -----------------------------------------------------------------------
-// Diff invariants
-// -----------------------------------------------------------------------
 
 #[test]
 fn diff_self_is_empty() {

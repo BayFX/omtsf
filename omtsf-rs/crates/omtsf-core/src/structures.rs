@@ -23,10 +23,6 @@ use crate::newtypes::{CalendarDate, CountryCode, EdgeId, NodeId};
 use crate::types::parse_geo;
 use crate::types::{DataQuality, Geo, GeoParseError, Identifier, Label};
 
-// ---------------------------------------------------------------------------
-// Node
-// ---------------------------------------------------------------------------
-
 /// A single node in an OMTSF supply-chain graph.
 ///
 /// Corresponds to the node structure defined in data-model.md Section 5.1.
@@ -46,7 +42,6 @@ pub struct Node {
     #[serde(rename = "type")]
     pub node_type: NodeTypeTag,
 
-    // ---- universal optional fields ----------------------------------------
     /// External or internal identifiers for this node (SPEC-002).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub identifiers: Option<Vec<Identifier>>,
@@ -59,7 +54,6 @@ pub struct Node {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub labels: Option<Vec<Label>>,
 
-    // ---- organization fields -----------------------------------------------
     /// Display name of the organisation or entity.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -80,7 +74,6 @@ pub struct Node {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub governance_structure: Option<serde_json::Value>,
 
-    // ---- facility fields ---------------------------------------------------
     /// [`NodeId`] of the organisation that operates this facility.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub operator: Option<NodeId>,
@@ -95,7 +88,6 @@ pub struct Node {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geo: Option<serde_json::Value>,
 
-    // ---- good fields -------------------------------------------------------
     /// Commodity or product classification code (e.g. HS code, CN code).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub commodity_code: Option<String>,
@@ -104,12 +96,10 @@ pub struct Node {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unit: Option<String>,
 
-    // ---- person fields -----------------------------------------------------
     /// Role of the individual within the supply chain context.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
 
-    // ---- attestation fields ------------------------------------------------
     /// Category of attestation (certification, audit, due diligence, etc.).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attestation_type: Option<AttestationType>,
@@ -159,7 +149,6 @@ pub struct Node {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub risk_likelihood: Option<RiskLikelihood>,
 
-    // ---- consignment fields ------------------------------------------------
     /// Production or shipment lot identifier.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lot_id: Option<String>,
@@ -192,7 +181,6 @@ pub struct Node {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub installation_id: Option<NodeId>,
 
-    // ---- extension catch-all -----------------------------------------------
     /// Unknown fields preserved for round-trip fidelity (SPEC-001 Section 2.2).
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -210,10 +198,6 @@ impl Node {
     }
 }
 
-// ---------------------------------------------------------------------------
-// EdgeProperties
-// ---------------------------------------------------------------------------
-
 /// Optional properties carried by an edge in an OMTSF supply-chain graph.
 ///
 /// Corresponds to the edge properties defined in data-model.md Section 6.2.
@@ -225,7 +209,6 @@ impl Node {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct EdgeProperties {
-    // ---- universal optional fields ----------------------------------------
     /// Data quality metadata for this edge (SPEC-001 Section 8.3).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data_quality: Option<DataQuality>,
@@ -251,7 +234,6 @@ pub struct EdgeProperties {
     )]
     pub valid_to: Option<Option<CalendarDate>>,
 
-    // ---- ownership / beneficial_ownership fields ---------------------------
     /// Percentage of ownership or beneficial ownership.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub percentage: Option<f64>,
@@ -260,7 +242,6 @@ pub struct EdgeProperties {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub direct: Option<bool>,
 
-    // ---- operational_control / beneficial_ownership fields ----------------
     /// Type of operational control arrangement.
     ///
     /// Stored as a raw JSON value because extension strings are possible beyond
@@ -268,12 +249,10 @@ pub struct EdgeProperties {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub control_type: Option<serde_json::Value>,
 
-    // ---- legal_parentage fields --------------------------------------------
     /// Accounting standard under which this parentage is consolidated.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub consolidation_basis: Option<ConsolidationBasis>,
 
-    // ---- former_identity fields --------------------------------------------
     /// Type of corporate identity event (merger, acquisition, rename, etc.).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub event_type: Option<EventType>,
@@ -286,7 +265,6 @@ pub struct EdgeProperties {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
-    // ---- supplies / subcontracts / brokers / sells_to fields ---------------
     /// Commodity or material flowing along this edge.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub commodity: Option<String>,
@@ -319,12 +297,10 @@ pub struct EdgeProperties {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub share_of_buyer_demand: Option<f64>,
 
-    // ---- distributes fields ------------------------------------------------
     /// Type of distribution or logistics service provided.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub service_type: Option<ServiceType>,
 
-    // ---- composed_of fields ------------------------------------------------
     /// Quantity of this component in the parent bill of materials.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quantity: Option<f64>,
@@ -333,20 +309,14 @@ pub struct EdgeProperties {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unit: Option<String>,
 
-    // ---- attested_by fields ------------------------------------------------
     /// Scope or coverage description of the attestation relationship.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
 
-    // ---- extension catch-all -----------------------------------------------
     /// Unknown fields preserved for round-trip fidelity (SPEC-001 Section 2.2).
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
-
-// ---------------------------------------------------------------------------
-// Edge
-// ---------------------------------------------------------------------------
 
 /// A directed relationship between two nodes in an OMTSF supply-chain graph.
 ///
@@ -386,10 +356,6 @@ pub struct Edge {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -398,8 +364,6 @@ mod tests {
 
     use super::*;
     use crate::enums::{EdgeType, NodeType};
-
-    // --- helpers ------------------------------------------------------------
 
     fn to_json<T: Serialize>(v: &T) -> String {
         serde_json::to_string(v).expect("serialize")
@@ -430,10 +394,6 @@ mod tests {
     fn calendar_date(s: &str) -> CalendarDate {
         CalendarDate::try_from(s).expect("valid CalendarDate")
     }
-
-    // -----------------------------------------------------------------------
-    // Node tests
-    // -----------------------------------------------------------------------
 
     /// Minimal node with only the two required fields.
     #[test]
@@ -655,10 +615,6 @@ mod tests {
         round_trip(&node);
     }
 
-    // -----------------------------------------------------------------------
-    // EdgeProperties tests
-    // -----------------------------------------------------------------------
-
     /// Empty [`EdgeProperties`] round-trips correctly.
     #[test]
     fn edge_properties_empty_round_trip() {
@@ -707,10 +663,6 @@ mod tests {
         let serialized = to_json(&props);
         assert!(serialized.contains("x_notes"));
     }
-
-    // -----------------------------------------------------------------------
-    // Edge tests
-    // -----------------------------------------------------------------------
 
     /// Minimal edge with only required fields.
     #[test]

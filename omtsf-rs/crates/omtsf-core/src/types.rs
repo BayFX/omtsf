@@ -13,10 +13,6 @@ use serde_json::Value;
 use crate::enums::{Confidence, Sensitivity, VerificationStatus};
 use crate::newtypes::CalendarDate;
 
-// ---------------------------------------------------------------------------
-// GeoParseError
-// ---------------------------------------------------------------------------
-
 /// Errors produced when parsing a raw `serde_json::Value` into a [`Geo`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum GeoParseError {
@@ -43,10 +39,6 @@ impl fmt::Display for GeoParseError {
 }
 
 impl std::error::Error for GeoParseError {}
-
-// ---------------------------------------------------------------------------
-// Geo
-// ---------------------------------------------------------------------------
 
 /// A parsed geographical value from a facility node's `geo` field.
 ///
@@ -92,12 +84,10 @@ pub fn parse_geo(value: &Value) -> Result<Geo, GeoParseError> {
         return Err(GeoParseError::NotAnObject);
     };
 
-    // Detect a simple {lat, lon} point: both keys must be present and numeric.
     let has_lat = obj.contains_key("lat");
     let has_lon = obj.contains_key("lon");
 
     if has_lat || has_lon {
-        // At least one of lat/lon is present — treat as an attempted Point.
         let lat = obj
             .get("lat")
             .and_then(Value::as_f64)
@@ -109,13 +99,8 @@ pub fn parse_geo(value: &Value) -> Result<Geo, GeoParseError> {
         return Ok(Geo::Point { lat, lon });
     }
 
-    // No lat/lon keys — treat the entire object as a GeoJSON geometry.
     Ok(Geo::GeoJson(value.clone()))
 }
-
-// ---------------------------------------------------------------------------
-// Identifier
-// ---------------------------------------------------------------------------
 
 /// An external or internal identifier attached to a node or edge.
 ///
@@ -169,10 +154,6 @@ pub struct Identifier {
     pub extra: serde_json::Map<String, Value>,
 }
 
-// ---------------------------------------------------------------------------
-// DataQuality
-// ---------------------------------------------------------------------------
-
 /// Data quality metadata attached to a node or edge.
 ///
 /// Corresponds to the `data_quality` property defined in SPEC-001 Section 8.3.
@@ -197,10 +178,6 @@ pub struct DataQuality {
     pub extra: serde_json::Map<String, Value>,
 }
 
-// ---------------------------------------------------------------------------
-// Label
-// ---------------------------------------------------------------------------
-
 /// A key/value label attached to a node or edge for tagging and filtering.
 ///
 /// Corresponds to the label record defined in SPEC-001 Section 8.4.
@@ -220,10 +197,6 @@ pub struct Label {
     pub extra: serde_json::Map<String, Value>,
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -231,8 +204,6 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-
-    // --- helpers ------------------------------------------------------------
 
     fn to_json<T: Serialize>(v: &T) -> String {
         serde_json::to_string(v).expect("serialize")
@@ -251,8 +222,6 @@ mod tests {
         assert_eq!(*v, back, "round-trip mismatch for {json}");
         back
     }
-
-    // --- Identifier ---------------------------------------------------------
 
     #[test]
     fn identifier_minimal_round_trip() {
@@ -328,17 +297,14 @@ mod tests {
 
     #[test]
     fn identifier_valid_to_null_vs_absent() {
-        // valid_to absent → outer Option is None
         let raw_absent = r#"{"scheme":"lei","value":"abc"}"#;
         let id_absent: Identifier = serde_json::from_str(raw_absent).expect("deserialize absent");
         assert_eq!(id_absent.valid_to, None);
 
-        // valid_to: null → outer Option is Some(None)
         let raw_null = r#"{"scheme":"lei","value":"abc","valid_to":null}"#;
         let id_null: Identifier = serde_json::from_str(raw_null).expect("deserialize null");
         assert_eq!(id_null.valid_to, Some(None));
 
-        // valid_to: "2030-01-01" → Some(Some(date))
         let raw_date = r#"{"scheme":"lei","value":"abc","valid_to":"2030-01-01"}"#;
         let id_date: Identifier = serde_json::from_str(raw_date).expect("deserialize date");
         assert!(id_date.valid_to.is_some());
@@ -362,8 +328,6 @@ mod tests {
         let re_serialized = to_json(&id);
         assert!(re_serialized.contains("x_custom_field"));
     }
-
-    // --- DataQuality --------------------------------------------------------
 
     #[test]
     fn data_quality_empty_round_trip() {
@@ -415,8 +379,6 @@ mod tests {
         assert!(re_serialized.contains("x_reviewer"));
     }
 
-    // --- Label --------------------------------------------------------------
-
     #[test]
     fn label_key_only_round_trip() {
         let label = Label {
@@ -462,8 +424,6 @@ mod tests {
         let re_serialized = to_json(&label);
         assert!(re_serialized.contains("x_source"));
     }
-
-    // --- Geo / parse_geo ----------------------------------------------------
 
     #[test]
     fn parse_geo_point_valid() {
@@ -538,7 +498,6 @@ mod tests {
 
     #[test]
     fn parse_geo_geojson_point_geojson_format() {
-        // A GeoJSON Point (with "type": "Point") — no lat/lon keys, treated as GeoJson.
         let val = json!({"type": "Point", "coordinates": [125.6, 10.1]});
         let geo = parse_geo(&val).expect("GeoJSON Point geometry");
         assert!(matches!(geo, Geo::GeoJson(_)));

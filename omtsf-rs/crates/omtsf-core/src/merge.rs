@@ -26,10 +26,6 @@ use crate::structures::Edge;
 use crate::types::{Identifier, Label};
 use crate::union_find::UnionFind;
 
-// ---------------------------------------------------------------------------
-// SameAsThreshold
-// ---------------------------------------------------------------------------
-
 /// Configures which `same_as` edges are honoured during union-find processing.
 ///
 /// The spec defines three confidence levels for `same_as` edges (merge.md
@@ -102,10 +98,6 @@ impl SameAsLevel {
     }
 }
 
-// ---------------------------------------------------------------------------
-// ConflictEntry
-// ---------------------------------------------------------------------------
-
 /// A single conflicting value observed in a merge group, with its provenance.
 ///
 /// Conflict entries are sorted by `(source_file, json_value)` to guarantee
@@ -117,10 +109,6 @@ pub struct ConflictEntry {
     /// The source file that contributed this value.
     pub source_file: String,
 }
-
-// ---------------------------------------------------------------------------
-// Conflict
-// ---------------------------------------------------------------------------
 
 /// A recorded conflict on a single property within a merge group.
 ///
@@ -137,10 +125,6 @@ pub struct Conflict {
     /// All distinct values seen for this property, with provenance.
     pub values: Vec<ConflictEntry>,
 }
-
-// ---------------------------------------------------------------------------
-// MergeMetadata
-// ---------------------------------------------------------------------------
 
 /// Provenance record written into the merged file header.
 ///
@@ -163,10 +147,6 @@ pub struct MergeMetadata {
     /// Total number of conflicts recorded across all nodes and edges.
     pub conflict_count: usize,
 }
-
-// ---------------------------------------------------------------------------
-// Scalar merge
-// ---------------------------------------------------------------------------
 
 /// Result of merging N optional scalar values from a merge group.
 ///
@@ -198,7 +178,6 @@ pub fn merge_scalars<T>(inputs: &[(Option<T>, &str)]) -> ScalarMergeResult<T>
 where
     T: Serialize + Clone,
 {
-    // Separate inputs that have a value from those that are absent.
     let mut present: Vec<(serde_json::Value, &str, &T)> = Vec::new();
 
     for (opt, source) in inputs {
@@ -212,18 +191,13 @@ where
         return ScalarMergeResult::Agreed(None);
     }
 
-    // Check for consensus: all present values must be JSON-equal to the first.
     let first_json = &present[0].0;
     let all_equal = present.iter().all(|(v, _, _)| v == first_json);
 
     if all_equal {
-        // Clone the first present T as the agreed value.
         return ScalarMergeResult::Agreed(Some(present[0].2.clone()));
     }
 
-    // Build ConflictEntry list: one entry per distinct (source_file, value) pair.
-    // Use a set of serialized values per source to avoid duplicating identical
-    // values from the same source.
     let mut entries: Vec<ConflictEntry> = present
         .into_iter()
         .map(|(json_val, source, _)| ConflictEntry {
@@ -232,7 +206,6 @@ where
         })
         .collect();
 
-    // Sort by (source_file, JSON value string) for determinism.
     entries.sort_by(|a, b| {
         let af = &a.source_file;
         let bf = &b.source_file;
@@ -241,15 +214,10 @@ where
         af.cmp(bf).then_with(|| av.cmp(&bv))
     });
 
-    // Deduplicate (same source_file + same json value is redundant).
     entries.dedup_by(|a, b| a.source_file == b.source_file && a.value == b.value);
 
     ScalarMergeResult::Conflict(entries)
 }
-
-// ---------------------------------------------------------------------------
-// Identifier set-union merge
-// ---------------------------------------------------------------------------
 
 /// Merges multiple `Identifier` arrays into a deduplicated, sorted union.
 ///
@@ -284,15 +252,10 @@ pub fn merge_identifiers(inputs: &[Option<&[Identifier]>]) -> Vec<Identifier> {
         }
     }
 
-    // Sort by canonical string (the first element of the tuple).
     result.sort_by(|(a, _), (b, _)| a.cmp(b));
 
     result.into_iter().map(|(_, id)| id).collect()
 }
-
-// ---------------------------------------------------------------------------
-// Label set-union merge
-// ---------------------------------------------------------------------------
 
 /// Merges multiple `Label` arrays into a deduplicated, sorted union.
 ///
@@ -310,7 +273,6 @@ pub fn merge_identifiers(inputs: &[Option<&[Identifier]>]) -> Vec<Identifier> {
 ///
 /// A `Vec<Label>` that is the sorted set-union.
 pub fn merge_labels(inputs: &[Option<&[Label]>]) -> Vec<Label> {
-    // Canonicalise key: (key_string, value_option_string) for dedup.
     let mut seen: HashSet<(String, Option<String>)> = HashSet::new();
     let mut result: Vec<Label> = Vec::new();
 
@@ -324,7 +286,6 @@ pub fn merge_labels(inputs: &[Option<&[Label]>]) -> Vec<Label> {
         }
     }
 
-    // Sort: primary by key ascending, secondary by value (None before Some).
     result.sort_by(|a, b| {
         a.key.cmp(&b.key).then_with(|| match (&a.value, &b.value) {
             (None, None) => std::cmp::Ordering::Equal,
@@ -336,10 +297,6 @@ pub fn merge_labels(inputs: &[Option<&[Label]>]) -> Vec<Label> {
 
     result
 }
-
-// ---------------------------------------------------------------------------
-// same_as processing
-// ---------------------------------------------------------------------------
 
 /// Processes `same_as` edges and applies qualifying ones to a [`UnionFind`].
 ///
@@ -379,7 +336,6 @@ where
     let mut honoured: Vec<&Edge> = Vec::new();
 
     for edge in edges {
-        // Filter to same_as edges only.
         let is_same_as = match &edge.edge_type {
             EdgeTypeTag::Known(EdgeType::SameAs) => true,
             EdgeTypeTag::Known(_) | EdgeTypeTag::Extension(_) => false,
@@ -388,18 +344,15 @@ where
             continue;
         }
 
-        // Extract the confidence from the edge properties.
-        // The confidence field lives inside `data_quality` on `EdgeProperties`,
-        // but `same_as` edges carry a dedicated `confidence` property in their
-        // `extra` map per the spec. We check `properties.extra["confidence"]`
-        // first, then `data_quality.confidence` as a fallback.
+        // The spec puts `confidence` in the edge's `extra` map for same_as
+        // edges, not in `data_quality`. We check `properties.extra` first,
+        // then the edge-level `extra` as a fallback.
         let confidence_str: Option<&str> = edge
             .properties
             .extra
             .get("confidence")
             .and_then(|v| v.as_str());
 
-        // Also look in the edge-level extra map.
         let confidence_str =
             confidence_str.or_else(|| edge.extra.get("confidence").and_then(|v| v.as_str()));
 
@@ -407,7 +360,6 @@ where
             continue;
         }
 
-        // Resolve source and target ordinals.
         let Some(src_ord) = node_id_to_ordinal(&edge.source) else {
             continue;
         };
@@ -421,10 +373,6 @@ where
 
     honoured
 }
-
-// ---------------------------------------------------------------------------
-// Conflict builder helper
-// ---------------------------------------------------------------------------
 
 /// Builds a sorted `_conflicts` JSON array from a slice of [`Conflict`] records.
 ///
@@ -442,10 +390,6 @@ pub fn build_conflicts_value(mut conflicts: Vec<Conflict>) -> Option<serde_json:
     Some(val)
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -458,10 +402,6 @@ mod tests {
     use crate::newtypes::NodeId;
     use crate::structures::{Edge, EdgeProperties};
     use crate::types::{Identifier, Label};
-
-    // -----------------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------------
 
     fn make_identifier(scheme: &str, value: &str) -> Identifier {
         Identifier {
@@ -513,10 +453,6 @@ mod tests {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // SameAsThreshold::honours
-    // -----------------------------------------------------------------------
-
     #[test]
     fn threshold_definite_honours_definite_only() {
         let t = SameAsThreshold::Definite;
@@ -556,10 +492,6 @@ mod tests {
     fn threshold_default_is_definite() {
         assert_eq!(SameAsThreshold::default(), SameAsThreshold::Definite);
     }
-
-    // -----------------------------------------------------------------------
-    // merge_scalars — identical properties
-    // -----------------------------------------------------------------------
 
     #[test]
     fn scalars_both_none_agrees_on_none() {
@@ -605,10 +537,6 @@ mod tests {
         let result = merge_scalars(&inputs);
         assert_eq!(result, ScalarMergeResult::Agreed(Some(42u64)));
     }
-
-    // -----------------------------------------------------------------------
-    // merge_scalars — conflicting properties
-    // -----------------------------------------------------------------------
 
     #[test]
     fn scalars_different_values_conflict() {
@@ -676,10 +604,6 @@ mod tests {
         let result = merge_scalars(&inputs);
         assert!(matches!(result, ScalarMergeResult::Conflict(_)));
     }
-
-    // -----------------------------------------------------------------------
-    // merge_identifiers — deduplication and sorting
-    // -----------------------------------------------------------------------
 
     #[test]
     fn identifiers_empty_inputs_produces_empty() {
@@ -758,10 +682,6 @@ mod tests {
         assert_eq!(result[1].scheme, "gln");
         assert_eq!(result[2].scheme, "lei");
     }
-
-    // -----------------------------------------------------------------------
-    // merge_labels — set union and sorting
-    // -----------------------------------------------------------------------
 
     #[test]
     fn labels_empty_inputs_produces_empty() {
@@ -842,10 +762,6 @@ mod tests {
         assert_eq!(result[2].key, "env");
         assert_eq!(result[2].value.as_deref(), Some("prod"));
     }
-
-    // -----------------------------------------------------------------------
-    // apply_same_as_edges — threshold gating
-    // -----------------------------------------------------------------------
 
     fn ordinal_lookup<'a>(ids: &'a [&'a str]) -> impl Fn(&str) -> Option<usize> + 'a {
         |id: &str| ids.iter().position(|&s| s == id)
@@ -974,10 +890,6 @@ mod tests {
         assert_eq!(uf.find(2), root);
     }
 
-    // -----------------------------------------------------------------------
-    // build_conflicts_value
-    // -----------------------------------------------------------------------
-
     #[test]
     fn build_conflicts_empty_returns_none() {
         let result = build_conflicts_value(vec![]);
@@ -1030,10 +942,6 @@ mod tests {
         let entries = arr[0]["values"].as_array().expect("values array");
         assert_eq!(entries.len(), 2);
     }
-
-    // -----------------------------------------------------------------------
-    // MergeMetadata — construction and serialisation
-    // -----------------------------------------------------------------------
 
     #[test]
     fn merge_metadata_round_trip() {

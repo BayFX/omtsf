@@ -103,7 +103,6 @@ pub fn gen_labels(
 
     let is_org = matches!(node_type, NodeTypeTag::Known(NodeType::Organization));
 
-    // `certified` flag — ~30 % probability, scaled by label_density
     let certified_p = (0.3 * label_density / 1.5).clamp(0.0, 1.0);
     if rng.gen_bool(certified_p) {
         labels.push(Label {
@@ -113,7 +112,6 @@ pub fn gen_labels(
         });
     }
 
-    // `tier` and `sector` — organization nodes only
     if is_org {
         let tier_values = ["1", "2", "3", "4", "5"];
         let tier_p = (0.6 * label_density / 1.5).clamp(0.0, 1.0);
@@ -144,7 +142,6 @@ pub fn gen_labels(
         }
     }
 
-    // `risk-level` — ~50 % of all nodes
     let risk_p = (0.5 * label_density / 1.5).clamp(0.0, 1.0);
     if rng.gen_bool(risk_p) {
         let risk_values = ["low", "medium", "high"];
@@ -156,7 +153,6 @@ pub fn gen_labels(
         });
     }
 
-    // `eu-regulated` — nodes in an EU jurisdiction
     if let Some(jur) = jurisdiction {
         let jur_str: &str = jur;
         if EU_COUNTRIES.iter().any(|&eu| eu == jur_str) {

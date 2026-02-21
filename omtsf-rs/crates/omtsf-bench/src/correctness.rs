@@ -75,7 +75,6 @@ pub fn check_shortest_path(
         return Err("path does not end at 'to' node".to_owned());
     }
 
-    // Check no repeated nodes (simple path)
     let unique: HashSet<_> = path.iter().collect();
     if unique.len() != path.len() {
         return Err("path contains repeated nodes".to_owned());
@@ -110,7 +109,6 @@ pub fn check_all_paths(
         if path[path.len() - 1] != *to_idx {
             return Err(format!("path {i} does not end at 'to'"));
         }
-        // Check simple path (no repeated nodes)
         let unique: HashSet<_> = path.iter().collect();
         if unique.len() != path.len() {
             return Err(format!("path {i} contains repeated nodes"));
@@ -144,7 +142,6 @@ pub fn check_subgraph(
         }
     }
 
-    // All edges must have both endpoints in the output node set
     for edge in &extracted.edges {
         if !output_ids.contains(&edge.source.to_string()) {
             return Err(format!(
@@ -160,8 +157,6 @@ pub fn check_subgraph(
         }
     }
 
-    // Check no valid edges are missing: any edge in original with both endpoints in
-    // the requested set should be in the output
     let original_edges_in_subgraph: usize = original_file
         .edges
         .iter()
@@ -193,7 +188,6 @@ pub fn check_merge(inputs: &[&OmtsFile], output: &OmtsFile) -> Result<(), String
         ));
     }
 
-    // All edge endpoints must reference existing output nodes
     let output_node_ids: HashSet<String> = output.nodes.iter().map(|n| n.id.to_string()).collect();
     for edge in &output.edges {
         if !output_node_ids.contains(&edge.source.to_string()) {
@@ -220,7 +214,6 @@ pub fn check_redaction(
 ) -> Result<(), String> {
     use omtsf_core::enums::{DisclosureScope, NodeType, NodeTypeTag};
 
-    // disclosure_scope must match
     match &output.disclosure_scope {
         Some(scope) if scope == target_scope => {}
         other => {
@@ -231,7 +224,6 @@ pub fn check_redaction(
         }
     }
 
-    // In public scope, no person nodes should remain
     if matches!(target_scope, DisclosureScope::Public) {
         for node in &output.nodes {
             if matches!(&node.node_type, NodeTypeTag::Known(NodeType::Person)) {

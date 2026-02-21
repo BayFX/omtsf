@@ -20,10 +20,6 @@ use crate::Direction;
 use crate::OutputFormat;
 use crate::error::CliError;
 
-// ---------------------------------------------------------------------------
-// run
-// ---------------------------------------------------------------------------
-
 /// Runs the `reach` command.
 ///
 /// Parses `content` as an OMTSF file, builds the graph, finds all nodes
@@ -61,7 +57,6 @@ pub fn run(
         reachable_from(&graph, node_id, core_direction, None).map_err(query_error_to_cli)?
     };
 
-    // Collect node IDs from the reachable set, sorted for determinism.
     let mut node_ids: Vec<String> = reachable
         .into_iter()
         .filter_map(|idx| graph.node_weight(idx).map(|w| w.local_id.clone()))
@@ -80,10 +75,6 @@ pub fn run(
         detail: e.to_string(),
     })
 }
-
-// ---------------------------------------------------------------------------
-// Depth-bounded reachability
-// ---------------------------------------------------------------------------
 
 /// Performs a depth-bounded BFS from `start`, returning all reachable
 /// [`petgraph::stable_graph::NodeIndex`] values within `max_depth` hops.
@@ -105,7 +96,6 @@ fn reachable_from_bounded(
         })?;
 
     let mut visited: HashSet<petgraph::stable_graph::NodeIndex> = HashSet::new();
-    // Queue entries: (node_index, depth_so_far).
     let mut queue: VecDeque<(petgraph::stable_graph::NodeIndex, u32)> = VecDeque::new();
 
     visited.insert(start_idx);
@@ -163,10 +153,6 @@ fn neighbours(
     result
 }
 
-// ---------------------------------------------------------------------------
-// Output
-// ---------------------------------------------------------------------------
-
 /// Writes reachable node IDs in human-readable format (one per line).
 fn print_human<W: std::io::Write>(w: &mut W, node_ids: &[String]) -> std::io::Result<()> {
     for id in node_ids {
@@ -193,10 +179,6 @@ fn print_json<W: std::io::Write>(w: &mut W, node_ids: &[String]) -> std::io::Res
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
     writeln!(w, "{json}")
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /// Converts a CLI [`Direction`] to the core [`CoreDirection`].
 fn to_core_direction(d: &Direction) -> CoreDirection {

@@ -25,10 +25,6 @@ use petgraph::visit::EdgeRef;
 use crate::enums::EdgeTypeTag;
 use crate::graph::OmtsGraph;
 
-// ---------------------------------------------------------------------------
-// Direction
-// ---------------------------------------------------------------------------
-
 /// Controls which edges are followed during graph traversal.
 ///
 /// Used by [`reachable_from`], [`shortest_path`], and [`all_paths`].
@@ -41,10 +37,6 @@ pub enum Direction {
     /// Follow edges in either direction, treating the graph as undirected.
     Both,
 }
-
-// ---------------------------------------------------------------------------
-// QueryError
-// ---------------------------------------------------------------------------
 
 /// Errors that can occur during graph queries.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,10 +63,6 @@ impl std::fmt::Display for QueryError {
 }
 
 impl std::error::Error for QueryError {}
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
 
 /// Returns `true` if the edge should be traversed given the optional filter.
 ///
@@ -133,10 +121,6 @@ fn neighbours(
     result
 }
 
-// ---------------------------------------------------------------------------
-// reachable_from
-// ---------------------------------------------------------------------------
-
 /// Returns the set of all nodes reachable from `start` via BFS.
 ///
 /// The start node itself is excluded from the result.
@@ -164,8 +148,6 @@ pub fn reachable_from(
     let mut visited: HashSet<NodeIndex> = HashSet::new();
     let mut queue: VecDeque<NodeIndex> = VecDeque::new();
 
-    // Seed queue with the start node's neighbours without marking the start
-    // itself as visited in the result set.
     visited.insert(start_idx);
     queue.push_back(start_idx);
 
@@ -178,15 +160,10 @@ pub fn reachable_from(
         }
     }
 
-    // Remove the start node so the result excludes it per spec.
     visited.remove(&start_idx);
 
     Ok(visited)
 }
-
-// ---------------------------------------------------------------------------
-// shortest_path
-// ---------------------------------------------------------------------------
 
 /// Returns the shortest path from `from` to `to` as a sequence of node indices.
 ///
@@ -225,7 +202,6 @@ pub fn shortest_path(
         return Ok(Some(vec![from_idx]));
     }
 
-    // BFS with predecessor tracking.
     let mut visited: HashSet<NodeIndex> = HashSet::new();
     let mut predecessor: HashMap<NodeIndex, NodeIndex> = HashMap::new();
     let mut queue: VecDeque<NodeIndex> = VecDeque::new();
@@ -252,7 +228,6 @@ pub fn shortest_path(
         return Ok(None);
     }
 
-    // Reconstruct path by walking predecessors backwards.
     let mut path = Vec::new();
     let mut current = to_idx;
     loop {
@@ -275,10 +250,6 @@ pub fn shortest_path(
 
     Ok(Some(path))
 }
-
-// ---------------------------------------------------------------------------
-// all_paths
-// ---------------------------------------------------------------------------
 
 /// Default maximum depth for [`all_paths`] when not otherwise specified.
 pub const DEFAULT_MAX_DEPTH: usize = 20;
@@ -321,23 +292,11 @@ pub fn all_paths(
 
     let mut results: Vec<Vec<NodeIndex>> = Vec::new();
 
-    // Handle trivial case: from == to.
     if from_idx == to_idx {
         results.push(vec![from_idx]);
         return Ok(results);
     }
 
-    // Iterative-deepening DFS: run DFS for depth limit d = 1 ..= max_depth.
-    // Each depth limit is independent; we collect all paths found at each
-    // depth and deduplicate by re-running with increasing limits.
-    //
-    // We use an explicit stack to avoid recursive function calls (avoiding
-    // any stack-overflow risk on large graphs), where each stack frame holds
-    // the current node, the depth consumed so far, the current path, and the
-    // visited-on-path set.
-    //
-    // We accumulate all unique paths into a HashSet of paths (as Vec<usize>)
-    // to avoid duplicates across depth iterations.
     let mut seen_paths: HashSet<Vec<NodeIndex>> = HashSet::new();
 
     for depth_limit in 1..=max_depth {
@@ -370,8 +329,6 @@ fn dfs_paths(
     edge_filter: Option<&HashSet<EdgeTypeTag>>,
     results: &mut HashSet<Vec<NodeIndex>>,
 ) {
-    // Explicit DFS stack. Each entry: (node, depth_used, path, on_path).
-    // We represent a "frame" as the state at that point in the DFS.
     struct Frame {
         node: NodeIndex,
         depth_used: usize,
@@ -393,9 +350,7 @@ fn dfs_paths(
 
     while let Some(frame) = stack.pop() {
         if frame.node == target && frame.depth_used > 0 {
-            // Found a complete path — record it.
             results.insert(frame.path.clone());
-            // Do not extend beyond target.
             continue;
         }
 
@@ -422,10 +377,6 @@ fn dfs_paths(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -440,10 +391,6 @@ mod tests {
     use crate::graph::build_graph;
     use crate::newtypes::{CalendarDate, EdgeId, FileSalt, NodeId, SemVer};
     use crate::structures::{Edge, EdgeProperties, Node};
-
-    // -----------------------------------------------------------------------
-    // Fixture helpers (duplicated from graph.rs tests)
-    // -----------------------------------------------------------------------
 
     const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
@@ -550,10 +497,6 @@ mod tests {
         *graph.node_index(id).expect("node must exist")
     }
 
-    // -----------------------------------------------------------------------
-    // Helper: build a linear chain A → B → C → D
-    // -----------------------------------------------------------------------
-
     fn linear_chain() -> crate::graph::OmtsGraph {
         let nodes = vec![org_node("a"), org_node("b"), org_node("c"), org_node("d")];
         let edges = vec![
@@ -564,10 +507,6 @@ mod tests {
         build_graph(&minimal_file(nodes, edges)).expect("linear chain builds")
     }
 
-    // -----------------------------------------------------------------------
-    // reachable_from tests
-    // -----------------------------------------------------------------------
-
     /// Forward reachability from the head of a linear chain returns all other nodes.
     #[test]
     fn test_reachable_forward_linear_chain() {
@@ -577,7 +516,6 @@ mod tests {
         assert!(reached.contains(&idx(&g, "b")));
         assert!(reached.contains(&idx(&g, "c")));
         assert!(reached.contains(&idx(&g, "d")));
-        // Start node excluded.
         assert!(!reached.contains(&idx(&g, "a")));
     }
 
@@ -627,7 +565,6 @@ mod tests {
         let g = build_graph(&minimal_file(nodes, edges)).expect("builds");
         let reached = reachable_from(&g, "a", Direction::Forward, None)
             .expect("should succeed without looping");
-        // b, c, d are reachable; a itself excluded.
         assert_eq!(reached.len(), 3);
         assert!(reached.contains(&idx(&g, "b")));
         assert!(reached.contains(&idx(&g, "c")));
@@ -679,10 +616,6 @@ mod tests {
         assert_eq!(err, QueryError::NodeNotFound("nonexistent".to_owned()));
     }
 
-    // -----------------------------------------------------------------------
-    // shortest_path tests
-    // -----------------------------------------------------------------------
-
     /// Shortest path in a linear chain is the chain itself.
     #[test]
     fn test_shortest_path_linear_chain() {
@@ -711,7 +644,6 @@ mod tests {
     #[test]
     fn test_shortest_path_no_path_returns_none() {
         let g = linear_chain();
-        // Backward direction from "a": no path back from d to a (forward direction)
         let result =
             shortest_path(&g, "d", "a", Direction::Forward, None).expect("should not error");
         assert!(result.is_none());
@@ -741,7 +673,6 @@ mod tests {
         let path = shortest_path(&g, "a", "d", Direction::Forward, None)
             .expect("should succeed")
             .expect("path should exist");
-        // Shortest is a → b → d (3 nodes, 2 edges).
         assert_eq!(path.len(), 3);
         assert_eq!(path[0], idx(&g, "a"));
         assert_eq!(path[2], idx(&g, "d"));
@@ -751,7 +682,6 @@ mod tests {
     #[test]
     fn test_shortest_path_backward_direction() {
         let g = linear_chain();
-        // Backward from d to a should succeed.
         let path = shortest_path(&g, "d", "a", Direction::Backward, None)
             .expect("should succeed")
             .expect("backward path should exist");
@@ -797,10 +727,6 @@ mod tests {
         assert_eq!(err, QueryError::NodeNotFound("ghost".to_owned()));
     }
 
-    // -----------------------------------------------------------------------
-    // all_paths tests
-    // -----------------------------------------------------------------------
-
     /// [`all_paths`] on a linear chain returns exactly one path.
     #[test]
     fn test_all_paths_linear_chain_single_path() {
@@ -831,7 +757,6 @@ mod tests {
         let paths = all_paths(&g, "a", "d", DEFAULT_MAX_DEPTH, Direction::Forward, None)
             .expect("should succeed");
         assert_eq!(paths.len(), 2);
-        // Both paths start at a and end at d.
         for path in &paths {
             assert_eq!(path[0], idx(&g, "a"));
             assert_eq!(*path.last().expect("non-empty"), idx(&g, "d"));
@@ -918,7 +843,6 @@ mod tests {
             Some(&filter),
         )
         .expect("should succeed");
-        // Only a→c via ownership; a→b requires supplies which is filtered out.
         assert_eq!(paths.len(), 1);
         assert_eq!(paths[0], vec![idx(&g, "a"), idx(&g, "c")]);
     }
@@ -974,11 +898,9 @@ mod tests {
         ];
         let g = build_graph(&minimal_file(nodes, edges)).expect("builds");
 
-        // Forward: no path from a to c (a has no outgoing edges).
         let fwd = shortest_path(&g, "a", "c", Direction::Forward, None).expect("should not error");
         assert!(fwd.is_none());
 
-        // Both: a ← b → c, so treating undirected, a is connected to b and b to c.
         let both = shortest_path(&g, "a", "c", Direction::Both, None).expect("should not error");
         assert!(both.is_some());
         let path = both.expect("path exists");

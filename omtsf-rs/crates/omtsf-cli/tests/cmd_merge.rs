@@ -24,10 +24,6 @@ fn fixture(name: &str) -> PathBuf {
     path
 }
 
-// ---------------------------------------------------------------------------
-// merge: two fixture files (exit 0)
-// ---------------------------------------------------------------------------
-
 #[test]
 fn merge_two_fixtures_exits_0() {
     let out = Command::new(omtsf_bin())
@@ -101,8 +97,6 @@ fn merge_shared_lei_deduplicates_nodes() {
         serde_json::from_str(stdout.trim()).expect("valid JSON from merge");
 
     let nodes = value["nodes"].as_array().expect("nodes array");
-    // merge-a has 2 nodes; merge-b has 2 nodes; they share one LEI so
-    // the merged output has 3 unique entity groups.
     assert_eq!(
         nodes.len(),
         3,
@@ -125,7 +119,6 @@ fn merge_output_is_valid_omts_file() {
     let value: serde_json::Value =
         serde_json::from_str(stdout.trim()).expect("valid JSON from merge");
 
-    // Required fields in the output.
     assert!(
         value["omtsf_version"].is_string(),
         "omtsf_version must be present"
@@ -135,16 +128,11 @@ fn merge_output_is_valid_omts_file() {
         "snapshot_date must be present"
     );
     assert!(value["file_salt"].is_string(), "file_salt must be present");
-    // Merge metadata must be present.
     assert!(
         value["merge_metadata"].is_object(),
         "merge_metadata must be present in merged output"
     );
 }
-
-// ---------------------------------------------------------------------------
-// merge: parse failure (exit 2)
-// ---------------------------------------------------------------------------
 
 #[test]
 fn merge_invalid_json_file_exits_2() {
@@ -183,28 +171,18 @@ fn merge_nonexistent_file_exits_2() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// merge: requires at least two files
-// ---------------------------------------------------------------------------
-
 #[test]
 fn merge_one_file_is_clap_error() {
-    // clap enforces num_args = 2.. so one file fails at argument parsing.
     let out = Command::new(omtsf_bin())
         .args(["merge", fixture("merge-a.omts").to_str().expect("path")])
         .output()
         .expect("run omtsf merge one file");
-    // clap exits 2 for argument errors.
     assert_eq!(
         out.status.code(),
         Some(2),
         "merge with one file should be rejected by clap"
     );
 }
-
-// ---------------------------------------------------------------------------
-// merge: stdin support
-// ---------------------------------------------------------------------------
 
 #[test]
 fn merge_stdin_and_file_exits_0() {
@@ -238,13 +216,8 @@ fn merge_stdin_and_file_exits_0() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// merge: validate the merged output with `omtsf validate`
-// ---------------------------------------------------------------------------
-
 #[test]
 fn merge_output_passes_validate() {
-    // Merge → pipe to validate via a temp file.
     let merge_out = Command::new(omtsf_bin())
         .args([
             "merge",

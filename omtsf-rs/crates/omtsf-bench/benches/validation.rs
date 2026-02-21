@@ -19,7 +19,6 @@ fn bench_validation(c: &mut Criterion) {
 
         group.throughput(Throughput::Elements(elements));
 
-        // L1 only
         group.bench_with_input(BenchmarkId::new("L1", name), &file, |b, file| {
             let config = ValidationConfig {
                 run_l1: true,
@@ -31,7 +30,6 @@ fn bench_validation(c: &mut Criterion) {
             });
         });
 
-        // L1 + L2
         group.bench_with_input(BenchmarkId::new("L1_L2", name), &file, |b, file| {
             let config = ValidationConfig {
                 run_l1: true,
@@ -43,7 +41,6 @@ fn bench_validation(c: &mut Criterion) {
             });
         });
 
-        // L1 + L2 + L3
         group.bench_with_input(BenchmarkId::new("L1_L2_L3", name), &file, |b, file| {
             let config = ValidationConfig {
                 run_l1: true,

@@ -25,10 +25,6 @@ use omtsf_core::{
 use crate::OutputFormat;
 use crate::error::CliError;
 
-// ---------------------------------------------------------------------------
-// run
-// ---------------------------------------------------------------------------
-
 /// Runs the `diff` command.
 ///
 /// Parses `content_a` and `content_b` as OMTSF files, constructs the
@@ -55,7 +51,6 @@ pub fn run(
     ignore_fields: &[String],
     format: &OutputFormat,
 ) -> Result<(), CliError> {
-    // --- Parse both files ---
     let file_a: OmtsFile = serde_json::from_str(content_a).map_err(|e| CliError::ParseFailed {
         detail: format!("file A, line {}, column {}: {e}", e.line(), e.column()),
     })?;
@@ -63,7 +58,6 @@ pub fn run(
         detail: format!("file B, line {}, column {}: {e}", e.line(), e.column()),
     })?;
 
-    // --- Build DiffFilter ---
     let filter = DiffFilter {
         node_types: if node_types.is_empty() {
             None
@@ -78,10 +72,8 @@ pub fn run(
         ignore_fields: ignore_fields.iter().cloned().collect::<HashSet<_>>(),
     };
 
-    // --- Compute diff ---
     let result = diff_filtered(&file_a, &file_b, Some(&filter));
 
-    // --- Write output ---
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
 
@@ -94,17 +86,12 @@ pub fn run(
         detail: e.to_string(),
     })?;
 
-    // --- Exit code ---
     if result.is_empty() {
         Ok(())
     } else {
         Err(CliError::DiffHasDifferences)
     }
 }
-
-// ---------------------------------------------------------------------------
-// Human output
-// ---------------------------------------------------------------------------
 
 /// Writes the diff result in unified-diff-inspired human-readable format.
 fn write_human<W: std::io::Write>(
@@ -122,7 +109,6 @@ fn write_human<W: std::io::Write>(
     write_nodes_human(w, &result.nodes, ids_only)?;
     write_edges_human(w, &result.edges, ids_only)?;
 
-    // Warnings from the diff engine (e.g. ambiguous match groups)
     for warning in &result.warnings {
         writeln!(w, "! {warning}")?;
     }
@@ -178,7 +164,6 @@ fn write_node_diff_human<W: std::io::Write>(
     node_diff: &NodeDiff,
     ids_only: bool,
 ) -> std::io::Result<()> {
-    // Header: show both IDs when they differ
     if node_diff.id_a == node_diff.id_b {
         writeln!(w, "  ~ {} ({})", node_diff.id_a, node_diff.node_type)?;
     } else {
@@ -343,10 +328,6 @@ fn write_summary_line<W: std::io::Write>(w: &mut W, summary: &DiffSummary) -> st
         summary.edges_unchanged,
     )
 }
-
-// ---------------------------------------------------------------------------
-// JSON output
-// ---------------------------------------------------------------------------
 
 /// Writes the diff result as a single JSON object to stdout.
 ///
@@ -543,18 +524,12 @@ fn label_set_diff_to_json(diff: &LabelSetDiff) -> serde_json::Value {
     })
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
     #![allow(clippy::panic)]
 
     use super::*;
-
-    // Minimal valid OMTS file — no nodes, no edges.
     const EMPTY: &str = r#"{
         "omtsf_version": "1.0.0",
         "snapshot_date": "2026-02-19",
@@ -563,9 +538,6 @@ mod tests {
         "edges": []
     }"#;
 
-    // File with one organization node (no external identifiers, so it cannot
-    // be matched across files; it will appear as added or removed depending on
-    // which side it is on).
     const WITH_ORG: &str = r#"{
         "omtsf_version": "1.0.0",
         "snapshot_date": "2026-02-19",
@@ -576,8 +548,6 @@ mod tests {
         "edges": []
     }"#;
 
-    // File identical to WITH_ORG but with a different name.
-    // To be matched the node needs an external identifier.
     const WITH_ORG_MODIFIED: &str = r#"{
         "omtsf_version": "1.0.0",
         "snapshot_date": "2026-02-19",
@@ -609,8 +579,6 @@ mod tests {
     }"#;
 
     const NOT_JSON: &str = "this is not json";
-
-    // ── run: parse failures ───────────────────────────────────────────────────
 
     #[test]
     fn run_bad_file_a_returns_parse_failed() {
@@ -668,8 +636,6 @@ mod tests {
         assert_eq!(err.exit_code(), 2);
     }
 
-    // ── run: identical files (exit 0) ─────────────────────────────────────────
-
     #[test]
     fn run_identical_empty_files_returns_ok() {
         let result = run(
@@ -690,9 +656,6 @@ mod tests {
 
     #[test]
     fn run_identical_files_exit_code_is_0() {
-        // Use the matched-node fixture: both files have org-001 with the same
-        // DUNS identifier so the diff engine can match them across files and
-        // finds no changes.
         let result = run(
             WITH_ORG_SAME_EXT_ID,
             WITH_ORG_SAME_EXT_ID,
@@ -705,8 +668,6 @@ mod tests {
         );
         assert!(result.is_ok(), "identical files should exit 0: {result:?}");
     }
-
-    // ── run: differing files (exit 1) ─────────────────────────────────────────
 
     #[test]
     fn run_different_files_returns_diff_has_differences() {
@@ -742,8 +703,6 @@ mod tests {
         assert_eq!(err.exit_code(), 1);
     }
 
-    // ── run: --ids-only ───────────────────────────────────────────────────────
-
     #[test]
     fn run_ids_only_still_exits_1_for_differences() {
         let err = run(
@@ -760,8 +719,6 @@ mod tests {
         assert_eq!(err.exit_code(), 1);
     }
 
-    // ── run: --summary-only ───────────────────────────────────────────────────
-
     #[test]
     fn run_summary_only_exits_1_for_differences() {
         let err = run(
@@ -777,8 +734,6 @@ mod tests {
         .expect_err("should exit 1");
         assert_eq!(err.exit_code(), 1);
     }
-
-    // ── run: JSON format ──────────────────────────────────────────────────────
 
     #[test]
     fn run_json_identical_files_returns_ok() {
@@ -812,8 +767,6 @@ mod tests {
             "expected DiffHasDifferences: {result:?}"
         );
     }
-
-    // ── write_human: output content checks ───────────────────────────────────
 
     fn capture_human(
         content_a: &str,
@@ -856,8 +809,6 @@ mod tests {
 
     #[test]
     fn human_output_modified_node_has_tilde_prefix() {
-        // Both files have org-001 with the same DUNS identifier so the node
-        // is matched; the name differs so it appears as modified.
         let s = capture_human(WITH_ORG_SAME_EXT_ID, WITH_ORG_MODIFIED, false, false);
         assert!(s.contains("  ~ org-001"), "output: {s}");
     }
@@ -865,23 +816,18 @@ mod tests {
     #[test]
     fn human_output_modified_node_shows_property_change() {
         let s = capture_human(WITH_ORG_SAME_EXT_ID, WITH_ORG_MODIFIED, false, false);
-        // Should contain "name" change information
         assert!(s.contains("name"), "output should mention 'name': {s}");
     }
 
     #[test]
     fn human_output_ids_only_omits_property_details() {
         let s = capture_human(WITH_ORG_SAME_EXT_ID, WITH_ORG_MODIFIED, true, false);
-        // Should still have the ~ header but not the property detail
         assert!(s.contains("  ~ org-001"), "output: {s}");
-        // Property changes indented under the node should not appear
         assert!(
             !s.contains("    ~"),
             "ids_only should omit property detail: {s}"
         );
     }
-
-    // ── write_json: output content checks ────────────────────────────────────
 
     fn capture_json(content_a: &str, content_b: &str) -> serde_json::Value {
         let file_a: OmtsFile = serde_json::from_str(content_a).expect("parse A");

@@ -19,10 +19,6 @@ use std::fmt;
 use crate::file::OmtsFile;
 use external::ExternalDataSource;
 
-// ---------------------------------------------------------------------------
-// Severity
-// ---------------------------------------------------------------------------
-
 /// The severity level of a validation finding.
 ///
 /// Maps directly to the three validation levels defined in the OMTSF spec:
@@ -48,10 +44,6 @@ impl fmt::Display for Severity {
     }
 }
 
-// ---------------------------------------------------------------------------
-// RuleId
-// ---------------------------------------------------------------------------
-
 /// Machine-readable identifier for a validation rule.
 ///
 /// Each variant corresponds to exactly one rule defined in the OMTSF
@@ -63,7 +55,6 @@ impl fmt::Display for Severity {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum RuleId {
-    // --- L1: Graph Data Model (SPEC-001) ---
     /// L1-GDM-01: Every node has a non-empty `id`, unique within the file.
     L1Gdm01,
     /// L1-GDM-02: Every edge has a non-empty `id`, unique within the file.
@@ -77,7 +68,6 @@ pub enum RuleId {
     /// L1-GDM-06: Edge source/target node types match the permitted types table. Extension edges are exempt.
     L1Gdm06,
 
-    // --- L1: Entity Identification (SPEC-002) ---
     /// L1-EID-01: Every identifier has a non-empty `scheme`.
     L1Eid01,
     /// L1-EID-02: Every identifier has a non-empty `value`.
@@ -101,13 +91,11 @@ pub enum RuleId {
     /// L1-EID-11: No duplicate `{scheme, value, authority}` tuple on the same node.
     L1Eid11,
 
-    // --- L1: Selective Disclosure (SPEC-004) ---
     /// L1-SDI-01: `boundary_ref` nodes have exactly one identifier with scheme `opaque`.
     L1Sdi01,
     /// L1-SDI-02: If `disclosure_scope` is declared, sensitivity constraints are satisfied.
     L1Sdi02,
 
-    // --- L2: Graph Data Model ---
     /// L2-GDM-01: A facility with no edge connecting it to an organisation.
     L2Gdm01,
     /// L2-GDM-02: An ownership edge missing `valid_from`.
@@ -117,7 +105,6 @@ pub enum RuleId {
     /// L2-GDM-04: L2 graph data model rule 04.
     L2Gdm04,
 
-    // --- L2: Entity Identification ---
     /// L2-EID-01: An organisation node with no external identifiers.
     L2Eid01,
     /// L2-EID-02: L2 entity identification rule 02.
@@ -135,7 +122,6 @@ pub enum RuleId {
     /// L2-EID-08: L2 entity identification rule 08.
     L2Eid08,
 
-    // --- L3: Entity Identification (registry verification) ---
     /// L3-EID-01: L3 registry verification rule 01.
     L3Eid01,
     /// L3-EID-02: L3 registry verification rule 02.
@@ -147,13 +133,11 @@ pub enum RuleId {
     /// L3-EID-05: L3 registry verification rule 05.
     L3Eid05,
 
-    // --- L3: Merge Semantics ---
     /// L3-MRG-01: Ownership percentage sum verification.
     L3Mrg01,
     /// L3-MRG-02: Legal parentage cycle detection via topological sort.
     L3Mrg02,
 
-    // --- Special variants ---
     /// An extension rule defined outside the core spec. Must not use `L1-*`, `L2-*`, or `L3-*` prefixes.
     Extension(String),
     /// An internal validator bug. Indicates a logic error in the validator itself.
@@ -218,10 +202,6 @@ impl fmt::Display for RuleId {
         f.write_str(self.code())
     }
 }
-
-// ---------------------------------------------------------------------------
-// Location
-// ---------------------------------------------------------------------------
 
 /// The location within the graph where a diagnostic finding was detected.
 ///
@@ -298,10 +278,6 @@ impl fmt::Display for Location {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Diagnostic
-// ---------------------------------------------------------------------------
-
 /// A single validation finding produced by the OMTSF validation engine.
 ///
 /// Diagnostics are collected across all applicable rules and returned in a
@@ -350,10 +326,6 @@ impl fmt::Display for Diagnostic {
         )
     }
 }
-
-// ---------------------------------------------------------------------------
-// ValidationResult
-// ---------------------------------------------------------------------------
 
 /// The collected output of a validation pass on a parsed OMTSF graph.
 ///
@@ -429,10 +401,6 @@ impl ValidationResult {
     }
 }
 
-// ---------------------------------------------------------------------------
-// ParseError
-// ---------------------------------------------------------------------------
-
 /// A parse-level failure: the input is not a valid `.omts` file.
 ///
 /// Parse errors prevent validation from running entirely. They are reported
@@ -462,10 +430,6 @@ impl fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-// ---------------------------------------------------------------------------
-// ValidateOutput
-// ---------------------------------------------------------------------------
-
 /// The top-level result type returned by the OMTSF validator.
 ///
 /// Distinguishes between a file that could not be parsed at all
@@ -483,10 +447,6 @@ pub enum ValidateOutput {
     /// Check [`ValidationResult::is_conformant`] for overall pass/fail status.
     Validated(ValidationResult),
 }
-
-// ---------------------------------------------------------------------------
-// Level
-// ---------------------------------------------------------------------------
 
 /// The validation level that a rule belongs to.
 ///
@@ -524,10 +484,6 @@ impl fmt::Display for Level {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// ValidationRule
-// ---------------------------------------------------------------------------
 
 /// A single, stateless validation rule that inspects an [`OmtsFile`].
 ///
@@ -590,10 +546,6 @@ pub trait ValidationRule {
     );
 }
 
-// ---------------------------------------------------------------------------
-// ValidationConfig
-// ---------------------------------------------------------------------------
-
 /// Controls which validation levels are active during a validation pass.
 ///
 /// A conformant validator always runs L1 rules.  L2 rules are on by default.
@@ -627,10 +579,6 @@ impl Default for ValidationConfig {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Registry and dispatch
-// ---------------------------------------------------------------------------
 
 /// Builds the ordered rule registry for the given configuration.
 ///
@@ -717,18 +665,12 @@ pub fn validate(
     ValidationResult::from_diagnostics(diags)
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
     #![allow(clippy::panic)]
 
     use super::*;
-
-    // --- Severity ---
 
     #[test]
     fn severity_display() {
@@ -743,8 +685,6 @@ mod tests {
         assert_eq!(s, s.clone());
         assert_ne!(Severity::Error, Severity::Info);
     }
-
-    // --- RuleId::code ---
 
     #[test]
     fn rule_id_code_l1_gdm() {
@@ -826,8 +766,6 @@ mod tests {
         assert_eq!(RuleId::Internal.to_string(), "internal");
     }
 
-    // --- Location ---
-
     #[test]
     fn location_display_header() {
         let loc = Location::Header {
@@ -897,8 +835,6 @@ mod tests {
         assert_eq!(Location::Global.to_string(), "(global)");
     }
 
-    // --- Diagnostic construction and display ---
-
     fn make_error(rule: RuleId) -> Diagnostic {
         Diagnostic::new(rule, Severity::Error, Location::Global, "test error")
     }
@@ -950,8 +886,6 @@ mod tests {
         assert!(s.starts_with("[I]"));
         assert!(s.contains("L3-MRG-02"));
     }
-
-    // --- ValidationResult ---
 
     #[test]
     fn validation_result_empty_is_conformant() {
@@ -1049,8 +983,6 @@ mod tests {
         assert!(r.is_conformant());
     }
 
-    // --- ParseError ---
-
     #[test]
     fn parse_error_display() {
         let e = ParseError::new("unexpected token at line 3");
@@ -1062,8 +994,6 @@ mod tests {
         let e: Box<dyn std::error::Error> = Box::new(ParseError::new("malformed json"));
         assert!(!e.to_string().is_empty());
     }
-
-    // --- ValidateOutput ---
 
     #[test]
     fn validate_output_parse_failed_variant() {
@@ -1096,8 +1026,6 @@ mod tests {
         }
     }
 
-    // --- Level ---
-
     #[test]
     fn level_severity_mapping() {
         assert_eq!(Level::L1.severity(), Severity::Error);
@@ -1119,8 +1047,6 @@ mod tests {
         assert_ne!(Level::L2, Level::L3);
     }
 
-    // --- ValidationConfig ---
-
     #[test]
     fn validation_config_default() {
         let cfg = ValidationConfig::default();
@@ -1140,8 +1066,6 @@ mod tests {
         };
         assert_ne!(cfg, cfg2);
     }
-
-    // --- build_registry ---
 
     #[test]
     fn build_registry_default_config_has_l1_rules() {
@@ -1278,8 +1202,6 @@ mod tests {
         );
     }
 
-    // --- validate ---
-
     /// Helper: build a minimal valid [`OmtsFile`] in-memory.
     fn minimal_omts_file() -> crate::file::OmtsFile {
         use crate::newtypes::{CalendarDate, FileSalt, SemVer};
@@ -1301,7 +1223,6 @@ mod tests {
 
     #[test]
     fn validate_clean_minimal_file_produces_zero_diagnostics() {
-        // A minimal file with no nodes and no edges passes all L1 rules.
         let file = minimal_omts_file();
         let cfg = ValidationConfig::default();
         let result = validate(&file, &cfg, None);
@@ -1315,7 +1236,6 @@ mod tests {
     #[test]
     fn validate_returns_validation_result() {
         let file = minimal_omts_file();
-        // Disable all rules so we get exactly zero diagnostics.
         let cfg = ValidationConfig {
             run_l1: false,
             run_l2: false,

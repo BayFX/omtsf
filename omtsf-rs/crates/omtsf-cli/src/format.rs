@@ -17,10 +17,6 @@ use std::time::Duration;
 
 use omtsf_core::{Diagnostic, Severity};
 
-// ---------------------------------------------------------------------------
-// Color support detection
-// ---------------------------------------------------------------------------
-
 /// Returns `true` if ANSI color codes should be emitted to stderr.
 ///
 /// Colors are disabled when any of the following conditions hold:
@@ -31,26 +27,16 @@ pub fn colors_enabled(no_color_flag: bool) -> bool {
     if no_color_flag {
         return false;
     }
-    // NO_COLOR env var: presence of the variable (any value) disables color.
     if std::env::var_os("NO_COLOR").is_some() {
         return false;
     }
-    // Check whether stderr is a TTY.
     std::io::stderr().is_terminal()
 }
-
-// ---------------------------------------------------------------------------
-// ANSI escape sequences
-// ---------------------------------------------------------------------------
 
 const ANSI_RED: &str = "\x1b[31m";
 const ANSI_YELLOW: &str = "\x1b[33m";
 const ANSI_CYAN: &str = "\x1b[36m";
 const ANSI_RESET: &str = "\x1b[0m";
-
-// ---------------------------------------------------------------------------
-// FormatterConfig
-// ---------------------------------------------------------------------------
 
 /// Configuration for the diagnostic formatter, derived from CLI flags.
 #[derive(Debug, Clone)]
@@ -77,10 +63,6 @@ impl FormatterConfig {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Human-mode formatting
-// ---------------------------------------------------------------------------
-
 /// Writes a single [`Diagnostic`] to `writer` in human-readable format.
 ///
 /// Format: `[E] L1-GDM-03  edge "e-042": target "node-999" not found`
@@ -102,7 +84,6 @@ pub fn write_diagnostic_human<W: Write>(
     diag: &Diagnostic,
     config: &FormatterConfig,
 ) -> std::io::Result<()> {
-    // Quiet mode: suppress warnings and info.
     if config.quiet {
         match diag.severity {
             Severity::Warning | Severity::Info => return Ok(()),
@@ -183,10 +164,6 @@ pub fn write_timing_human<W: Write>(
     writeln!(writer, "{label} in {}ms", duration.as_millis())
 }
 
-// ---------------------------------------------------------------------------
-// JSON-mode formatting (NDJSON)
-// ---------------------------------------------------------------------------
-
 /// Writes a single [`Diagnostic`] to `writer` as a NDJSON line.
 ///
 /// Each line is a self-contained JSON object:
@@ -205,7 +182,6 @@ pub fn write_diagnostic_json<W: Write>(
     diag: &Diagnostic,
     config: &FormatterConfig,
 ) -> std::io::Result<()> {
-    // Quiet mode: suppress warnings and info.
     if config.quiet {
         match diag.severity {
             Severity::Warning | Severity::Info => return Ok(()),
@@ -219,9 +195,8 @@ pub fn write_diagnostic_json<W: Write>(
         Severity::Info => "info",
     };
 
-    // Build a minimal JSON object without pulling in serde_json for the CLI
-    // formatter. We use manual JSON serialization to keep the dependency
-    // surface small and avoid allocating a full serde_json::Value.
+    // Manual JSON serialization avoids pulling in serde_json for the CLI
+    // formatter, keeping the dependency surface small.
     let rule_id_json = json_string(diag.rule_id.code());
     let severity_json = json_string(severity_str);
     let location_json = json_string(&diag.location.to_string());
@@ -257,10 +232,6 @@ pub fn write_summary_json<W: Write>(
         r#"{{"summary":{{"errors":{errors},"warnings":{warnings},"info":{infos}}}}}"#,
     )
 }
-
-// ---------------------------------------------------------------------------
-// Helper: dispatch by format
-// ---------------------------------------------------------------------------
 
 /// Output format selection, mirroring the CLI `--format` flag.
 ///
@@ -313,10 +284,6 @@ pub fn write_summary<W: Write>(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
 /// Returns the singular or plural form of `word` depending on `count`.
 fn pluralize<'a>(count: usize, singular: &'a str, plural: &'a str) -> &'a str {
     if count == 1 { singular } else { plural }
@@ -342,10 +309,6 @@ fn json_string(s: &str) -> String {
     out
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -353,8 +316,6 @@ mod tests {
     use omtsf_core::{Diagnostic, Location, RuleId, Severity};
 
     use super::*;
-
-    // ── helpers ──────────────────────────────────────────────────────────────
 
     fn no_color_config() -> FormatterConfig {
         FormatterConfig {
@@ -428,8 +389,6 @@ mod tests {
         String::from_utf8(buf).expect("utf8")
     }
 
-    // ── human format ─────────────────────────────────────────────────────────
-
     #[test]
     fn human_error_contains_tag_rule_location_message() {
         let s = capture_human(&make_error(), &no_color_config());
@@ -461,7 +420,6 @@ mod tests {
             verbose: false,
         };
         let s = capture_human(&make_error(), &config);
-        // The error tag should be wrapped in red ANSI codes.
         assert!(s.contains(ANSI_RED), "no red ANSI: {s}");
         assert!(s.contains(ANSI_RESET), "no reset ANSI: {s}");
     }
@@ -512,8 +470,6 @@ mod tests {
         assert!(s.contains("[E]"), "output: {s}");
     }
 
-    // ── human summary ────────────────────────────────────────────────────────
-
     #[test]
     fn human_summary_format() {
         let mut buf: Vec<u8> = Vec::new();
@@ -539,8 +495,6 @@ mod tests {
         write_summary_human(&mut buf, 3, 1, 0, &quiet_config()).expect("write");
         assert!(buf.is_empty(), "summary should be suppressed in quiet mode");
     }
-
-    // ── verbose timing ───────────────────────────────────────────────────────
 
     #[test]
     fn verbose_timing_emitted_when_verbose() {
@@ -573,15 +527,11 @@ mod tests {
         );
     }
 
-    // ── JSON format ──────────────────────────────────────────────────────────
-
     #[test]
     fn json_output_is_valid_ndjson_line() {
         let s = capture_json(&make_error(), &no_color_config());
-        // Must be a single line ending with newline.
         let trimmed = s.trim_end_matches('\n');
         assert!(!trimmed.contains('\n'), "must be single line: {s}");
-        // Must start and end with braces (JSON object).
         assert!(trimmed.starts_with('{'), "output: {s}");
         assert!(trimmed.ends_with('}'), "output: {s}");
     }
@@ -626,8 +576,6 @@ mod tests {
         assert!(!s.is_empty(), "error should not be suppressed");
     }
 
-    // ── JSON summary ─────────────────────────────────────────────────────────
-
     #[test]
     fn json_summary_format() {
         let mut buf: Vec<u8> = Vec::new();
@@ -645,8 +593,6 @@ mod tests {
         write_summary_json(&mut buf, 3, 1, 0, &quiet_config()).expect("write");
         assert!(buf.is_empty(), "summary should be suppressed in quiet mode");
     }
-
-    // ── json_string escaping ─────────────────────────────────────────────────
 
     #[test]
     fn json_string_escapes_double_quote() {
@@ -668,19 +614,13 @@ mod tests {
         assert_eq!(json_string("hello"), r#""hello""#);
     }
 
-    // ── colors_enabled logic ─────────────────────────────────────────────────
-
     #[test]
     fn colors_disabled_by_no_color_flag() {
-        // Temporarily unset NO_COLOR to test only the flag path.
-        // We can only test the flag=true case reliably in unit tests.
         assert!(
             !colors_enabled(true),
             "colors should be off when flag is set"
         );
     }
-
-    // ── FormatMode dispatch ───────────────────────────────────────────────────
 
     #[test]
     fn write_diagnostic_human_mode_dispatches_correctly() {
@@ -726,8 +666,6 @@ mod tests {
         let s = String::from_utf8(buf).expect("utf8");
         assert!(s.contains("\"summary\""), "output: {s}");
     }
-
-    // ── pluralize ────────────────────────────────────────────────────────────
 
     #[test]
     fn pluralize_one_uses_singular() {

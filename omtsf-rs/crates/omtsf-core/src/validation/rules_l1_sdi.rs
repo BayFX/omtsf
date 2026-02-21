@@ -13,10 +13,6 @@ use crate::sensitivity::effective_sensitivity;
 
 use super::{Diagnostic, Level, Location, RuleId, Severity, ValidationRule};
 
-// ---------------------------------------------------------------------------
-// L1-SDI-01: boundary_ref nodes have exactly one opaque identifier
-// ---------------------------------------------------------------------------
-
 /// L1-SDI-01 — `boundary_ref` nodes have exactly one identifier with scheme `opaque`.
 ///
 /// Per SPEC-004 and the redaction specification (docs/redaction.md Section 5.1),
@@ -41,7 +37,6 @@ impl ValidationRule for L1Sdi01 {
         _external_data: Option<&dyn super::external::ExternalDataSource>,
     ) {
         for node in &file.nodes {
-            // Only applies to boundary_ref nodes.
             if node.node_type != NodeTypeTag::Known(NodeType::BoundaryRef) {
                 continue;
             }
@@ -50,7 +45,6 @@ impl ValidationRule for L1Sdi01 {
 
             let identifiers = match &node.identifiers {
                 None => {
-                    // No identifiers at all — missing the required opaque identifier.
                     diags.push(Diagnostic::new(
                         RuleId::L1Sdi01,
                         Severity::Error,
@@ -68,7 +62,6 @@ impl ValidationRule for L1Sdi01 {
                 Some(ids) => ids,
             };
 
-            // Count identifiers with scheme "opaque".
             let opaque_count = identifiers
                 .iter()
                 .filter(|id| id.scheme == "opaque")
@@ -93,7 +86,6 @@ impl ValidationRule for L1Sdi01 {
             }
 
             if opaque_count == 0 {
-                // Has identifiers, but none are "opaque".
                 diags.push(Diagnostic::new(
                     RuleId::L1Sdi01,
                     Severity::Error,
@@ -107,7 +99,6 @@ impl ValidationRule for L1Sdi01 {
                     ),
                 ));
             } else if opaque_count > 1 {
-                // Multiple opaque identifiers.
                 diags.push(Diagnostic::new(
                     RuleId::L1Sdi01,
                     Severity::Error,
@@ -123,7 +114,6 @@ impl ValidationRule for L1Sdi01 {
             }
 
             if total_count > 1 {
-                // Extra identifiers beyond the single opaque one.
                 diags.push(Diagnostic::new(
                     RuleId::L1Sdi01,
                     Severity::Error,
@@ -140,10 +130,6 @@ impl ValidationRule for L1Sdi01 {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// L1-SDI-02: sensitivity constraints are satisfied when disclosure_scope is declared
-// ---------------------------------------------------------------------------
 
 /// L1-SDI-02 — If `disclosure_scope` is declared, sensitivity constraints are satisfied.
 ///
@@ -176,15 +162,14 @@ impl ValidationRule for L1Sdi02 {
         _external_data: Option<&dyn super::external::ExternalDataSource>,
     ) {
         let scope = match &file.disclosure_scope {
-            None => return, // No scope declared — rule does not apply.
+            None => return,
             Some(s) => s,
         };
 
-        // Determine the maximum allowed sensitivity for the declared scope.
         let max_allowed = match scope {
-            DisclosureScope::Internal => return, // No constraint on internal.
-            DisclosureScope::Partner => Sensitivity::Restricted, // confidential not allowed
-            DisclosureScope::Public => Sensitivity::Public, // restricted + confidential not allowed
+            DisclosureScope::Internal => return,
+            DisclosureScope::Partner => Sensitivity::Restricted,
+            DisclosureScope::Public => Sensitivity::Public,
         };
 
         for node in &file.nodes {
@@ -238,10 +223,6 @@ impl ValidationRule for L1Sdi02 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -253,10 +234,6 @@ mod tests {
     use crate::structures::Node;
     use crate::types::Identifier;
     use crate::validation::{Diagnostic, ValidationRule};
-
-    // -----------------------------------------------------------------------
-    // Fixture helpers
-    // -----------------------------------------------------------------------
 
     const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
@@ -355,13 +332,8 @@ mod tests {
         diags
     }
 
-    // -----------------------------------------------------------------------
-    // L1-SDI-01 — satisfied cases
-    // -----------------------------------------------------------------------
-
     #[test]
     fn sdi01_non_boundary_ref_nodes_ignored() {
-        // Organization nodes are not subject to L1-SDI-01, even with no identifiers.
         let file = make_file(
             vec![node_no_identifiers("org-1", NodeType::Organization)],
             None,
@@ -375,7 +347,6 @@ mod tests {
 
     #[test]
     fn sdi01_boundary_ref_exactly_one_opaque_passes() {
-        // A boundary_ref with exactly one opaque identifier satisfies L1-SDI-01.
         let file = make_file(
             vec![node_with_identifiers(
                 "br-1",
@@ -422,10 +393,6 @@ mod tests {
         );
     }
 
-    // -----------------------------------------------------------------------
-    // L1-SDI-01 — violation: no identifiers field
-    // -----------------------------------------------------------------------
-
     #[test]
     fn sdi01_boundary_ref_no_identifiers_field_is_error() {
         let file = make_file(
@@ -440,10 +407,6 @@ mod tests {
         assert!(diags[0].message.contains("opaque"));
     }
 
-    // -----------------------------------------------------------------------
-    // L1-SDI-01 — violation: empty identifiers array
-    // -----------------------------------------------------------------------
-
     #[test]
     fn sdi01_boundary_ref_empty_identifiers_is_error() {
         let file = make_file(
@@ -456,10 +419,6 @@ mod tests {
         assert_eq!(diags[0].severity, Severity::Error);
         assert!(diags[0].message.contains("br-1"));
     }
-
-    // -----------------------------------------------------------------------
-    // L1-SDI-01 — violation: identifier with wrong scheme
-    // -----------------------------------------------------------------------
 
     #[test]
     fn sdi01_boundary_ref_non_opaque_scheme_is_error() {
@@ -482,10 +441,6 @@ mod tests {
         assert!(diags[0].message.contains("opaque"));
     }
 
-    // -----------------------------------------------------------------------
-    // L1-SDI-01 — violation: more than one opaque identifier
-    // -----------------------------------------------------------------------
-
     #[test]
     fn sdi01_boundary_ref_two_opaque_identifiers_is_error() {
         let file = make_file(
@@ -507,13 +462,8 @@ mod tests {
         assert!(diags.iter().any(|d| d.message.contains("br-1")));
     }
 
-    // -----------------------------------------------------------------------
-    // L1-SDI-01 — violation: one opaque + extra identifiers
-    // -----------------------------------------------------------------------
-
     #[test]
     fn sdi01_boundary_ref_opaque_plus_extra_identifier_is_error() {
-        // One opaque plus one non-opaque → total count > 1, which violates SDI-01.
         let file = make_file(
             vec![node_with_identifiers(
                 "br-1",
@@ -534,23 +484,16 @@ mod tests {
         assert!(diags.iter().all(|d| d.severity == Severity::Error));
     }
 
-    // -----------------------------------------------------------------------
-    // L1-SDI-01 — multiple boundary_ref nodes, some violating
-    // -----------------------------------------------------------------------
-
     #[test]
     fn sdi01_multiple_boundary_refs_all_violations_collected() {
         let file = make_file(
             vec![
-                // Valid
                 node_with_identifiers(
                     "br-ok",
                     NodeType::BoundaryRef,
                     vec![opaque_identifier("good")],
                 ),
-                // No identifiers
                 node_no_identifiers("br-bad1", NodeType::BoundaryRef),
-                // Wrong scheme
                 node_with_identifiers(
                     "br-bad2",
                     NodeType::BoundaryRef,
@@ -566,10 +509,6 @@ mod tests {
         assert!(diags.iter().any(|d| d.message.contains("br-bad2")));
         assert!(!diags.iter().any(|d| d.message.contains("br-ok")));
     }
-
-    // -----------------------------------------------------------------------
-    // L1-SDI-02 — no disclosure_scope: rule does not fire
-    // -----------------------------------------------------------------------
 
     #[test]
     fn sdi02_no_disclosure_scope_no_diagnostics() {
@@ -593,10 +532,6 @@ mod tests {
         );
     }
 
-    // -----------------------------------------------------------------------
-    // L1-SDI-02 — internal scope: no constraints
-    // -----------------------------------------------------------------------
-
     #[test]
     fn sdi02_internal_scope_allows_all_sensitivities() {
         let file = make_file(
@@ -617,10 +552,6 @@ mod tests {
             "internal scope imposes no sensitivity constraints"
         );
     }
-
-    // -----------------------------------------------------------------------
-    // L1-SDI-02 — partner scope: confidential not allowed, restricted allowed
-    // -----------------------------------------------------------------------
 
     #[test]
     fn sdi02_partner_scope_public_identifier_passes() {
@@ -706,10 +637,6 @@ mod tests {
         assert!(diags[0].message.contains("confidential"));
     }
 
-    // -----------------------------------------------------------------------
-    // L1-SDI-02 — public scope: restricted + confidential not allowed
-    // -----------------------------------------------------------------------
-
     #[test]
     fn sdi02_public_scope_public_identifier_passes() {
         let file = make_file(
@@ -791,10 +718,6 @@ mod tests {
         );
     }
 
-    // -----------------------------------------------------------------------
-    // L1-SDI-02 — multiple nodes and identifiers, all violations collected
-    // -----------------------------------------------------------------------
-
     #[test]
     fn sdi02_public_scope_collects_all_violations() {
         let file = make_file(
@@ -849,10 +772,6 @@ mod tests {
         assert!(diags.iter().all(|d| d.rule_id == RuleId::L1Sdi02));
     }
 
-    // -----------------------------------------------------------------------
-    // L1-SDI-02 — location precision: correct index in Identifier location
-    // -----------------------------------------------------------------------
-
     #[test]
     fn sdi02_location_points_to_correct_identifier_index() {
         let file = make_file(
@@ -875,10 +794,6 @@ mod tests {
         ));
     }
 
-    // -----------------------------------------------------------------------
-    // L1-SDI-02 — nodes with no identifiers are ignored
-    // -----------------------------------------------------------------------
-
     #[test]
     fn sdi02_node_with_no_identifiers_is_ignored() {
         let file = make_file(
@@ -891,10 +806,6 @@ mod tests {
             "nodes without identifiers must be ignored by L1-SDI-02"
         );
     }
-
-    // -----------------------------------------------------------------------
-    // L1-SDI-02 — boundary_ref opaque identifier is public by default
-    // -----------------------------------------------------------------------
 
     #[test]
     fn sdi02_boundary_ref_opaque_identifier_passes_public_scope() {

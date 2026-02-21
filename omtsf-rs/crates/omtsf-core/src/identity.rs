@@ -12,10 +12,6 @@ use crate::newtypes::CalendarDate;
 use crate::structures::{Edge, EdgeProperties};
 use crate::types::Identifier;
 
-// ---------------------------------------------------------------------------
-// identifiers_match
-// ---------------------------------------------------------------------------
-
 /// Returns `true` when two [`Identifier`] records should be considered the
 /// same identifier for merge purposes.
 ///
@@ -37,22 +33,18 @@ use crate::types::Identifier;
 /// 5. **Temporal compatibility** — the validity intervals must overlap; see
 ///    [`temporal_compatible`] for the detailed rules.
 pub fn identifiers_match(a: &Identifier, b: &Identifier) -> bool {
-    // Rule 1: Exclude internal scheme.
     if a.scheme == "internal" || b.scheme == "internal" {
         return false;
     }
 
-    // Rule 2: Schemes must match.
     if a.scheme != b.scheme {
         return false;
     }
 
-    // Rule 3: Values must match (whitespace-trimmed).
     if a.value.trim() != b.value.trim() {
         return false;
     }
 
-    // Rule 4: Authority check.
     if a.authority.is_some() || b.authority.is_some() {
         match (&a.authority, &b.authority) {
             (Some(aa), Some(ba)) => {
@@ -60,7 +52,6 @@ pub fn identifiers_match(a: &Identifier, b: &Identifier) -> bool {
                     return false;
                 }
             }
-            // One has authority, the other does not.
             (Some(_), None) | (None, Some(_)) => return false,
             // Both None is handled by the outer `is_some()` guard above and
             // can never reach this arm, but the match must be exhaustive.
@@ -68,13 +59,8 @@ pub fn identifiers_match(a: &Identifier, b: &Identifier) -> bool {
         }
     }
 
-    // Rule 5: Temporal compatibility.
     temporal_compatible(a, b)
 }
-
-// ---------------------------------------------------------------------------
-// temporal_compatible
-// ---------------------------------------------------------------------------
 
 /// Returns `true` when two identifier records' validity intervals overlap.
 ///
@@ -95,19 +81,16 @@ pub fn identifiers_match(a: &Identifier, b: &Identifier) -> bool {
 ///   present. An explicit `valid_to: null` (no-expiry) never causes
 ///   incompatibility.
 pub fn temporal_compatible(a: &Identifier, b: &Identifier) -> bool {
-    // If either record has no temporal information at all, assume compatible.
     let a_has_temporal = a.valid_from.is_some() || a.valid_to.is_some();
     let b_has_temporal = b.valid_from.is_some() || b.valid_to.is_some();
     if !a_has_temporal || !b_has_temporal {
         return true;
     }
 
-    // Check whether interval A ends before interval B starts.
     if intervals_disjoint(a.valid_to.as_ref(), b.valid_from.as_ref()) {
         return false;
     }
 
-    // Check whether interval B ends before interval A starts.
     if intervals_disjoint(b.valid_to.as_ref(), a.valid_from.as_ref()) {
         return false;
     }
@@ -126,26 +109,16 @@ pub fn temporal_compatible(a: &Identifier, b: &Identifier) -> bool {
 ///
 /// Disjoint only when `end < start` with both values concrete.
 fn intervals_disjoint(end: Option<&Option<CalendarDate>>, start: Option<&CalendarDate>) -> bool {
-    // If start is absent, the interval is open-ended at the left; never
-    // disjoint on that end.
     let Some(start_date) = start else {
         return false;
     };
 
-    // Resolve the end value.
     match end {
-        // end field absent → open-ended; not disjoint.
         None => false,
-        // explicit null → no-expiry; not disjoint.
         Some(None) => false,
-        // concrete end date: disjoint iff end < start
         Some(Some(end_date)) => end_date < start_date,
     }
 }
-
-// ---------------------------------------------------------------------------
-// is_lei_annulled
-// ---------------------------------------------------------------------------
 
 /// Returns `true` when an LEI identifier is known to be in ANNULLED status.
 ///
@@ -173,10 +146,6 @@ pub fn is_lei_annulled(id: &Identifier) -> bool {
         Some("ANNULLED")
     )
 }
-
-// ---------------------------------------------------------------------------
-// edge_composite_key
-// ---------------------------------------------------------------------------
 
 /// Composite key used to group edge merge candidates.
 ///
@@ -220,7 +189,6 @@ pub fn edge_composite_key(
     target_rep: usize,
     edge: &Edge,
 ) -> Option<EdgeCompositeKey> {
-    // same_as edges are never merged; exclude them entirely.
     if let EdgeTypeTag::Known(EdgeType::SameAs) = &edge.edge_type {
         return None;
     }
@@ -231,10 +199,6 @@ pub fn edge_composite_key(
         edge_type: edge.edge_type.clone(),
     })
 }
-
-// ---------------------------------------------------------------------------
-// build_edge_candidate_index
-// ---------------------------------------------------------------------------
 
 /// Builds a composite-key index that groups edge ordinals by their resolved
 /// `(find(source), find(target), type)` triple.
@@ -284,7 +248,6 @@ where
         let tgt_rep = find(tgt_ord);
 
         let Some(key) = edge_composite_key(src_rep, tgt_rep, edge) else {
-            // same_as — skip
             continue;
         };
 
@@ -293,10 +256,6 @@ where
 
     index
 }
-
-// ---------------------------------------------------------------------------
-// edge_identity_properties_match
-// ---------------------------------------------------------------------------
 
 /// Returns `true` when two edges' type-specific identity properties are equal
 /// per the SPEC-003 Section 3.1 table.
@@ -391,10 +350,6 @@ fn options_eq(a: &Option<f64>, b: &Option<f64>) -> bool {
     }
 }
 
-// ---------------------------------------------------------------------------
-// edges_match
-// ---------------------------------------------------------------------------
-
 /// Returns `true` when two edges are merge candidates.
 ///
 /// Two edges are merge candidates when **all** of the following hold:
@@ -433,7 +388,6 @@ pub fn edges_match(
     a: &Edge,
     b: &Edge,
 ) -> bool {
-    // same_as edges are never merge candidates.
     if let EdgeTypeTag::Known(EdgeType::SameAs) = &a.edge_type {
         return false;
     }
@@ -441,17 +395,14 @@ pub fn edges_match(
         return false;
     }
 
-    // Condition 1 & 2: resolved endpoints must match.
     if source_rep_a != source_rep_b || target_rep_a != target_rep_b {
         return false;
     }
 
-    // Condition 3: types must match.
     if a.edge_type != b.edge_type {
         return false;
     }
 
-    // Condition 4: shared external identifier OR property-table match.
     let a_external: Vec<&Identifier> = a
         .identifiers
         .as_deref()
@@ -468,9 +419,7 @@ pub fn edges_match(
         .filter(|id| id.scheme != "internal")
         .collect();
 
-    // If either edge has external identifiers, check for a matching pair.
     if !a_external.is_empty() || !b_external.is_empty() {
-        // Check whether any pair of external identifiers matches.
         for id_a in &a_external {
             for id_b in &b_external {
                 if identifiers_match(id_a, id_b) {
@@ -478,18 +427,11 @@ pub fn edges_match(
                 }
             }
         }
-        // At least one side had external identifiers but none matched.
         return false;
     }
 
-    // Both edges have no external identifiers: fall back to type-specific
-    // property comparison.
     edge_identity_properties_match(&a.edge_type, &a.properties, &b.properties)
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -501,8 +443,6 @@ mod tests {
     use crate::newtypes::CalendarDate;
 
     use super::*;
-
-    // --- helpers ------------------------------------------------------------
 
     fn make_id(scheme: &str, value: &str) -> Identifier {
         Identifier {
@@ -534,12 +474,9 @@ mod tests {
     }
 
     fn with_valid_to_null(mut id: Identifier) -> Identifier {
-        // Explicit no-expiry (JSON null)
         id.valid_to = Some(None);
         id
     }
-
-    // --- identifiers_match --------------------------------------------------
 
     #[test]
     fn same_scheme_and_value_matches() {
@@ -635,8 +572,6 @@ mod tests {
         assert!(identifiers_match(&a, &b));
     }
 
-    // --- temporal_compatible ------------------------------------------------
-
     #[test]
     fn both_missing_temporal_is_compatible() {
         let a = make_id("lei", "X");
@@ -711,8 +646,6 @@ mod tests {
         assert!(!identifiers_match(&a, &b));
     }
 
-    // --- is_lei_annulled ----------------------------------------------------
-
     #[test]
     fn non_lei_scheme_not_annulled() {
         let id = make_id("duns", "123");
@@ -757,8 +690,6 @@ mod tests {
         assert!(!is_lei_annulled(&id), "non-lei scheme must return false");
     }
 
-    // --- edge helper construction -------------------------------------------
-
     fn make_edge(id: &str, edge_type: EdgeTypeTag, source: &str, target: &str) -> Edge {
         use crate::newtypes::{EdgeId, NodeId};
         use crate::structures::EdgeProperties;
@@ -782,8 +713,6 @@ mod tests {
         edge.properties = props;
         edge
     }
-
-    // --- edge_composite_key -------------------------------------------------
 
     #[test]
     fn composite_key_same_as_excluded() {
@@ -836,8 +765,6 @@ mod tests {
         let key_02 = edge_composite_key(0, 2, &edge).expect("Some");
         assert_ne!(key_01, key_02, "different target_rep must differ");
     }
-
-    // --- build_edge_candidate_index -----------------------------------------
 
     #[test]
     fn candidate_index_empty_edges() {
@@ -992,8 +919,6 @@ mod tests {
         bucket.sort_unstable();
         assert_eq!(bucket, vec![0usize, 1]);
     }
-
-    // --- edge_identity_properties_match ------------------------------------
 
     #[test]
     fn ownership_same_percentage_and_direct_matches() {
@@ -1351,8 +1276,6 @@ mod tests {
             &crate::structures::EdgeProperties::default()
         ));
     }
-
-    // --- edges_match --------------------------------------------------------
 
     #[test]
     fn edges_match_same_as_is_never_a_candidate() {

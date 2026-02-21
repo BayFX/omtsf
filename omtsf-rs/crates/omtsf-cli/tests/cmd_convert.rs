@@ -23,10 +23,6 @@ fn fixture(name: &str) -> PathBuf {
     path
 }
 
-// ---------------------------------------------------------------------------
-// convert: pretty (default)
-// ---------------------------------------------------------------------------
-
 #[test]
 fn convert_minimal_pretty_exit_0() {
     let out = Command::new(omtsf_bin())
@@ -69,13 +65,8 @@ fn convert_minimal_pretty_has_indentation() {
         .output()
         .expect("run omtsf convert");
     let stdout = String::from_utf8_lossy(&out.stdout);
-    // Pretty-printed JSON has newlines and spaces.
     assert!(stdout.contains('\n'), "expected newlines in pretty output");
 }
-
-// ---------------------------------------------------------------------------
-// convert: compact mode
-// ---------------------------------------------------------------------------
 
 #[test]
 fn convert_compact_exit_0() {
@@ -101,7 +92,6 @@ fn convert_compact_is_single_line() {
         .output()
         .expect("run omtsf convert --compact");
     let stdout = String::from_utf8_lossy(&out.stdout);
-    // Compact output is one line (possibly with a trailing newline from println).
     let trimmed = stdout.trim_end_matches('\n');
     assert!(
         !trimmed.contains('\n'),
@@ -150,10 +140,6 @@ fn convert_compact_is_smaller_than_pretty() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// convert: round-trip fidelity
-// ---------------------------------------------------------------------------
-
 #[test]
 fn convert_round_trips_full_featured() {
     let out = Command::new(omtsf_bin())
@@ -168,7 +154,6 @@ fn convert_round_trips_full_featured() {
     let value: serde_json::Value =
         serde_json::from_str(stdout.trim()).expect("valid JSON after convert");
 
-    // Spot-check key data survived the round-trip.
     assert_eq!(value["omtsf_version"], "0.1.0");
     assert_eq!(value["disclosure_scope"], "partner");
     let nodes = value["nodes"].as_array().expect("nodes array");
@@ -179,7 +164,6 @@ fn convert_round_trips_full_featured() {
 
 #[test]
 fn convert_preserves_unknown_fields() {
-    // Write a temporary file with an unknown top-level field.
     use std::io::Write as _;
     let content = r#"{
         "omtsf_version": "1.0.0",
@@ -207,10 +191,6 @@ fn convert_preserves_unknown_fields() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// convert: stdin
-// ---------------------------------------------------------------------------
-
 #[test]
 fn convert_stdin_exit_0() {
     use std::io::Write as _;
@@ -234,10 +214,6 @@ fn convert_stdin_exit_0() {
         serde_json::from_str(stdout.trim()).expect("valid JSON from convert -");
     assert_eq!(value["omtsf_version"], "0.1.0");
 }
-
-// ---------------------------------------------------------------------------
-// convert: error cases
-// ---------------------------------------------------------------------------
 
 #[test]
 fn convert_nonexistent_file_exits_2() {

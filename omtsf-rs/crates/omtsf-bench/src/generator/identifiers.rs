@@ -14,7 +14,6 @@ const ALPHANUM: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 /// Algorithm: generate 18-char `[A-Z0-9]` body, then compute the two check
 /// digits by reversing the MOD 97-10 verification.
 pub fn gen_lei(rng: &mut StdRng) -> Identifier {
-    // Generate 18-character body
     let body: String = (0..18)
         .map(|_| {
             let idx = rng.gen_range(0..ALPHANUM.len());
@@ -22,8 +21,6 @@ pub fn gen_lei(rng: &mut StdRng) -> Identifier {
         })
         .collect();
 
-    // Compute MOD 97-10 check digits.
-    // Append "00" to body, compute remainder, check = 98 - remainder.
     let with_zeros = format!("{body}00");
     let remainder = mod97_remainder(&with_zeros);
     let check = 98 - remainder;
@@ -78,7 +75,6 @@ pub fn gen_duns(rng: &mut StdRng) -> Identifier {
 
 /// Generates a valid GLN with correct GS1 Mod-10 check digit.
 pub fn gen_gln(rng: &mut StdRng) -> Identifier {
-    // Generate 12 random digits, compute check digit
     let body: Vec<u8> = (0..12).map(|_| rng.gen_range(0u8..10)).collect();
 
     let mut sum: u32 = 0;
@@ -215,7 +211,6 @@ pub fn gen_identifiers(
     // at least one external identifier for diff/merge to work.
     let mut ids = vec![gen_internal(counter), gen_duns(rng)];
 
-    // Additional external identifiers based on density
     let extra_count = if identifier_density <= 2.0 {
         0
     } else {
@@ -289,7 +284,6 @@ mod tests {
     #[test]
     fn gen_identifiers_respects_density() {
         let mut rng = StdRng::seed_from_u64(42);
-        // Low density: always 2 (internal + duns)
         let ids = gen_identifiers(&mut rng, 0, 1.0);
         assert_eq!(ids.len(), 2);
         assert_eq!(ids[0].scheme, "internal");

@@ -54,10 +54,6 @@ use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableDiGraph};
 use crate::enums::{EdgeTypeTag, NodeTypeTag};
 use crate::file::OmtsFile;
 
-// ---------------------------------------------------------------------------
-// Weight types
-// ---------------------------------------------------------------------------
-
 /// Weight stored inline on each petgraph node.
 ///
 /// Designed for cache-friendly traversal: the struct is small (≈56 bytes on
@@ -87,10 +83,6 @@ pub struct EdgeWeight {
     /// Index into the `OmtsFile::edges` vector for the full deserialized edge.
     pub data_index: usize,
 }
-
-// ---------------------------------------------------------------------------
-// Error type
-// ---------------------------------------------------------------------------
 
 /// Errors that can occur during graph construction from an [`OmtsFile`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,10 +124,6 @@ impl std::fmt::Display for GraphBuildError {
 }
 
 impl std::error::Error for GraphBuildError {}
-
-// ---------------------------------------------------------------------------
-// OmtsGraph
-// ---------------------------------------------------------------------------
 
 /// A directed labeled property multigraph built from an [`OmtsFile`].
 ///
@@ -206,10 +194,6 @@ impl OmtsGraph {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Construction
-// ---------------------------------------------------------------------------
-
 /// Constructs an [`OmtsGraph`] from a deserialized [`OmtsFile`].
 ///
 /// Construction is O(N + E) where N is node count and E is edge count.
@@ -242,7 +226,6 @@ pub fn build_graph(file: &OmtsFile) -> Result<OmtsGraph, GraphBuildError> {
     let mut nodes_by_type: HashMap<NodeTypeTag, Vec<NodeIndex>> = HashMap::new();
     let mut edges_by_type: HashMap<EdgeTypeTag, Vec<EdgeIndex>> = HashMap::new();
 
-    // Pass 1: insert all nodes.
     for (data_index, node) in file.nodes.iter().enumerate() {
         let local_id = node.id.to_string();
 
@@ -264,7 +247,6 @@ pub fn build_graph(file: &OmtsFile) -> Result<OmtsGraph, GraphBuildError> {
             .push(idx);
     }
 
-    // Pass 2: insert all edges.
     for (data_index, edge) in file.edges.iter().enumerate() {
         let edge_id = edge.id.to_string();
         let source_id = edge.source.to_string();
@@ -305,10 +287,6 @@ pub fn build_graph(file: &OmtsFile) -> Result<OmtsGraph, GraphBuildError> {
     })
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -318,10 +296,6 @@ mod tests {
     use crate::file::OmtsFile;
     use crate::newtypes::{CalendarDate, EdgeId, FileSalt, NodeId, SemVer};
     use crate::structures::{Edge, EdgeProperties, Node};
-
-    // -----------------------------------------------------------------------
-    // Fixture helpers
-    // -----------------------------------------------------------------------
 
     const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
@@ -461,10 +435,6 @@ mod tests {
             extra: serde_json::Map::new(),
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Tests
-    // -----------------------------------------------------------------------
 
     /// An empty file (no nodes, no edges) builds successfully.
     #[test]

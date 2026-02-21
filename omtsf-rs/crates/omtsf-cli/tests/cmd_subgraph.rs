@@ -23,10 +23,6 @@ fn fixture(name: &str) -> PathBuf {
     path
 }
 
-// ---------------------------------------------------------------------------
-// subgraph: basic extraction
-// ---------------------------------------------------------------------------
-
 #[test]
 fn subgraph_single_node_exits_0() {
     let out = Command::new(omtsf_bin())
@@ -69,7 +65,6 @@ fn subgraph_output_is_valid_omts_file() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     let value: serde_json::Value =
         serde_json::from_str(stdout.trim()).expect("valid JSON from subgraph");
-    // A valid .omts file has omtsf_version, snapshot_date, file_salt, nodes, edges.
     assert!(
         value.get("omtsf_version").is_some(),
         "missing omtsf_version"
@@ -85,7 +80,6 @@ fn subgraph_output_is_valid_omts_file() {
 
 #[test]
 fn subgraph_two_nodes_includes_edge_between_them() {
-    // org-a and org-b have edge e-ab between them.
     let out = Command::new(omtsf_bin())
         .args([
             "subgraph",
@@ -112,7 +106,6 @@ fn subgraph_two_nodes_includes_edge_between_them() {
 
 #[test]
 fn subgraph_two_non_adjacent_nodes_has_no_edges() {
-    // org-a and org-d are not directly connected (3 hops apart).
     let out = Command::new(omtsf_bin())
         .args([
             "subgraph",
@@ -133,14 +126,8 @@ fn subgraph_two_non_adjacent_nodes_has_no_edges() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// subgraph: --expand flag
-// ---------------------------------------------------------------------------
-
 #[test]
 fn subgraph_expand_1_includes_neighbours() {
-    // Starting from org-b with expand=1, we get org-b plus its 1-hop both-direction
-    // neighbours: org-a (incoming) and org-c (outgoing).
     let out = Command::new(omtsf_bin())
         .args([
             "subgraph",
@@ -159,7 +146,6 @@ fn subgraph_expand_1_includes_neighbours() {
     let nodes = value["nodes"].as_array().expect("nodes array");
     let node_ids: Vec<&str> = nodes.iter().filter_map(|n| n["id"].as_str()).collect();
 
-    // org-b (center), org-a (incoming 1 hop), org-c (outgoing 1 hop).
     assert!(node_ids.contains(&"org-b"), "org-b must be present");
     assert!(
         node_ids.contains(&"org-a"),
@@ -173,7 +159,6 @@ fn subgraph_expand_1_includes_neighbours() {
 
 #[test]
 fn subgraph_expand_0_is_same_as_no_expand() {
-    // --expand 0 is the default; should be identical to omitting the flag.
     let out_default = Command::new(omtsf_bin())
         .args([
             "subgraph",
@@ -201,10 +186,6 @@ fn subgraph_expand_0_is_same_as_no_expand() {
         "expand 0 == default"
     );
 }
-
-// ---------------------------------------------------------------------------
-// subgraph: error cases
-// ---------------------------------------------------------------------------
 
 #[test]
 fn subgraph_unknown_node_exits_1() {

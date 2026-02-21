@@ -10,10 +10,6 @@ use std::path::PathBuf;
 
 use omtsf_core::OmtsFile;
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/fixtures")
@@ -39,10 +35,6 @@ fn round_trip(f: &OmtsFile, label: &str) {
     assert_eq!(*f, back, "{label}: round-trip produced a different value");
 }
 
-// ---------------------------------------------------------------------------
-// Fixture: minimal.omts
-// ---------------------------------------------------------------------------
-
 /// Parse `minimal.omts` as a typed [`OmtsFile`] and verify required fields.
 #[test]
 fn parse_minimal_fixture() {
@@ -59,7 +51,6 @@ fn parse_minimal_fixture() {
     );
     assert!(!f.file_salt.is_empty(), "file_salt must be non-empty");
 
-    // Minimal fixture has one org node and no edges.
     assert_eq!(
         f.nodes.len(),
         1,
@@ -67,16 +58,11 @@ fn parse_minimal_fixture() {
     );
     assert!(f.edges.is_empty(), "minimal fixture should have no edges");
 
-    // The single node must have a valid type.
     let node = &f.nodes[0];
     assert_eq!(&*node.id, "org-acme");
 
     round_trip(&f, "minimal.omts");
 }
-
-// ---------------------------------------------------------------------------
-// Fixture: full-featured.omts
-// ---------------------------------------------------------------------------
 
 /// Parse `full-featured.omts` as a typed [`OmtsFile`] and verify a rich graph.
 #[test]
@@ -84,7 +70,6 @@ fn parse_full_featured_fixture() {
     let content = read_fixture("full-featured.omts");
     let f = parse(&content, "full-featured.omts");
 
-    // Top-level optional fields.
     assert!(
         f.disclosure_scope.is_some(),
         "disclosure_scope should be set"
@@ -98,14 +83,12 @@ fn parse_full_featured_fixture() {
         "snapshot_sequence should be set"
     );
 
-    // Graph must be non-trivial.
     assert!(
         f.nodes.len() > 1,
         "full-featured fixture must have multiple nodes"
     );
     assert!(!f.edges.is_empty(), "full-featured fixture must have edges");
 
-    // Verify that diverse node types are present.
     use omtsf_core::enums::{NodeType, NodeTypeTag};
     let types_present: Vec<&NodeTypeTag> = f.nodes.iter().map(|n| &n.node_type).collect();
     assert!(
@@ -121,7 +104,6 @@ fn parse_full_featured_fixture() {
         "must include a good node"
     );
 
-    // Verify diverse edge types.
     use omtsf_core::enums::{EdgeType, EdgeTypeTag};
     let edge_types: Vec<&EdgeTypeTag> = f.edges.iter().map(|e| &e.edge_type).collect();
     assert!(
@@ -133,7 +115,6 @@ fn parse_full_featured_fixture() {
         "must include a supplies edge"
     );
 
-    // Spot-check identifiers on the first organisation node.
     let org_alpha = f
         .nodes
         .iter()
@@ -145,7 +126,6 @@ fn parse_full_featured_fixture() {
         .expect("org-alpha should have identifiers");
     assert!(ids.len() >= 2, "org-alpha should have multiple identifiers");
 
-    // Spot-check data quality.
     let dq = org_alpha
         .data_quality
         .as_ref()
@@ -157,10 +137,6 @@ fn parse_full_featured_fixture() {
 
     round_trip(&f, "full-featured.omts");
 }
-
-// ---------------------------------------------------------------------------
-// Fixture: extension-types.omts
-// ---------------------------------------------------------------------------
 
 /// Parse `extension-types.omts` as a typed [`OmtsFile`].
 ///
@@ -175,7 +151,6 @@ fn parse_extension_types_fixture() {
     let content = read_fixture("extension-types.omts");
     let f = parse(&content, "extension-types.omts");
 
-    // Unknown top-level fields must be preserved.
     assert!(
         f.extra.contains_key("x_producer"),
         "x_producer should be captured in OmtsFile::extra"
@@ -185,7 +160,6 @@ fn parse_extension_types_fixture() {
         "x_schema_hint should be captured in OmtsFile::extra"
     );
 
-    // Must have extension-typed nodes.
     use omtsf_core::enums::NodeTypeTag;
     let ext_nodes: Vec<_> = f
         .nodes
@@ -198,7 +172,6 @@ fn parse_extension_types_fixture() {
         ext_nodes.len()
     );
 
-    // Check the custom-site extension node has its extra fields.
     let custom_site = f
         .nodes
         .iter()
@@ -217,7 +190,6 @@ fn parse_extension_types_fixture() {
         "x_site_metadata should be in node extra"
     );
 
-    // Must have extension-typed edges.
     use omtsf_core::enums::EdgeTypeTag;
     let ext_edges: Vec<_> = f
         .edges
@@ -230,7 +202,6 @@ fn parse_extension_types_fixture() {
         ext_edges.len()
     );
 
-    // Check the carbon-link extension edge has extra fields preserved.
     let carbon_edge = f
         .edges
         .iter()
@@ -245,12 +216,10 @@ fn parse_extension_types_fixture() {
         "x_link_basis should be in edge extra"
     );
 
-    // Edge properties extra fields are also preserved.
     assert!(
         carbon_edge.properties.extra.contains_key("x_methodology"),
         "x_methodology should be in EdgeProperties::extra"
     );
 
-    // Full round-trip must preserve all extension and unknown data.
     round_trip(&f, "extension-types.omts");
 }

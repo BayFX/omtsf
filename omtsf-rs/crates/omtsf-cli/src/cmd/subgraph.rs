@@ -22,10 +22,6 @@ use omtsf_core::newtypes::CalendarDate;
 use crate::cmd::init::today_string;
 use crate::error::CliError;
 
-// ---------------------------------------------------------------------------
-// run
-// ---------------------------------------------------------------------------
-
 /// Runs the `subgraph` command.
 ///
 /// Parses `content` as an OMTSF file, builds the graph, and extracts the
@@ -50,17 +46,12 @@ pub fn run(content: &str, node_ids: &[String], expand: u32) -> Result<(), CliErr
     })?;
 
     let mut subgraph_file = if expand == 0 {
-        // No expansion: plain induced subgraph.
         let id_refs: Vec<&str> = node_ids.iter().map(String::as_str).collect();
         induced_subgraph(&graph, &file, &id_refs).map_err(query_error_to_cli)?
     } else {
-        // Expansion: compute the union of ego-graphs for each listed node,
-        // then take the induced subgraph of that union.
         compute_expanded_subgraph(&graph, &file, node_ids, expand)?
     };
 
-    // Update the snapshot_date to today per the CLI spec: "The output header
-    // is copied from the input with an updated snapshot_date."
     let today = today_string().map_err(|e| CliError::IoError {
         source: "system clock".to_owned(),
         detail: e,
@@ -80,10 +71,6 @@ pub fn run(content: &str, node_ids: &[String], expand: u32) -> Result<(), CliErr
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Expanded subgraph helper
-// ---------------------------------------------------------------------------
-
 /// Computes the induced subgraph after expanding each node in `node_ids` by
 /// `expand` hops in both directions.
 ///
@@ -100,7 +87,6 @@ fn compute_expanded_subgraph(
 ) -> Result<OmtsFile, CliError> {
     use std::collections::HashSet;
 
-    // Validate that all requested nodes exist before beginning expansion.
     for id in node_ids {
         if graph.node_index(id).is_none() {
             return Err(CliError::NodeNotFound {
@@ -109,7 +95,6 @@ fn compute_expanded_subgraph(
         }
     }
 
-    // Collect the union of all expanded node IDs.
     let mut expanded_ids: HashSet<String> = HashSet::new();
 
     for id in node_ids {
@@ -120,14 +105,9 @@ fn compute_expanded_subgraph(
         }
     }
 
-    // Extract the induced subgraph of the union.
     let id_refs: Vec<&str> = expanded_ids.iter().map(String::as_str).collect();
     induced_subgraph(graph, file, &id_refs).map_err(query_error_to_cli)
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /// Converts a [`QueryError`] to the appropriate [`CliError`].
 fn query_error_to_cli(e: QueryError) -> CliError {

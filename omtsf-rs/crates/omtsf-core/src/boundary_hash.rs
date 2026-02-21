@@ -16,10 +16,6 @@ use sha2::{Digest, Sha256};
 use crate::canonical::CanonicalId;
 use crate::newtypes::FileSalt;
 
-// ---------------------------------------------------------------------------
-// Error type
-// ---------------------------------------------------------------------------
-
 /// Errors that can occur when computing a boundary reference value.
 #[derive(Debug)]
 pub enum BoundaryHashError {
@@ -39,10 +35,6 @@ impl fmt::Display for BoundaryHashError {
 }
 
 impl std::error::Error for BoundaryHashError {}
-
-// ---------------------------------------------------------------------------
-// Hex helpers (no external `hex` crate to keep WASM deps minimal)
-// ---------------------------------------------------------------------------
 
 /// Encodes a byte slice as a lowercase hexadecimal string.
 fn hex_encode(bytes: &[u8]) -> String {
@@ -90,10 +82,6 @@ fn hex_nibble(b: u8) -> Option<u8> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
 /// Computes the boundary reference value for a node given its public
 /// canonical identifiers and the decoded 32-byte file salt.
 ///
@@ -119,7 +107,6 @@ pub fn boundary_ref_value(
         return Ok(hex_encode(&buf));
     }
 
-    // Sort canonical strings by UTF-8 byte order (plain lexicographic on &str).
     let mut canonicals: Vec<&str> = public_ids.iter().map(CanonicalId::as_str).collect();
     canonicals.sort_unstable();
 
@@ -162,10 +149,6 @@ pub fn generate_file_salt() -> Result<FileSalt, BoundaryHashError> {
     FileSalt::try_from(hex.as_str()).map_err(|e| BoundaryHashError::InvalidSalt(e.to_string()))
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -198,18 +181,6 @@ mod tests {
         CanonicalId::from_identifier(&id)
     }
 
-    // -----------------------------------------------------------------------
-    // TV1: Multiple public identifiers, one restricted (excluded by caller)
-    // -----------------------------------------------------------------------
-    //
-    // Public identifiers: lei:5493006MHB84DD0ZWV18, duns:081466849
-    // (vat:DE:DE123456789 is restricted and excluded before this function)
-    // Canonical strings (after from_identifier):
-    //   "duns:081466849", "lei:5493006MHB84DD0ZWV18"
-    // Sorted:  "duns:081466849" < "lei:5493006MHB84DD0ZWV18"  (d < l in ASCII)
-    // Joined:  "duns:081466849\nlei:5493006MHB84DD0ZWV18"
-    // Expected SHA-256: e8798687b081da98b7cd1c4e5e2423bd3214fbab0f1f476a2dcdbf67c2e21141
-
     #[test]
     fn tv1_multiple_public_identifiers() {
         let ids = vec![
@@ -223,14 +194,6 @@ mod tests {
         );
     }
 
-    // -----------------------------------------------------------------------
-    // TV2: Single identifier
-    // -----------------------------------------------------------------------
-    //
-    // Canonical: "lei:5493006MHB84DD0ZWV18"
-    // Joined:    "lei:5493006MHB84DD0ZWV18"
-    // Expected SHA-256: 7849e55c4381ba852a2ada50f15e58d871de085893b7be8826f75560854c78c8
-
     #[test]
     fn tv2_single_identifier() {
         let ids = vec![make_id("lei", "5493006MHB84DD0ZWV18", None)];
@@ -240,15 +203,6 @@ mod tests {
             "7849e55c4381ba852a2ada50f15e58d871de085893b7be8826f75560854c78c8"
         );
     }
-
-    // -----------------------------------------------------------------------
-    // TV3: Identifier requiring percent-encoding
-    // -----------------------------------------------------------------------
-    //
-    // nat-reg with authority=RA000548, value="HRB:86891"
-    // The colon in the value is percent-encoded → canonical: "nat-reg:RA000548:HRB%3A86891"
-    // Joined:    "nat-reg:RA000548:HRB%3A86891"
-    // Expected SHA-256: 7b33571d3bba150f4dfd9609c38b4f9acc9a3a8dbfa3121418a35264562ca5d9
 
     #[test]
     fn tv3_percent_encoded_identifier() {
@@ -260,13 +214,6 @@ mod tests {
             "7b33571d3bba150f4dfd9609c38b4f9acc9a3a8dbfa3121418a35264562ca5d9"
         );
     }
-
-    // -----------------------------------------------------------------------
-    // TV4: No public identifiers — random CSPRNG token
-    // -----------------------------------------------------------------------
-    //
-    // internal and vat identifiers are excluded before calling this function.
-    // Result must be a 64-character lowercase hex string; value is non-deterministic.
 
     #[test]
     fn tv4_no_public_identifiers_returns_64_hex_chars() {
@@ -281,10 +228,6 @@ mod tests {
         );
     }
 
-    // -----------------------------------------------------------------------
-    // TV4 variant: two calls produce different random tokens
-    // -----------------------------------------------------------------------
-
     #[test]
     fn tv4_random_tokens_differ() {
         let r1 = boundary_ref_value(&[], &test_salt()).expect("CSPRNG succeeds");
@@ -292,10 +235,6 @@ mod tests {
         // 2^-256 collision probability; will never fail in practice.
         assert_ne!(r1, r2, "two random tokens should differ");
     }
-
-    // -----------------------------------------------------------------------
-    // Sorting: input order must not affect the hash
-    // -----------------------------------------------------------------------
 
     #[test]
     fn deterministic_regardless_of_input_order() {
@@ -313,10 +252,6 @@ mod tests {
         assert_eq!(r1, r2);
     }
 
-    // -----------------------------------------------------------------------
-    // decode_salt: FileSalt round-trip
-    // -----------------------------------------------------------------------
-
     #[test]
     fn decode_salt_round_trip() {
         let fs = FileSalt::try_from(TEST_SALT_HEX).expect("valid FileSalt");
@@ -326,10 +261,6 @@ mod tests {
         assert_eq!(bytes[2], 0x22);
         assert_eq!(bytes[31], 0xff);
     }
-
-    // -----------------------------------------------------------------------
-    // hex_encode: basic sanity checks
-    // -----------------------------------------------------------------------
 
     #[test]
     fn hex_encode_all_zeros() {
@@ -345,10 +276,6 @@ mod tests {
     fn hex_encode_mixed_bytes() {
         assert_eq!(hex_encode(&[0xde, 0xad, 0xbe, 0xef]), "deadbeef");
     }
-
-    // -----------------------------------------------------------------------
-    // hex_decode_salt: error cases
-    // -----------------------------------------------------------------------
 
     #[test]
     fn hex_decode_salt_rejects_too_short() {
@@ -382,10 +309,6 @@ mod tests {
         let result = hex_decode_salt(&zeros).expect("all zeros is valid");
         assert_eq!(result, [0u8; 32]);
     }
-
-    // -----------------------------------------------------------------------
-    // BoundaryHashError display
-    // -----------------------------------------------------------------------
 
     #[test]
     fn error_invalid_salt_display() {

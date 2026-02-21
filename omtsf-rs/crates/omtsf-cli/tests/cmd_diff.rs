@@ -24,10 +24,6 @@ fn fixture(name: &str) -> PathBuf {
     path
 }
 
-// ---------------------------------------------------------------------------
-// diff: identical files (exit 0)
-// ---------------------------------------------------------------------------
-
 /// Diffing a file against itself must exit 0 (no differences).
 #[test]
 fn diff_identical_files_exits_0() {
@@ -73,10 +69,6 @@ fn diff_identical_files_summary_shows_zero_changes() {
         "summary should show 0 modified; stdout: {stdout}"
     );
 }
-
-// ---------------------------------------------------------------------------
-// diff: differing files (exit 1)
-// ---------------------------------------------------------------------------
 
 /// Diffing two files with different node names must exit 1 (differences found).
 #[test]
@@ -132,10 +124,6 @@ fn diff_modified_files_output_contains_summary() {
         "output should contain Summary line; stdout: {stdout}"
     );
 }
-
-// ---------------------------------------------------------------------------
-// diff: parse failure (exit 2)
-// ---------------------------------------------------------------------------
 
 /// Diffing a non-JSON file must exit 2.
 #[test]
@@ -195,10 +183,6 @@ fn diff_nonexistent_file_exits_2() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// diff: --ids-only flag
-// ---------------------------------------------------------------------------
-
 /// `--ids-only` must still exit 1 when there are differences.
 #[test]
 fn diff_ids_only_exits_1_for_differences() {
@@ -238,10 +222,6 @@ fn diff_ids_only_output_contains_node_id() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// diff: --summary-only flag
-// ---------------------------------------------------------------------------
-
 /// `--summary-only` must still exit 1 when there are differences.
 #[test]
 fn diff_summary_only_exits_1_for_differences() {
@@ -279,10 +259,6 @@ fn diff_summary_only_output_contains_summary_line() {
         "output should contain Summary line; stdout: {stdout}"
     );
 }
-
-// ---------------------------------------------------------------------------
-// diff: --format json
-// ---------------------------------------------------------------------------
 
 /// JSON output for identical files must be valid JSON and contain a summary.
 #[test]
@@ -343,10 +319,6 @@ fn diff_json_modified_files_exits_1_and_is_valid_json() {
         "expected at least 1 modified node; obj: {obj}"
     );
 }
-
-// ---------------------------------------------------------------------------
-// diff: writes to stdout
-// ---------------------------------------------------------------------------
 
 /// Human mode output must go to stdout, not stderr.
 #[test]

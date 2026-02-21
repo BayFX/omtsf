@@ -23,10 +23,6 @@ use crate::OutputFormat;
 use crate::cmd::selectors::build_selector_set;
 use crate::error::CliError;
 
-// ---------------------------------------------------------------------------
-// run
-// ---------------------------------------------------------------------------
-
 /// Runs the `query` command.
 ///
 /// Parses `content` as an OMTSF file, builds a [`SelectorSet`] from the
@@ -92,8 +88,6 @@ pub fn run(
         });
     }
 
-    // Emit diagnostic counts to stderr (suppressed by --quiet at the dispatch level,
-    // but the spec says to report to stderr so we always write here).
     eprintln!("matched: {node_count} node(s), {edge_count} edge(s)");
 
     let stdout = std::io::stdout();
@@ -122,10 +116,6 @@ pub fn run(
     })
 }
 
-// ---------------------------------------------------------------------------
-// Output: human mode
-// ---------------------------------------------------------------------------
-
 /// Writes matched nodes and edges as a tab-separated table.
 ///
 /// Columns: `KIND`, `ID`, `TYPE`, `NAME/ENDPOINT`
@@ -134,7 +124,6 @@ fn print_human<W: std::io::Write>(
     nodes: &[&omtsf_core::Node],
     edges: &[&omtsf_core::Edge],
 ) -> std::io::Result<()> {
-    // Header
     writeln!(w, "KIND\tID\tTYPE\tNAME/ENDPOINT")?;
 
     for node in nodes {
@@ -155,10 +144,6 @@ fn print_human<W: std::io::Write>(
 
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// Output: JSON mode
-// ---------------------------------------------------------------------------
 
 /// Writes matched nodes and edges as a JSON object.
 ///
@@ -190,20 +175,13 @@ fn print_json<W: std::io::Write>(
     writeln!(w, "{json}")
 }
 
-// ---------------------------------------------------------------------------
-// Display helpers
-// ---------------------------------------------------------------------------
-
 /// Returns a display string for a [`omtsf_core::NodeTypeTag`].
 fn node_type_display(tag: &omtsf_core::NodeTypeTag) -> String {
     match tag {
-        omtsf_core::NodeTypeTag::Known(t) => {
-            // Re-serialize via serde to get the snake_case string.
-            serde_json::to_value(t)
-                .ok()
-                .and_then(|v| v.as_str().map(str::to_owned))
-                .unwrap_or_else(|| format!("{t:?}"))
-        }
+        omtsf_core::NodeTypeTag::Known(t) => serde_json::to_value(t)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_owned))
+            .unwrap_or_else(|| format!("{t:?}")),
         omtsf_core::NodeTypeTag::Extension(s) => s.clone(),
     }
 }
@@ -219,10 +197,6 @@ fn edge_type_display(tag: &omtsf_core::EdgeTypeTag) -> String {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -230,8 +204,6 @@ mod tests {
 
     use super::*;
     use crate::OutputFormat;
-
-    // Minimal valid .omts JSON with one organization node and one supplies edge.
     const SAMPLE_FILE: &str = r#"{
         "omtsf_version": "1.0.0",
         "snapshot_date": "2026-02-19",
@@ -252,8 +224,6 @@ mod tests {
     fn strs(v: &[&str]) -> Vec<String> {
         v.iter().map(std::string::ToString::to_string).collect()
     }
-
-    // ── basic matching ────────────────────────────────────────────────────────
 
     /// Matching by node type returns exit code 0.
     #[test]
@@ -380,8 +350,6 @@ mod tests {
         assert_eq!(err.exit_code(), 2);
     }
 
-    // ── print_human table format ──────────────────────────────────────────────
-
     /// Human output table includes the KIND, ID, TYPE, NAME/ENDPOINT header.
     #[test]
     fn test_human_output_contains_header() {
@@ -426,8 +394,6 @@ mod tests {
         assert!(output.contains("org-1"), "should contain source");
         assert!(output.contains("org-2"), "should contain target");
     }
-
-    // ── print_json format ─────────────────────────────────────────────────────
 
     /// JSON output is a valid JSON object with `nodes` and `edges` arrays.
     #[test]

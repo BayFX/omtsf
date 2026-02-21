@@ -37,10 +37,6 @@ use crate::graph::OmtsGraph;
 use crate::graph::queries::{Direction, QueryError};
 use crate::graph::selectors::SelectorSet;
 
-// ---------------------------------------------------------------------------
-// induced_subgraph
-// ---------------------------------------------------------------------------
-
 /// Extracts the induced subgraph for the given set of node IDs.
 ///
 /// The induced subgraph contains exactly the specified nodes and every edge
@@ -74,8 +70,6 @@ pub fn induced_subgraph(
     file: &OmtsFile,
     node_ids: &[&str],
 ) -> Result<OmtsFile, QueryError> {
-    // Step 1: resolve all string IDs to NodeIndex values, failing fast on any
-    // unknown ID.
     let mut index_set: HashSet<NodeIndex> = HashSet::with_capacity(node_ids.len());
     for &id in node_ids {
         let idx = *graph
@@ -86,10 +80,6 @@ pub fn induced_subgraph(
 
     assemble_subgraph(graph, file, &index_set)
 }
-
-// ---------------------------------------------------------------------------
-// ego_graph
-// ---------------------------------------------------------------------------
 
 /// Extracts the ego-graph: the induced subgraph of all nodes within `radius`
 /// hops of `center`.
@@ -125,8 +115,6 @@ pub fn ego_graph(
         .node_index(center)
         .ok_or_else(|| QueryError::NodeNotFound(center.to_owned()))?;
 
-    // Bounded BFS: collect all nodes within `radius` hops of `center`.
-    // Each queue entry is (node_index, hops_used_so_far).
     let mut visited: HashSet<NodeIndex> = HashSet::new();
     let mut queue: VecDeque<(NodeIndex, usize)> = VecDeque::new();
 
@@ -135,7 +123,6 @@ pub fn ego_graph(
 
     while let Some((current, hops)) = queue.pop_front() {
         if hops >= radius {
-            // Do not expand further; already at the radius boundary.
             continue;
         }
 
@@ -182,10 +169,6 @@ pub fn ego_graph(
 
     assemble_subgraph(graph, file, &visited)
 }
-
-// ---------------------------------------------------------------------------
-// selector_match
-// ---------------------------------------------------------------------------
 
 /// Result of a [`selector_match`] scan.
 ///
@@ -243,10 +226,6 @@ pub fn selector_match(file: &OmtsFile, selectors: &SelectorSet) -> SelectorMatch
     result
 }
 
-// ---------------------------------------------------------------------------
-// selector_subgraph
-// ---------------------------------------------------------------------------
-
 /// Extracts a subgraph based on selector predicates.
 ///
 /// The extraction runs in four sequential phases:
@@ -290,9 +269,6 @@ pub fn selector_subgraph(
         return assemble_subgraph(graph, file, &all_nodes);
     }
 
-    // Phase 1: Seed scan — find matching nodes and edges.
-    // Fast path: when the only node-applicable selectors are node_types,
-    // use the type index instead of scanning all nodes.
     let mut seed_nodes: HashSet<NodeIndex> = HashSet::new();
 
     if selectors.has_node_selectors() {
@@ -313,9 +289,6 @@ pub fn selector_subgraph(
         }
     }
 
-    // Collect matching edge indices so we can resolve endpoints in phase 2.
-    // Fast path: when the only edge-applicable selectors are edge_types,
-    // use the type index instead of scanning all edges.
     let mut seed_edge_node_ids: Vec<(String, String)> = Vec::new();
     let mut any_edge_matched = false;
 
@@ -348,8 +321,6 @@ pub fn selector_subgraph(
         return Err(QueryError::EmptyResult);
     }
 
-    // Phase 2: Seed edge resolution — add source/target of matched edges to
-    // seed_nodes so they participate in BFS expansion.
     for (source_id, target_id) in &seed_edge_node_ids {
         if let Some(&idx) = graph.node_index(source_id.as_str()) {
             seed_nodes.insert(idx);
@@ -359,8 +330,6 @@ pub fn selector_subgraph(
         }
     }
 
-    // Phase 3: BFS expansion — expand `expand` hops from seed_nodes treating
-    // the graph as undirected (Direction::Both), mirroring ego_graph.
     let mut visited: HashSet<NodeIndex> = seed_nodes.clone();
     let mut queue: VecDeque<(NodeIndex, usize)> =
         seed_nodes.iter().map(|&idx| (idx, 0usize)).collect();
@@ -373,7 +342,6 @@ pub fn selector_subgraph(
         }
         let next_hops = hops + 1;
 
-        // Outgoing neighbours
         for edge_ref in g.edges(current) {
             let neighbour = edge_ref.target();
             if !visited.contains(&neighbour) {
@@ -381,7 +349,6 @@ pub fn selector_subgraph(
                 queue.push_back((neighbour, next_hops));
             }
         }
-        // Incoming neighbours
         for edge_ref in g.edges_directed(current, petgraph::Direction::Incoming) {
             let neighbour = edge_ref.source();
             if !visited.contains(&neighbour) {
@@ -391,13 +358,8 @@ pub fn selector_subgraph(
         }
     }
 
-    // Phase 4: Induced subgraph assembly.
     assemble_subgraph(graph, file, &visited)
 }
-
-// ---------------------------------------------------------------------------
-// Internal: type-index eligibility checks
-// ---------------------------------------------------------------------------
 
 /// Returns `true` when `node_types` is the only non-empty node-applicable
 /// selector group, allowing the type index to replace a full linear scan.
@@ -417,10 +379,6 @@ fn can_use_edge_type_index(ss: &SelectorSet) -> bool {
     !ss.edge_types.is_empty() && ss.label_keys.is_empty() && ss.label_key_values.is_empty()
 }
 
-// ---------------------------------------------------------------------------
-// Internal: assemble OmtsFile from a NodeIndex set
-// ---------------------------------------------------------------------------
-
 /// Assembles an [`OmtsFile`] from a set of included [`NodeIndex`] values.
 ///
 /// Iterates all edges in the graph; includes an edge in the output only if
@@ -436,8 +394,6 @@ fn assemble_subgraph(
 ) -> Result<OmtsFile, QueryError> {
     let g = graph.graph();
 
-    // Build the set of data_indices for included nodes so we can look up
-    // membership when filtering the file.nodes Vec.
     let mut included_data_indices: HashSet<usize> = HashSet::with_capacity(index_set.len());
     for &idx in index_set {
         if let Some(weight) = graph.node_weight(idx) {
@@ -445,7 +401,6 @@ fn assemble_subgraph(
         }
     }
 
-    // Collect included nodes in original order (preserving file.nodes ordering).
     let nodes: Vec<crate::structures::Node> = file
         .nodes
         .iter()
@@ -454,9 +409,6 @@ fn assemble_subgraph(
         .map(|(_, node)| node.clone())
         .collect();
 
-    // Collect included edges: only edges whose both endpoints are in index_set.
-    // Instead of scanning ALL edges in the graph, iterate only outgoing edges
-    // of included nodes — O(sum of out-degrees of included nodes) vs O(E_total).
     let mut included_edge_data_indices: HashSet<usize> = HashSet::new();
     for &node_idx in index_set {
         for edge_ref in g.edges(node_idx) {
@@ -474,8 +426,6 @@ fn assemble_subgraph(
         .map(|(_, edge)| edge.clone())
         .collect();
 
-    // Determine whether to retain reporting_entity.
-    // Build a set of included node ID strings for O(1) lookup.
     let included_node_ids: HashSet<String> = nodes.iter().map(|n| n.id.to_string()).collect();
     let reporting_entity = file.reporting_entity.as_ref().and_then(|re_id| {
         if included_node_ids.contains(&re_id.to_string()) {
@@ -499,10 +449,6 @@ fn assemble_subgraph(
     })
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -513,10 +459,6 @@ mod tests {
     use crate::graph::build_graph;
     use crate::newtypes::{CalendarDate, EdgeId, FileSalt, NodeId, SemVer};
     use crate::structures::{Edge, EdgeProperties, Node};
-
-    // -----------------------------------------------------------------------
-    // Fixture helpers
-    // -----------------------------------------------------------------------
 
     const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
@@ -617,10 +559,6 @@ mod tests {
             extra: serde_json::Map::new(),
         }
     }
-
-    // -----------------------------------------------------------------------
-    // induced_subgraph tests
-    // -----------------------------------------------------------------------
 
     /// Extract a known subset from a linear chain; verify nodes and edges.
     #[test]
@@ -803,10 +741,6 @@ mod tests {
         assert_eq!(sub.nodes.len(), 0);
         assert_eq!(sub.edges.len(), 0);
     }
-
-    // -----------------------------------------------------------------------
-    // ego_graph tests
-    // -----------------------------------------------------------------------
 
     /// Ego-graph with radius 0 returns only the center node (no edges to others).
     #[test]
@@ -1044,10 +978,6 @@ mod tests {
         assert_eq!(sub, back);
     }
 
-    // -----------------------------------------------------------------------
-    // Selector test helpers
-    // -----------------------------------------------------------------------
-
     use crate::graph::selectors::{Selector, SelectorSet};
     use crate::newtypes::CountryCode;
     use crate::types::{Identifier, Label};
@@ -1116,10 +1046,6 @@ mod tests {
             extra: serde_json::Map::new(),
         }
     }
-
-    // -----------------------------------------------------------------------
-    // selector_match tests
-    // -----------------------------------------------------------------------
 
     /// `selector_match` with `NodeType` selector returns matching node indices.
     #[test]
@@ -1290,10 +1216,6 @@ mod tests {
         assert_eq!(result.node_indices, vec![0, 1]);
         assert_eq!(result.edge_indices, vec![0]);
     }
-
-    // -----------------------------------------------------------------------
-    // selector_subgraph tests
-    // -----------------------------------------------------------------------
 
     /// `selector_subgraph` with expand=0 returns seed nodes and their incident edges.
     #[test]

@@ -20,10 +20,6 @@ use omtsf_core::graph::{QueryError, build_graph, selector_subgraph};
 use crate::cmd::selectors::build_selector_set;
 use crate::error::CliError;
 
-// ---------------------------------------------------------------------------
-// run
-// ---------------------------------------------------------------------------
-
 /// Runs the `extract-subchain` command.
 ///
 /// Parses `content` as an OMTSF file, builds a [`SelectorSet`] from the
@@ -82,18 +78,12 @@ pub fn run(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
     #![allow(clippy::panic)]
 
     use super::*;
-
-    // Minimal valid .omts JSON: two organization nodes, one facility, plus edges.
     const SAMPLE_FILE: &str = r#"{
         "omtsf_version": "1.0.0",
         "snapshot_date": "2026-02-19",
@@ -116,8 +106,6 @@ mod tests {
     fn strs(v: &[&str]) -> Vec<String> {
         v.iter().map(std::string::ToString::to_string).collect()
     }
-
-    // ── basic success cases ───────────────────────────────────────────────────
 
     /// Selecting organizations with expand=0 produces a valid .omts file.
     #[test]
@@ -170,8 +158,6 @@ mod tests {
         );
     }
 
-    // ── failure cases ─────────────────────────────────────────────────────────
-
     /// Selecting a type with no matches returns `NoResults` (exit code 1).
     #[test]
     fn test_extract_subchain_no_match_returns_exit_1() {
@@ -223,8 +209,6 @@ mod tests {
         assert_eq!(err.exit_code(), 2);
     }
 
-    // ── output is valid .omts ─────────────────────────────────────────────────
-
     /// The subgraph produced from selector extraction round-trips through serde.
     #[test]
     fn test_extract_subchain_produces_valid_omts() {
@@ -244,7 +228,6 @@ mod tests {
         let subgraph = omtsf_core::graph::selector_subgraph(&graph, &file, &selector_set, 0)
             .expect("extract subgraph");
 
-        // Round-trip through JSON to verify it is a valid OmtsFile.
         let json = serde_json::to_string_pretty(&subgraph).expect("serialize");
         let back: OmtsFile = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(back.nodes.len(), subgraph.nodes.len());

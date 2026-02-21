@@ -25,10 +25,6 @@ use crate::structures::{Edge, EdgeProperties, Node};
 use crate::types::{DataQuality, Identifier, Label};
 use crate::union_find::UnionFind;
 
-// ---------------------------------------------------------------------------
-// Internal serialization helper
-// ---------------------------------------------------------------------------
-
 /// Serializes a type-tag enum (which implements `Serialize` to a JSON string)
 /// and returns the unquoted string value.
 ///
@@ -41,10 +37,6 @@ fn tag_to_string<T: Serialize>(tag: &T) -> String {
         Err(_) => "<unknown>".to_owned(),
     }
 }
-
-// ---------------------------------------------------------------------------
-// Public types — lightweight references
-// ---------------------------------------------------------------------------
 
 /// A lightweight reference to a node, carrying just enough information for
 /// readable diff output without cloning the full [`Node`].
@@ -92,10 +84,6 @@ impl EdgeRef {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Property/identifier/label change types
-// ---------------------------------------------------------------------------
-
 /// A change to a single scalar property field.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PropertyChange {
@@ -136,10 +124,6 @@ pub struct LabelSetDiff {
     pub removed: Vec<Label>,
 }
 
-// ---------------------------------------------------------------------------
-// NodeDiff / EdgeDiff
-// ---------------------------------------------------------------------------
-
 /// Differences found between a matched pair of nodes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NodeDiff {
@@ -176,10 +160,6 @@ pub struct EdgeDiff {
     pub label_changes: LabelSetDiff,
 }
 
-// ---------------------------------------------------------------------------
-// NodesDiff / EdgesDiff
-// ---------------------------------------------------------------------------
-
 /// Classification of node differences between two files.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct NodesDiff {
@@ -206,10 +186,6 @@ pub struct EdgesDiff {
     pub unchanged: Vec<EdgeDiff>,
 }
 
-// ---------------------------------------------------------------------------
-// DiffFilter
-// ---------------------------------------------------------------------------
-
 /// Optional filter to restrict which nodes and edges are compared.
 ///
 /// Filtering by node type also filters edges: edges whose source or target
@@ -223,10 +199,6 @@ pub struct DiffFilter {
     /// Property names to exclude from comparison.
     pub ignore_fields: HashSet<String>,
 }
-
-// ---------------------------------------------------------------------------
-// DiffSummary / DiffResult
-// ---------------------------------------------------------------------------
 
 /// Summary statistics for a diff result.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -286,10 +258,6 @@ impl DiffResult {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Internal: node matching
-// ---------------------------------------------------------------------------
-
 /// Result of node matching.
 ///
 /// Contains pairs of (`a_idx`, `b_idx`) that matched, the canonical identifier
@@ -311,8 +279,6 @@ struct NodeMatchResult {
 /// via shared identifiers, computes transitive closure using union-find,
 /// detects ambiguous groups, and classifies unmatched nodes.
 fn match_nodes(nodes_a: &[Node], nodes_b: &[Node], filter: Option<&DiffFilter>) -> NodeMatchResult {
-    // --- filter helpers ---
-
     let node_type_allowed = |node: &Node| -> bool {
         match filter.and_then(|f| f.node_types.as_ref()) {
             None => true,
@@ -320,7 +286,6 @@ fn match_nodes(nodes_a: &[Node], nodes_b: &[Node], filter: Option<&DiffFilter>) 
         }
     };
 
-    // Build sets of active (filter-passing) indices.
     let active_a: Vec<usize> = (0..nodes_a.len())
         .filter(|&i| node_type_allowed(&nodes_a[i]))
         .collect();
@@ -328,41 +293,28 @@ fn match_nodes(nodes_a: &[Node], nodes_b: &[Node], filter: Option<&DiffFilter>) 
         .filter(|&i| node_type_allowed(&nodes_b[i]))
         .collect();
 
-    // Build canonical identifier indices for each file.
-    // The index maps CanonicalId → list of node ordinals within the file's slice.
     let index_a = build_identifier_index(nodes_a);
     let index_b = build_identifier_index(nodes_b);
 
-    // We need a unified node space for union-find.
-    // Assign ordinals: A nodes get [0, len_a), B nodes get [len_a, len_a+len_b).
     let len_a = nodes_a.len();
     let len_b = nodes_b.len();
     let total = len_a + len_b;
 
     let mut uf = UnionFind::new(total);
 
-    // Track which canonical keys caused each pair to match, keyed by
-    // (a_idx, b_idx) pair for later reporting.
     let mut pair_matched_by: HashMap<(usize, usize), Vec<String>> = HashMap::new();
 
-    // For each canonical key present in both indices, union all A-nodes and
-    // B-nodes that share the key.
     for (canonical_id, a_nodes) in &index_a {
         let Some(b_nodes) = index_b.get(canonical_id) else {
             continue;
         };
 
-        // We need to check identifiers_match for each (a_id, b_id) pair because
-        // the canonical index groups by key string but identifiers_match also
-        // checks authority and temporal compatibility.
         for &ai in a_nodes {
             for &bi in b_nodes {
-                // Only process active (filter-passing) nodes.
                 if !active_a.contains(&ai) || !active_b.contains(&bi) {
                     continue;
                 }
 
-                // Check if any identifier pair on these two nodes actually matches.
                 let a_node = &nodes_a[ai];
                 let b_node = &nodes_b[bi];
 
@@ -390,7 +342,6 @@ fn match_nodes(nodes_a: &[Node], nodes_b: &[Node], filter: Option<&DiffFilter>) 
                 }
 
                 if found_match {
-                    // B node ordinal is offset by len_a in the unified space.
                     uf.union(ai, len_a + bi);
                     pair_matched_by
                         .entry((ai, bi))
@@ -401,8 +352,6 @@ fn match_nodes(nodes_a: &[Node], nodes_b: &[Node], filter: Option<&DiffFilter>) 
         }
     }
 
-    // Group all elements by union-find representative.
-    // Each group maps representative → (list of a_indices, list of b_indices).
     let mut groups: HashMap<usize, (Vec<usize>, Vec<usize>)> = HashMap::new();
 
     for &ai in &active_a {
@@ -420,19 +369,14 @@ fn match_nodes(nodes_a: &[Node], nodes_b: &[Node], filter: Option<&DiffFilter>) 
     let mut warnings: Vec<String> = Vec::new();
 
     for (rep, (a_members, b_members)) in &groups {
-        let _ = rep; // representative not used directly
+        let _ = rep;
 
         match (a_members.as_slice(), b_members.as_slice()) {
-            // No match on either side — shouldn't happen since we only form groups
-            // from active nodes, but handle defensively.
             ([], []) => {}
-
-            // Only A nodes — deletions.
             (a_list, []) => {
                 unmatched_a.extend_from_slice(a_list);
             }
 
-            // Only B nodes — additions.
             ([], b_list) => {
                 unmatched_b.extend_from_slice(b_list);
             }
@@ -470,10 +414,6 @@ fn match_nodes(nodes_a: &[Node], nodes_b: &[Node], filter: Option<&DiffFilter>) 
     }
 }
 
-// ---------------------------------------------------------------------------
-// Internal: edge matching
-// ---------------------------------------------------------------------------
-
 /// Builds a map from `NodeId` string to a representative index in the unified
 /// node space `[0, len_a + len_b)`.
 ///
@@ -490,19 +430,16 @@ fn build_node_rep_map(
 
     let mut uf = UnionFind::new(total);
 
-    // Union matched pairs.
     for &(ai, bi, _) in matched_pairs {
         uf.union(ai, len_a + bi);
     }
 
     let mut map: HashMap<String, usize> = HashMap::new();
 
-    // Map A-node IDs to their representatives.
     for (ai, node) in nodes_a.iter().enumerate() {
         let rep = uf.find(ai);
         map.insert(node.id.to_string(), rep);
     }
-    // Map B-node IDs to their representatives.
     for (bi, node) in nodes_b.iter().enumerate() {
         let rep = uf.find(len_a + bi);
         map.insert(node.id.to_string(), rep);
@@ -530,7 +467,6 @@ fn match_edges(
     matched_node_pairs: &[(usize, usize, Vec<String>)],
     filter: Option<&DiffFilter>,
 ) -> (Vec<(usize, usize)>, Vec<usize>, Vec<usize>) {
-    // Build representative map.
     let (node_rep_map, _) = build_node_rep_map(nodes_a, nodes_b, matched_node_pairs);
 
     let edge_type_allowed = |edge: &Edge| -> bool {
@@ -540,13 +476,10 @@ fn match_edges(
         }
     };
 
-    // Additionally, edges whose source or target has a filtered-out node type
-    // are excluded when node_types filter is active.
     let node_type_allowed_for_id = |node_id: &NodeId| -> bool {
         match filter.and_then(|f| f.node_types.as_ref()) {
             None => true,
             Some(allowed) => {
-                // Check in A nodes first, then B nodes.
                 let id_str: &str = node_id;
                 if let Some(node) = nodes_a.iter().find(|n| &*n.id == id_str) {
                     return allowed.contains(&tag_to_string(&node.node_type));
@@ -554,7 +487,6 @@ fn match_edges(
                 if let Some(node) = nodes_b.iter().find(|n| &*n.id == id_str) {
                     return allowed.contains(&tag_to_string(&node.node_type));
                 }
-                // Unknown node ID — exclude.
                 false
             }
         }
@@ -573,13 +505,11 @@ fn match_edges(
         .filter(|&i| edge_is_active(&edges_b[i]))
         .collect();
 
-    // Resolve representatives for each edge's endpoints.
     let resolve_rep = |node_id: &NodeId| -> Option<usize> {
         let key: &str = node_id;
         node_rep_map.get(key).copied()
     };
 
-    // Group A-edges by composite key (src_rep, tgt_rep, edge_type).
     // For same_as edges, edges_match returns false, so they won't be paired.
     type EdgeKey = (usize, usize, String);
 
@@ -598,7 +528,6 @@ fn match_edges(
 
     let mut matched_pairs: Vec<(usize, usize)> = Vec::new();
     let mut unmatched_b_edges: Vec<usize> = Vec::new();
-    // Track which A-edges were consumed.
     let mut matched_a_set: HashSet<usize> = HashSet::new();
 
     for &bi in &active_b_edges {
@@ -618,7 +547,6 @@ fn match_edges(
             continue;
         };
 
-        // Find the first unmatched A-edge in this bucket that matches edge_b.
         let mut found = false;
         for &ai in bucket.iter() {
             if matched_a_set.contains(&ai) {
@@ -644,7 +572,6 @@ fn match_edges(
         }
     }
 
-    // Any active A-edges not in matched_a_set are deletions.
     let unmatched_a_edges: Vec<usize> = active_a_edges
         .into_iter()
         .filter(|ai| !matched_a_set.contains(ai))
@@ -652,10 +579,6 @@ fn match_edges(
 
     (matched_pairs, unmatched_a_edges, unmatched_b_edges)
 }
-
-// ---------------------------------------------------------------------------
-// Internal: property comparison
-// ---------------------------------------------------------------------------
 
 /// Floating-point epsilon for numeric field comparisons (diff.md Section 3.1).
 const NUMERIC_EPSILON: f64 = 1e-9;
@@ -866,7 +789,6 @@ fn compare_node_properties(a: &Node, b: &Node, ignore: &HashSet<String>) -> Vec<
         };
     }
 
-    // String fields — simple equality after trimming.
     check!(
         "name",
         a.name
@@ -956,7 +878,6 @@ fn compare_node_properties(a: &Node, b: &Node, ignore: &HashSet<String>) -> Vec<
             .as_deref()
             .map(|s| serde_json::Value::String(s.to_owned()))
     );
-    // Date fields — normalise before comparing.
     check!(
         "valid_from",
         to_value(&a.valid_from).map(|v| normalise_date_value(&v)),
@@ -1010,7 +931,6 @@ fn compare_node_properties(a: &Node, b: &Node, ignore: &HashSet<String>) -> Vec<
             .as_deref()
             .map(|s| serde_json::Value::String(s.to_owned()))
     );
-    // Numeric fields — epsilon comparison via values_equal.
     check!(
         "quantity",
         a.quantity
@@ -1063,7 +983,6 @@ fn compare_node_properties(a: &Node, b: &Node, ignore: &HashSet<String>) -> Vec<
             .map(|id| serde_json::Value::String(id.to_string()))
     );
 
-    // data_quality nested object.
     if !ignore.contains("data_quality") {
         compare_data_quality(
             "data_quality",
@@ -1074,7 +993,6 @@ fn compare_node_properties(a: &Node, b: &Node, ignore: &HashSet<String>) -> Vec<
         );
     }
 
-    // Extra (unknown) fields — compare by key.
     {
         let mut extra_keys: HashSet<&str> = HashSet::new();
         for k in a.extra.keys() {
@@ -1114,7 +1032,6 @@ fn compare_edge_props(
         };
     }
 
-    // Date fields.
     check!(
         "valid_from",
         to_value(&a.valid_from).map(|v| normalise_date_value(&v)),
@@ -1134,7 +1051,6 @@ fn compare_edge_props(
         check!("valid_to", av, bv);
     }
 
-    // Numeric fields.
     check!(
         "percentage",
         a.percentage
@@ -1181,14 +1097,12 @@ fn compare_edge_props(
             .map(serde_json::Value::Number)
     );
 
-    // Boolean fields.
     check!(
         "direct",
         a.direct.map(serde_json::Value::Bool),
         b.direct.map(serde_json::Value::Bool)
     );
 
-    // String / enum fields.
     check!(
         "control_type",
         a.control_type.clone(),
@@ -1285,7 +1199,6 @@ fn compare_edge_props(
             .map(|s| serde_json::Value::String(s.to_owned()))
     );
 
-    // data_quality nested object.
     if !ignore.contains("data_quality") {
         compare_data_quality(
             "data_quality",
@@ -1296,7 +1209,6 @@ fn compare_edge_props(
         );
     }
 
-    // Extra fields.
     {
         let mut extra_keys: HashSet<&str> = HashSet::new();
         for k in a.extra.keys() {
@@ -1325,7 +1237,6 @@ fn compare_edge_props(
 /// checked for field-level changes to `valid_from`, `valid_to`, `sensitivity`,
 /// `verification_status`, and `verification_date`.
 fn compare_identifiers(a_ids: &[Identifier], b_ids: &[Identifier]) -> IdentifierSetDiff {
-    // Build canonical-key → identifier maps.
     let mut a_map: HashMap<CanonicalId, &Identifier> = HashMap::new();
     for id in a_ids {
         if id.scheme != "internal" {
@@ -1343,34 +1254,29 @@ fn compare_identifiers(a_ids: &[Identifier], b_ids: &[Identifier]) -> Identifier
     let mut removed: Vec<Identifier> = Vec::new();
     let mut modified: Vec<IdentifierFieldDiff> = Vec::new();
 
-    // Identifiers in A but not B → removed.
     for (cid, id) in &a_map {
         if !b_map.contains_key(cid) {
             removed.push((*id).clone());
         }
     }
 
-    // Identifiers in B but not A → added.
     for (cid, id) in &b_map {
         if !a_map.contains_key(cid) {
             added.push((*id).clone());
         }
     }
 
-    // Identifiers in both → compare field-by-field.
     for (cid, id_a) in &a_map {
         let Some(id_b) = b_map.get(cid) else {
             continue;
         };
         let mut field_changes: Vec<PropertyChange> = Vec::new();
-        // valid_from
         maybe_change(
             "valid_from",
             to_value(&id_a.valid_from).map(|v| normalise_date_value(&v)),
             to_value(&id_b.valid_from).map(|v| normalise_date_value(&v)),
             &mut field_changes,
         );
-        // valid_to
         {
             let av = match &id_a.valid_to {
                 None => None,
@@ -1384,21 +1290,18 @@ fn compare_identifiers(a_ids: &[Identifier], b_ids: &[Identifier]) -> Identifier
             };
             maybe_change("valid_to", av, bv, &mut field_changes);
         }
-        // sensitivity
         maybe_change(
             "sensitivity",
             to_value(&id_a.sensitivity),
             to_value(&id_b.sensitivity),
             &mut field_changes,
         );
-        // verification_status
         maybe_change(
             "verification_status",
             to_value(&id_a.verification_status),
             to_value(&id_b.verification_status),
             &mut field_changes,
         );
-        // verification_date
         maybe_change(
             "verification_date",
             to_value(&id_a.verification_date).map(|v| normalise_date_value(&v)),
@@ -1417,7 +1320,6 @@ fn compare_identifiers(a_ids: &[Identifier], b_ids: &[Identifier]) -> Identifier
             .map(|s| serde_json::Value::String(s.to_owned()));
         maybe_change("authority", av_auth, bv_auth, &mut field_changes);
 
-        // Extra fields.
         let mut extra_keys: HashSet<&str> = HashSet::new();
         for k in id_a.extra.keys() {
             extra_keys.insert(k.as_str());
@@ -1452,8 +1354,6 @@ fn compare_identifiers(a_ids: &[Identifier], b_ids: &[Identifier]) -> Identifier
 /// key appears as a deletion of the old pair and an addition of the new one
 /// (diff.md Section 3.3).
 fn compare_labels(a_labels: &[Label], b_labels: &[Label]) -> LabelSetDiff {
-    // Build (key, value) sets.
-    // We use a normalised representation: (key, Option<value>).
     let a_set: HashSet<(&str, Option<&str>)> = a_labels
         .iter()
         .map(|l| (l.key.as_str(), l.value.as_deref()))
@@ -1482,10 +1382,6 @@ fn compare_labels(a_labels: &[Label], b_labels: &[Label]) -> LabelSetDiff {
     LabelSetDiff { added, removed }
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
 /// Compares two parsed OMTSF files and returns a description of the differences.
 ///
 /// File A is the baseline ("before"); file B is the target ("after").
@@ -1509,10 +1405,8 @@ pub fn diff(a: &OmtsFile, b: &OmtsFile) -> DiffResult {
 pub fn diff_filtered(a: &OmtsFile, b: &OmtsFile, filter: Option<&DiffFilter>) -> DiffResult {
     let mut warnings: Vec<String> = Vec::new();
 
-    // Shared empty ignore set used when no filter is provided.
     let empty_ignore: HashSet<String> = HashSet::new();
 
-    // Emit a version mismatch warning if applicable.
     if a.omtsf_version != b.omtsf_version {
         warnings.push(format!(
             "Version mismatch: A has {}, B has {}",
@@ -1520,11 +1414,9 @@ pub fn diff_filtered(a: &OmtsFile, b: &OmtsFile, filter: Option<&DiffFilter>) ->
         ));
     }
 
-    // --- Node matching ---
     let node_match = match_nodes(&a.nodes, &b.nodes, filter);
     warnings.extend(node_match.warnings);
 
-    // --- Build node diffs ---
     let mut nodes_diff = NodesDiff::default();
 
     for ai in node_match.unmatched_a {
@@ -1575,7 +1467,6 @@ pub fn diff_filtered(a: &OmtsFile, b: &OmtsFile, filter: Option<&DiffFilter>) ->
         }
     }
 
-    // --- Edge matching ---
     let (matched_edge_pairs, unmatched_a_edges, unmatched_b_edges) = match_edges(
         &a.edges,
         &b.edges,
@@ -1640,10 +1531,6 @@ pub fn diff_filtered(a: &OmtsFile, b: &OmtsFile, filter: Option<&DiffFilter>) ->
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -1655,10 +1542,6 @@ mod tests {
     use crate::newtypes::{CalendarDate, EdgeId, FileSalt, NodeId, SemVer};
     use crate::structures::EdgeProperties;
     use crate::types::Identifier;
-
-    // -----------------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------------
 
     const SALT_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const SALT_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -1800,10 +1683,6 @@ mod tests {
             extra: serde_json::Map::new(),
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Node matching tests
-    // -----------------------------------------------------------------------
 
     /// Two empty files produce an empty diff.
     #[test]
@@ -1961,10 +1840,6 @@ mod tests {
         assert_eq!(result.nodes.added.len(), 1);
         assert!(result.nodes.unchanged.is_empty());
     }
-
-    // -----------------------------------------------------------------------
-    // Edge matching tests
-    // -----------------------------------------------------------------------
 
     /// Edges are matched when both endpoints match and type is the same.
     #[test]
@@ -2261,10 +2136,6 @@ mod tests {
         assert_eq!(result.edges.added.len(), 1);
         assert!(result.edges.unchanged.is_empty());
     }
-
-    // -----------------------------------------------------------------------
-    // T-030 Property comparison tests
-    // -----------------------------------------------------------------------
 
     /// Helper: two matched org nodes with same LEI and same name → identical pair.
     fn make_identical_pair(id: &str, lei: &str, name: &str) -> (Node, Node) {

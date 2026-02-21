@@ -18,10 +18,6 @@ use omtsf_core::graph::{OmtsGraph, Selector, SelectorSet, extraction};
 use omtsf_core::validation::{ValidationConfig, validate};
 use omtsf_core::{OmtsFile, build_graph};
 
-// ---------------------------------------------------------------------------
-// Cached setup
-// ---------------------------------------------------------------------------
-
 struct HugeSetup {
     json: String,
     file: OmtsFile,
@@ -40,9 +36,8 @@ fn get_setup() -> &'static HugeSetup {
     SETUP.get_or_init(|| {
         let path = huge_fixture_path();
         eprintln!("Loading huge fixture from {}...", path.display());
-        let json = std::fs::read_to_string(&path).expect(
-            "Failed to read huge fixture. Run `just gen-huge` first to generate it.",
-        );
+        let json = std::fs::read_to_string(&path)
+            .expect("Failed to read huge fixture. Run `just gen-huge` first to generate it.");
         let byte_size = json.len() as u64;
         let file: OmtsFile = serde_json::from_str(&json).expect("deserialize huge fixture");
         let node_count = file.nodes.len();
@@ -72,10 +67,6 @@ fn get_setup() -> &'static HugeSetup {
         }
     })
 }
-
-// ---------------------------------------------------------------------------
-// Group A: Parse & Serialize
-// ---------------------------------------------------------------------------
 
 fn bench_huge_deserialize(c: &mut Criterion) {
     let s = get_setup();
@@ -107,10 +98,6 @@ fn bench_huge_serialize(c: &mut Criterion) {
     group.finish();
 }
 
-// ---------------------------------------------------------------------------
-// Group B: Graph Construction
-// ---------------------------------------------------------------------------
-
 fn bench_huge_build_graph(c: &mut Criterion) {
     let s = get_setup();
     let elements = (s.node_count + s.edge_count) as u64;
@@ -127,10 +114,6 @@ fn bench_huge_build_graph(c: &mut Criterion) {
     });
     group.finish();
 }
-
-// ---------------------------------------------------------------------------
-// Group C: Graph Queries (20-tier depth)
-// ---------------------------------------------------------------------------
 
 fn bench_huge_reachability(c: &mut Criterion) {
     let s = get_setup();
@@ -199,10 +182,6 @@ fn bench_huge_shortest_path(c: &mut Criterion) {
     group.finish();
 }
 
-// ---------------------------------------------------------------------------
-// Group D: Selector Query
-// ---------------------------------------------------------------------------
-
 fn bench_huge_selector_match(c: &mut Criterion) {
     let s = get_setup();
     let element_count = (s.node_count + s.edge_count) as u64;
@@ -211,7 +190,6 @@ fn bench_huge_selector_match(c: &mut Criterion) {
     group.sample_size(20);
     group.throughput(Throughput::Elements(element_count));
 
-    // Label-only selector
     let label_ss = SelectorSet::from_selectors(vec![Selector::LabelKey("certified".to_owned())]);
     group.bench_function(BenchmarkId::new("label", "Huge"), |b| {
         b.iter(|| {
@@ -219,7 +197,6 @@ fn bench_huge_selector_match(c: &mut Criterion) {
         });
     });
 
-    // Node-type selector
     let type_ss = SelectorSet::from_selectors(vec![Selector::NodeType(NodeTypeTag::Known(
         NodeType::Organization,
     ))]);
@@ -229,7 +206,6 @@ fn bench_huge_selector_match(c: &mut Criterion) {
         });
     });
 
-    // Multi-selector
     let multi_ss = SelectorSet::from_selectors(vec![
         Selector::NodeType(NodeTypeTag::Known(NodeType::Organization)),
         Selector::LabelKey("certified".to_owned()),
@@ -250,12 +226,10 @@ fn bench_huge_selector_subgraph(c: &mut Criterion) {
     group.sample_size(10);
     group.measurement_time(std::time::Duration::from_secs(60));
 
-    // Narrow: attestation nodes (~10% match)
     let narrow_ss = SelectorSet::from_selectors(vec![Selector::NodeType(NodeTypeTag::Known(
         NodeType::Attestation,
     ))]);
 
-    // Narrow expand 0
     let output = extraction::selector_subgraph(&s.graph, &s.file, &narrow_ss, 0)
         .expect("attestations exist");
     let out_nodes = output.nodes.len() as u64;
@@ -267,33 +241,28 @@ fn bench_huge_selector_subgraph(c: &mut Criterion) {
         });
     });
 
-    // Narrow expand 1
     group.bench_function(BenchmarkId::new("narrow_exp1", "Huge"), |b| {
         b.iter(|| {
             let _ = extraction::selector_subgraph(&s.graph, &s.file, &narrow_ss, 1).expect("works");
         });
     });
 
-    // Narrow expand 3
     group.bench_function(BenchmarkId::new("narrow_exp3", "Huge"), |b| {
         b.iter(|| {
             let _ = extraction::selector_subgraph(&s.graph, &s.file, &narrow_ss, 3).expect("works");
         });
     });
 
-    // Broad: organization nodes (~45% match)
     let broad_ss = SelectorSet::from_selectors(vec![Selector::NodeType(NodeTypeTag::Known(
         NodeType::Organization,
     ))]);
 
-    // Broad expand 0
     group.bench_function(BenchmarkId::new("broad_exp0", "Huge"), |b| {
         b.iter(|| {
             let _ = extraction::selector_subgraph(&s.graph, &s.file, &broad_ss, 0).expect("works");
         });
     });
 
-    // Broad expand 1
     group.bench_function(BenchmarkId::new("broad_exp1", "Huge"), |b| {
         b.iter(|| {
             let _ = extraction::selector_subgraph(&s.graph, &s.file, &broad_ss, 1).expect("works");
@@ -302,10 +271,6 @@ fn bench_huge_selector_subgraph(c: &mut Criterion) {
 
     group.finish();
 }
-
-// ---------------------------------------------------------------------------
-// Group E: Validation
-// ---------------------------------------------------------------------------
 
 fn bench_huge_validation(c: &mut Criterion) {
     let s = get_setup();
@@ -316,7 +281,6 @@ fn bench_huge_validation(c: &mut Criterion) {
     group.measurement_time(std::time::Duration::from_secs(60));
     group.throughput(Throughput::Elements(elements));
 
-    // L1 only
     group.bench_function(BenchmarkId::new("L1", "Huge"), |b| {
         let config = ValidationConfig {
             run_l1: true,
@@ -328,7 +292,6 @@ fn bench_huge_validation(c: &mut Criterion) {
         });
     });
 
-    // L1 + L2 + L3 (full pipeline)
     group.bench_function(BenchmarkId::new("L1_L2_L3", "Huge"), |b| {
         let config = ValidationConfig {
             run_l1: true,
@@ -342,10 +305,6 @@ fn bench_huge_validation(c: &mut Criterion) {
 
     group.finish();
 }
-
-// ---------------------------------------------------------------------------
-// Criterion harness
-// ---------------------------------------------------------------------------
 
 criterion_group!(
     benches,

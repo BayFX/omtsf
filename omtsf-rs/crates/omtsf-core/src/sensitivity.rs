@@ -12,10 +12,6 @@ use crate::enums::{EdgeType, EdgeTypeTag, NodeType, NodeTypeTag, Sensitivity};
 use crate::structures::Edge;
 use crate::types::Identifier;
 
-// ---------------------------------------------------------------------------
-// Identifier sensitivity (Sections 2.1 and 2.2)
-// ---------------------------------------------------------------------------
-
 /// Returns the effective sensitivity for an identifier, taking into account:
 ///
 /// 1. **Explicit override** — if `identifier.sensitivity` is `Some(s)`, return
@@ -35,17 +31,14 @@ use crate::types::Identifier;
 /// * `identifier` — the identifier whose sensitivity is being determined.
 /// * `node_type` — the type tag of the node that owns this identifier.
 pub fn effective_sensitivity(identifier: &Identifier, node_type: &NodeTypeTag) -> Sensitivity {
-    // Explicit override always wins.
     if let Some(explicit) = &identifier.sensitivity {
         return explicit.clone();
     }
 
-    // Person-node rule: default to confidential when no explicit value.
     if let NodeTypeTag::Known(NodeType::Person) = node_type {
         return Sensitivity::Confidential;
     }
 
-    // Scheme-based default.
     scheme_default(&identifier.scheme)
 }
 
@@ -68,10 +61,6 @@ fn scheme_default(scheme: &str) -> Sensitivity {
         _ => Sensitivity::Public,
     }
 }
-
-// ---------------------------------------------------------------------------
-// Edge-property sensitivity (Section 2.3)
-// ---------------------------------------------------------------------------
 
 /// Returns the effective sensitivity for a named property on an edge.
 ///
@@ -98,12 +87,10 @@ fn scheme_default(scheme: &str) -> Sensitivity {
 /// * `edge` — the edge whose property is being classified.
 /// * `property_name` — the JSON property name to classify (e.g. `"contract_ref"`).
 pub fn effective_property_sensitivity(edge: &Edge, property_name: &str) -> Sensitivity {
-    // Step 1: consult the _property_sensitivity override map.
     if let Some(override_sensitivity) = read_property_sensitivity_override(edge, property_name) {
         return override_sensitivity;
     }
 
-    // Step 2: apply the default table.
     property_default(&edge.edge_type, property_name)
 }
 
@@ -122,12 +109,10 @@ fn read_property_sensitivity_override(edge: &Edge, property_name: &str) -> Optio
 
     let raw = override_map.get(property_name)?.as_str()?;
 
-    // Parse the string into a Sensitivity variant.
     match raw {
         "public" => Some(Sensitivity::Public),
         "restricted" => Some(Sensitivity::Restricted),
         "confidential" => Some(Sensitivity::Confidential),
-        // Unrecognised value: fall through to default.
         _ => None,
     }
 }
@@ -143,7 +128,6 @@ fn property_default(edge_type: &EdgeTypeTag, property_name: &str) -> Sensitivity
         "volume" => Sensitivity::Restricted,
         "volume_unit" => Sensitivity::Public,
         "percentage" => percentage_default(edge_type),
-        // All other properties default to Public.
         _ => Sensitivity::Public,
     }
 }
@@ -175,10 +159,6 @@ fn percentage_default(edge_type: &EdgeTypeTag) -> Sensitivity {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -190,10 +170,6 @@ mod tests {
     use crate::newtypes::{EdgeId, NodeId};
     use crate::structures::{Edge, EdgeProperties};
     use crate::types::Identifier;
-
-    // -----------------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------------
 
     fn make_identifier(scheme: &str, explicit_sensitivity: Option<Sensitivity>) -> Identifier {
         Identifier {
@@ -269,10 +245,6 @@ mod tests {
         extra
     }
 
-    // -----------------------------------------------------------------------
-    // Section 2.1 — Scheme-based defaults (non-person nodes)
-    // -----------------------------------------------------------------------
-
     #[test]
     fn scheme_lei_defaults_to_public() {
         let id = make_identifier("lei", None);
@@ -329,10 +301,6 @@ mod tests {
         assert_eq!(result, Sensitivity::Public);
     }
 
-    // -----------------------------------------------------------------------
-    // Explicit override on non-person node
-    // -----------------------------------------------------------------------
-
     #[test]
     fn explicit_public_overrides_scheme_default_restricted() {
         // nat-reg defaults to restricted, but explicit public wins.
@@ -355,10 +323,6 @@ mod tests {
         let result = effective_sensitivity(&id, &known_node_type(NodeType::Organization));
         assert_eq!(result, Sensitivity::Confidential);
     }
-
-    // -----------------------------------------------------------------------
-    // Section 2.2 — Person-node override
-    // -----------------------------------------------------------------------
 
     #[test]
     fn person_node_lei_defaults_to_confidential() {
@@ -406,10 +370,6 @@ mod tests {
         assert_eq!(result, Sensitivity::Confidential);
     }
 
-    // -----------------------------------------------------------------------
-    // All other non-person known node types use scheme defaults
-    // -----------------------------------------------------------------------
-
     #[test]
     fn facility_node_uses_scheme_default() {
         let id = make_identifier("lei", None);
@@ -444,10 +404,6 @@ mod tests {
         let result = effective_sensitivity(&id, &known_node_type(NodeType::BoundaryRef));
         assert_eq!(result, Sensitivity::Public);
     }
-
-    // -----------------------------------------------------------------------
-    // Section 2.3 — Edge property defaults (no override)
-    // -----------------------------------------------------------------------
 
     #[test]
     fn contract_ref_defaults_to_restricted() {
@@ -547,10 +503,6 @@ mod tests {
             Sensitivity::Public
         );
     }
-
-    // -----------------------------------------------------------------------
-    // Section 2.3 — _property_sensitivity override map
-    // -----------------------------------------------------------------------
 
     #[test]
     fn property_sensitivity_override_public_on_restricted_default() {
@@ -668,10 +620,6 @@ mod tests {
             Sensitivity::Public
         );
     }
-
-    // -----------------------------------------------------------------------
-    // Percentage default: all other known edge types → Public
-    // -----------------------------------------------------------------------
 
     #[test]
     fn percentage_on_operational_control_defaults_to_public() {

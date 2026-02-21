@@ -57,8 +57,9 @@
 | `crates/omtsf-core/tests/` | Integration tests for core | `#![allow(clippy::expect_used)]` permitted |
 | `tests/fixtures/` | `.omts` test fixture files | JSON format, shared across crates |
 
-### Comment Style
+### Code Style
 
+- **File size limit**: keep `.rs` files under 800 lines — if longer, split into modules
 - **Public interfaces**: `///` doc comments on all public types, traits, functions, methods, and enum variants — write for `cargo doc` readers
 - **Inline comments**: only when explaining *why*, never *what* — if the code needs a comment to explain what it does, rewrite the code
 - **No commented-out code** — delete it, git has history

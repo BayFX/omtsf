@@ -58,10 +58,6 @@ fn validate_json(value: &serde_json::Value) -> bool {
     out.status.code() == Some(0)
 }
 
-// ---------------------------------------------------------------------------
-// Redaction 1: Person nodes removed at public scope
-// ---------------------------------------------------------------------------
-
 /// In public scope, all `person` nodes are removed (Omit action).
 #[test]
 fn redaction_public_removes_person_nodes() {
@@ -155,10 +151,6 @@ fn redaction_public_preserves_file_salt() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Redaction 2: Scope transition — internal to partner
-// ---------------------------------------------------------------------------
-
 /// Redacting an internal-scope file to partner scope exits 0.
 #[test]
 fn redaction_scope_transition_internal_to_partner_exits_0() {
@@ -201,10 +193,6 @@ fn redaction_scope_transition_internal_to_partner_validates() {
         "partner-scope redacted output must pass L1 validation"
     );
 }
-
-// ---------------------------------------------------------------------------
-// Redaction 3: Scope transition — partner to public
-// ---------------------------------------------------------------------------
 
 /// Redacting a partner-scope file to public scope exits 0.
 #[test]
@@ -263,10 +251,6 @@ fn redaction_scope_transition_partner_to_public_validates() {
         "partner→public redacted output must pass L1 validation"
     );
 }
-
-// ---------------------------------------------------------------------------
-// Redaction 4: Boundary refs in redacted output
-// ---------------------------------------------------------------------------
 
 /// Redacting a file that contains `boundary_ref` nodes: the existing boundary
 /// refs are preserved in the output (they are always retained).
@@ -343,10 +327,6 @@ fn redaction_boundary_ref_has_opaque_identifier() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Redaction 5: Statistics on stderr
-// ---------------------------------------------------------------------------
-
 /// The redaction command emits statistics to stderr on success.
 #[test]
 fn redaction_emits_statistics_to_stderr() {
@@ -372,10 +352,6 @@ fn redaction_statistics_mention_scope() {
         "stderr should mention the target scope; stderr: {stderr}"
     );
 }
-
-// ---------------------------------------------------------------------------
-// Redaction 6: Attempting less-restrictive scope transition
-// ---------------------------------------------------------------------------
 
 /// Redacting a `public`-scope file to `partner` (less restrictive) exits 1.
 #[test]
@@ -437,10 +413,6 @@ fn redaction_partner_to_internal_exits_1() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Redaction 7: Redact full-featured fixture to public
-// ---------------------------------------------------------------------------
-
 /// Redacting the full-featured fixture (which includes person, attestation,
 /// consignment, facility, etc.) to public scope exits 0 and produces valid output.
 #[test]
@@ -485,10 +457,6 @@ fn redaction_full_featured_public_retains_org_nodes() {
         serde_json::from_str(stdout.trim()).expect("valid JSON from redact");
     let nodes = value["nodes"].as_array().expect("nodes array");
 
-    // The full-featured fixture has 2 organization nodes; they should survive
-    // public redaction (unless replaced with boundary_ref stubs by the CLI's
-    // retain_ids=empty policy — in that case they become boundary_ref nodes).
-    // The key property is that at least some non-person nodes remain.
     assert!(
         !nodes.is_empty(),
         "public output of full-featured must not be empty"

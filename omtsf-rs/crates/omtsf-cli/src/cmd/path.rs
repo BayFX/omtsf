@@ -21,10 +21,6 @@ use omtsf_core::graph::{QueryError, all_paths, build_graph};
 use crate::OutputFormat;
 use crate::error::CliError;
 
-// ---------------------------------------------------------------------------
-// run
-// ---------------------------------------------------------------------------
-
 /// Runs the `path` command.
 ///
 /// Parses `content` as an OMTSF file, builds the graph, and finds up to
@@ -53,7 +49,6 @@ pub fn run(
         detail: e.to_string(),
     })?;
 
-    // Use all_paths for the full enumeration up to max_depth.
     let mut raw_paths = all_paths(
         &graph,
         from,
@@ -70,8 +65,6 @@ pub fn run(
         });
     }
 
-    // Sort paths shortest-first; secondary sort by node ID sequence for
-    // determinism.
     raw_paths.sort_by(|a, b| {
         a.len().cmp(&b.len()).then_with(|| {
             let ids_a: Vec<&str> = a
@@ -86,7 +79,6 @@ pub fn run(
         })
     });
 
-    // Resolve each path to a Vec<String> of node IDs.
     let paths: Vec<Vec<String>> = raw_paths
         .iter()
         .take(max_paths)
@@ -109,10 +101,6 @@ pub fn run(
         detail: e.to_string(),
     })
 }
-
-// ---------------------------------------------------------------------------
-// Output
-// ---------------------------------------------------------------------------
 
 /// Writes paths in human-readable format: each path on one line, node IDs
 /// separated by ` -> `.
@@ -147,10 +135,6 @@ fn print_json<W: std::io::Write>(w: &mut W, paths: &[Vec<String>]) -> std::io::R
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
     writeln!(w, "{json}")
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /// Converts a [`QueryError`] to the appropriate [`CliError`].
 fn query_error_to_cli(e: QueryError) -> CliError {

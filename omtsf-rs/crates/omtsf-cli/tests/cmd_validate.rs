@@ -8,8 +8,6 @@ use std::process::Command;
 /// Path to the compiled `omtsf` binary.
 fn omtsf_bin() -> PathBuf {
     let mut path = std::env::current_exe().expect("current exe");
-    // current_exe is something like …/deps/cmd_validate-<hash>
-    // The binary lives in the parent directory.
     path.pop();
     if path.ends_with("deps") {
         path.pop();
@@ -21,16 +19,10 @@ fn omtsf_bin() -> PathBuf {
 /// Path to a shared fixture file.
 fn fixture(name: &str) -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    // CARGO_MANIFEST_DIR is .../crates/omtsf-cli; fixtures are in tests/fixtures
-    // relative to the workspace root.
     path.push("../../tests/fixtures");
     path.push(name);
     path
 }
-
-// ---------------------------------------------------------------------------
-// validate: known-good fixture (exit 0)
-// ---------------------------------------------------------------------------
 
 #[test]
 fn validate_minimal_exits_0() {
@@ -66,16 +58,11 @@ fn validate_minimal_summary_on_stderr() {
         .output()
         .expect("run omtsf validate");
     let stderr = String::from_utf8_lossy(&out.stderr);
-    // A clean file produces a summary like "0 errors, 0 warnings, 0 info"
     assert!(
         stderr.contains("error") || stderr.contains("errors"),
         "stderr should contain a summary; stderr: {stderr}"
     );
 }
-
-// ---------------------------------------------------------------------------
-// validate: known-bad fixture (exit 1)
-// ---------------------------------------------------------------------------
 
 #[test]
 fn validate_invalid_edge_exits_1() {
@@ -104,7 +91,6 @@ fn validate_invalid_edge_emits_diagnostics_to_stderr() {
         .output()
         .expect("run omtsf validate");
     let stderr = String::from_utf8_lossy(&out.stderr);
-    // Expect at least one [E] diagnostic for the bad edge target.
     assert!(
         stderr.contains("[E]"),
         "expected [E] diagnostic on stderr; stderr: {stderr}"
@@ -126,10 +112,6 @@ fn validate_invalid_edge_produces_no_stdout() {
         String::from_utf8_lossy(&out.stdout)
     );
 }
-
-// ---------------------------------------------------------------------------
-// validate: parse failure (exit 2)
-// ---------------------------------------------------------------------------
 
 #[test]
 fn validate_invalid_json_exits_2() {
@@ -158,10 +140,6 @@ fn validate_nonexistent_file_exits_2() {
         "expected exit 2 for nonexistent file"
     );
 }
-
-// ---------------------------------------------------------------------------
-// validate: --level flag
-// ---------------------------------------------------------------------------
 
 #[test]
 fn validate_level_1_minimal_exits_0() {
@@ -217,10 +195,6 @@ fn validate_level_1_invalid_edge_exits_1() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// validate: stdin support
-// ---------------------------------------------------------------------------
-
 #[test]
 fn validate_stdin_minimal_exits_0() {
     let content = std::fs::read(fixture("minimal.omts")).expect("read fixture");
@@ -271,10 +245,6 @@ fn validate_stdin_invalid_edge_exits_1() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// validate: JSON output format
-// ---------------------------------------------------------------------------
-
 #[test]
 fn validate_json_format_minimal_exits_0() {
     let out = Command::new(omtsf_bin())
@@ -311,7 +281,6 @@ fn validate_json_format_invalid_edge_exits_1_with_ndjson_on_stderr() {
         "expected exit 1 for invalid-edge.omts in JSON mode"
     );
     let stderr = String::from_utf8_lossy(&out.stderr);
-    // Each diagnostic line should be parseable JSON.
     let first_line = stderr.lines().next().expect("at least one line on stderr");
     let parsed: Result<serde_json::Value, _> = serde_json::from_str(first_line);
     assert!(
@@ -323,13 +292,8 @@ fn validate_json_format_invalid_edge_exits_1_with_ndjson_on_stderr() {
     assert!(obj.get("severity").is_some(), "missing severity field");
 }
 
-// ---------------------------------------------------------------------------
-// validate: quiet mode
-// ---------------------------------------------------------------------------
-
 #[test]
 fn validate_quiet_suppresses_warnings_on_stderr() {
-    // full-featured.omts has L2 warnings; --quiet should suppress them
     let out = Command::new(omtsf_bin())
         .args([
             "validate",
@@ -339,8 +303,6 @@ fn validate_quiet_suppresses_warnings_on_stderr() {
         .output()
         .expect("run omtsf validate --quiet");
     let stderr = String::from_utf8_lossy(&out.stderr);
-    // In quiet mode, summary is suppressed and only errors go to stderr.
-    // For a clean file, stderr should be empty.
     assert!(
         stderr.is_empty(),
         "stderr should be empty in quiet mode for clean file; stderr: {stderr}"

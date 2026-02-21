@@ -12,10 +12,6 @@ use omtsf_core::OmtsFile;
 
 use crate::error::CliError;
 
-// ---------------------------------------------------------------------------
-// run
-// ---------------------------------------------------------------------------
-
 /// Runs the `convert` command.
 ///
 /// Parses `content` as an OMTSF file, re-serializes it, and writes the output
@@ -51,10 +47,6 @@ pub fn run(content: &str, compact: bool) -> Result<(), CliError> {
     })
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -72,8 +64,6 @@ mod tests {
 
     const NOT_JSON: &str = "not valid json {{ here";
 
-    // ── happy path ────────────────────────────────────────────────────────────
-
     #[test]
     fn run_valid_pretty_returns_ok() {
         let result = run(MINIMAL, false);
@@ -85,8 +75,6 @@ mod tests {
         let result = run(MINIMAL, true);
         assert!(result.is_ok(), "expected Ok: {result:?}");
     }
-
-    // ── parse failure ─────────────────────────────────────────────────────────
 
     #[test]
     fn run_invalid_json_returns_parse_failed() {
@@ -105,11 +93,9 @@ mod tests {
 
     #[test]
     fn run_parse_error_detail_includes_line_and_column() {
-        // Inject a JSON syntax error on a known line to verify line/column reporting.
         let bad_json = "{\n  \"omtsf_version\": !!bad\n}";
         let err = run(bad_json, false).expect_err("should fail");
         let msg = err.message();
-        // The error should contain "line" and "column" from serde_json::Error.
         assert!(msg.contains("line"), "message should include line: {msg}");
         assert!(
             msg.contains("column"),

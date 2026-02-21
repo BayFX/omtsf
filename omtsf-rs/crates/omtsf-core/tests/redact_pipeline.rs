@@ -22,10 +22,6 @@ use omtsf_core::{
     Sensitivity, redact,
 };
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const SALT: &str = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
 
 fn salt() -> FileSalt {
@@ -241,10 +237,6 @@ fn find_node<'a>(output: &'a OmtsFile, id: &str) -> Option<&'a Node> {
     })
 }
 
-// ---------------------------------------------------------------------------
-// T-028-01: internal scope is a no-op
-// ---------------------------------------------------------------------------
-
 #[test]
 fn redact_internal_scope_is_noop() {
     let nodes = vec![
@@ -262,21 +254,13 @@ fn redact_internal_scope_is_noop() {
     assert_eq!(output.file_salt, file.file_salt);
     assert_eq!(output.nodes.len(), file.nodes.len());
     assert_eq!(output.edges.len(), file.edges.len());
-    // All identifiers preserved.
     let node_a = find_node(&output, "org-a").expect("org-a present");
     assert_eq!(node_a.identifiers.as_deref().unwrap_or(&[]).len(), 1);
     assert_l1_valid(&output);
 }
 
-// ---------------------------------------------------------------------------
-// T-028-02: Full redaction to partner scope
-// ---------------------------------------------------------------------------
-
 #[test]
 fn redact_to_partner_scope_full() {
-    // Three orgs: org-a and org-b retained; org-c replaced.
-    // org-a has a LEI (public) and a confidential id (stripped in partner).
-    // org-c has only a LEI; its boundary_ref uses that for the hash.
     let nodes = vec![
         make_org_node(
             "org-a",
@@ -301,11 +285,9 @@ fn redact_to_partner_scope_full() {
     let output =
         redact(&file, DisclosureScope::Partner, &retain_ids).expect("partner redact must succeed");
 
-    // disclosure_scope and salt.
     assert_eq!(output.disclosure_scope, Some(DisclosureScope::Partner));
     assert_eq!(output.file_salt, file.file_salt);
 
-    // org-a retained, confidential id stripped.
     let node_a = find_node(&output, "org-a").expect("org-a present");
     assert!(
         matches!(
@@ -318,14 +300,12 @@ fn redact_to_partner_scope_full() {
     assert_eq!(ids_a.len(), 1, "confidential id must be stripped");
     assert_eq!(ids_a[0].scheme, "lei");
 
-    // org-b retained with its LEI.
     let node_b = find_node(&output, "org-b").expect("org-b present");
     assert!(matches!(
         &node_b.node_type,
         NodeTypeTag::Known(NodeType::Organization)
     ));
 
-    // org-c replaced with boundary_ref.
     let node_c = find_node(&output, "org-c").expect("org-c present as boundary_ref");
     assert!(
         matches!(&node_c.node_type, NodeTypeTag::Known(NodeType::BoundaryRef)),
@@ -344,12 +324,10 @@ fn redact_to_partner_scope_full() {
         "opaque value must be 64 hex chars"
     );
 
-    // e-1 (org-a → org-b, both Retain) is kept.
     assert!(
         output.edges.iter().any(|e| e.id == eid("e-1")),
         "e-1 must be kept (both endpoints Retain)"
     );
-    // e-2 (org-b → org-c, Retain → Replace) is kept as a boundary-crossing edge.
     assert!(
         output.edges.iter().any(|e| e.id == eid("e-2")),
         "e-2 must be kept (boundary-crossing edge)"
@@ -358,16 +336,8 @@ fn redact_to_partner_scope_full() {
     assert_l1_valid(&output);
 }
 
-// ---------------------------------------------------------------------------
-// T-028-03: Full redaction to public scope
-// ---------------------------------------------------------------------------
-
 #[test]
 fn redact_to_public_scope_full() {
-    // org-a: retained; org-b: replaced; person-doe: omitted.
-    // Edges: org-a → org-b (supplies, kept as boundary-crossing);
-    //        person-doe → org-a (beneficial_ownership, omitted unconditionally).
-    // org-a has a restricted id (stripped in public) and a LEI (kept).
     let nodes = vec![
         make_org_node(
             "org-a",
@@ -403,11 +373,9 @@ fn redact_to_public_scope_full() {
     let output =
         redact(&file, DisclosureScope::Public, &retain_ids).expect("public redact must succeed");
 
-    // disclosure_scope and salt.
     assert_eq!(output.disclosure_scope, Some(DisclosureScope::Public));
     assert_eq!(output.file_salt, file.file_salt);
 
-    // org-a retained; restricted id stripped.
     let node_a = find_node(&output, "org-a").expect("org-a present");
     assert!(matches!(
         &node_a.node_type,
@@ -421,32 +389,27 @@ fn redact_to_public_scope_full() {
     );
     assert_eq!(ids_a[0].scheme, "lei");
 
-    // org-b replaced with boundary_ref.
     let node_b = find_node(&output, "org-b").expect("org-b present as boundary_ref");
     assert!(matches!(
         &node_b.node_type,
         NodeTypeTag::Known(NodeType::BoundaryRef)
     ));
 
-    // person-doe absent entirely.
     assert!(
         find_node(&output, "person-doe").is_none(),
         "person-doe must be omitted in public scope"
     );
 
-    // e-supplies kept (Retain → Replace boundary crossing).
     assert!(
         output.edges.iter().any(|e| e.id == eid("e-supplies")),
         "e-supplies must be kept"
     );
 
-    // e-bo omitted (beneficial_ownership unconditionally omitted in public).
     assert!(
         !output.edges.iter().any(|e| e.id == eid("e-bo")),
         "e-bo must be omitted in public scope"
     );
 
-    // No person nodes in output.
     assert!(
         output
             .nodes
@@ -455,7 +418,6 @@ fn redact_to_public_scope_full() {
         "no person nodes in public output"
     );
 
-    // No beneficial_ownership edges in output.
     assert!(
         output.edges.iter().all(|e| !matches!(
             &e.edge_type,
@@ -467,13 +429,8 @@ fn redact_to_public_scope_full() {
     assert_l1_valid(&output);
 }
 
-// ---------------------------------------------------------------------------
-// T-028-04: L1-SDI-01 validity of boundary_ref nodes
-// ---------------------------------------------------------------------------
-
 #[test]
 fn redact_boundary_ref_nodes_are_l1_sdi01_valid() {
-    // Two orgs; one retained, one replaced. Verify boundary_ref structure.
     let nodes = vec![
         make_org_node("org-keep", vec![lei_id("5493006MHB84DD0ZWV18")]),
         make_org_node("org-replace", vec![lei_id("529900T8BM49AURSDO55")]),
@@ -485,7 +442,6 @@ fn redact_boundary_ref_nodes_are_l1_sdi01_valid() {
 
     let output = redact(&file, DisclosureScope::Partner, &retain_ids).expect("redact must succeed");
 
-    // Check L1-SDI-01 explicitly.
     let cfg = ValidationConfig {
         run_l1: true,
         run_l2: false,
@@ -498,7 +454,6 @@ fn redact_boundary_ref_nodes_are_l1_sdi01_valid() {
         "L1-SDI-01 must pass; errors: {sdi01_errors:?}"
     );
 
-    // Check structure directly.
     let replaced = find_node(&output, "org-replace").expect("org-replace present");
     assert!(matches!(
         &replaced.node_type,
@@ -509,14 +464,8 @@ fn redact_boundary_ref_nodes_are_l1_sdi01_valid() {
     assert_eq!(ids[0].scheme, "opaque");
 }
 
-// ---------------------------------------------------------------------------
-// T-028-05: Deduplication — single boundary_ref per node
-// ---------------------------------------------------------------------------
-
 #[test]
 fn redact_one_boundary_ref_per_replaced_node() {
-    // org-c is replaced and referenced by two edges. Only one boundary_ref
-    // stub must appear in the output.
     let nodes = vec![
         make_org_node("org-a", vec![lei_id("5493006MHB84DD0ZWV18")]),
         make_org_node("org-b", vec![lei_id("529900T8BM49AURSDO55")]),
@@ -534,7 +483,6 @@ fn redact_one_boundary_ref_per_replaced_node() {
 
     let output = redact(&file, DisclosureScope::Partner, &retain_ids).expect("redact must succeed");
 
-    // Exactly one boundary_ref node for org-c.
     let bref_count = output
         .nodes
         .iter()
@@ -545,16 +493,11 @@ fn redact_one_boundary_ref_per_replaced_node() {
         .count();
     assert_eq!(bref_count, 1, "exactly one boundary_ref node for org-c");
 
-    // Both boundary-crossing edges are kept.
     assert!(output.edges.iter().any(|e| e.id == eid("e-1")));
     assert!(output.edges.iter().any(|e| e.id == eid("e-2")));
 
     assert_l1_valid(&output);
 }
-
-// ---------------------------------------------------------------------------
-// T-028-06: Both-endpoints-replaced edges are omitted
-// ---------------------------------------------------------------------------
 
 #[test]
 fn redact_both_endpoints_replaced_edge_omitted() {
@@ -563,30 +506,22 @@ fn redact_both_endpoints_replaced_edge_omitted() {
         make_org_node("org-b", vec![lei_id("529900T8BM49AURSDO55")]),
         make_org_node("org-c", vec![lei_id("3ERO3P1U3D2WQ9WLWA36")]),
     ];
-    // e-bc connects two replaced nodes; must be omitted.
     let edges = vec![
         make_edge("e-ac", EdgeType::Supplies, "org-a", "org-c"),
         make_edge("e-bc", EdgeType::Supplies, "org-b", "org-c"),
     ];
     let file = make_file(nodes, edges);
 
-    // Only org-a retained; org-b and org-c replaced.
     let mut retain_ids: HashSet<NodeId> = HashSet::new();
     retain_ids.insert(nid("org-a"));
 
     let output = redact(&file, DisclosureScope::Partner, &retain_ids).expect("redact must succeed");
 
-    // e-ac: org-a (Retain) → org-c (Replace) → kept.
     assert!(output.edges.iter().any(|e| e.id == eid("e-ac")));
-    // e-bc: org-b (Replace) → org-c (Replace) → omitted.
     assert!(!output.edges.iter().any(|e| e.id == eid("e-bc")));
 
     assert_l1_valid(&output);
 }
-
-// ---------------------------------------------------------------------------
-// T-028-07: Salt preserved
-// ---------------------------------------------------------------------------
 
 #[test]
 fn redact_salt_preserved() {
@@ -606,19 +541,14 @@ fn redact_salt_preserved() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// T-028-08: Edge property stripping — partner scope removes confidential only
-// ---------------------------------------------------------------------------
-
 #[test]
 fn redact_partner_strips_confidential_edge_properties() {
-    // beneficial_ownership edge with percentage (confidential) and valid_from (public).
     let nodes = vec![
         make_person_node("person-1"),
         make_org_node("org-a", vec![lei_id("5493006MHB84DD0ZWV18")]),
     ];
     let props = EdgeProperties {
-        percentage: Some(60.0), // confidential on beneficial_ownership
+        percentage: Some(60.0),
         valid_from: Some(CalendarDate::try_from("2020-01-01").expect("valid date")),
         ..EdgeProperties::default()
     };
@@ -632,10 +562,8 @@ fn redact_partner_strips_confidential_edge_properties() {
     )];
     let file = make_file(nodes, edges);
 
-    // Retain both endpoints so the edge survives.
     let mut retain_ids: HashSet<NodeId> = HashSet::new();
     retain_ids.insert(nid("org-a"));
-    // person-1 is retained in partner scope (filtered identifiers)
     retain_ids.insert(nid("person-1"));
 
     let output = redact(&file, DisclosureScope::Partner, &retain_ids).expect("redact must succeed");
@@ -646,12 +574,10 @@ fn redact_partner_strips_confidential_edge_properties() {
         .find(|e| e.id == eid("e-bo"))
         .expect("e-bo must be present in partner scope");
 
-    // percentage (confidential on beneficial_ownership) stripped.
     assert!(
         edge.properties.percentage.is_none(),
         "percentage must be stripped in partner scope"
     );
-    // valid_from (public) kept.
     assert!(
         edge.properties.valid_from.is_some(),
         "valid_from must be kept in partner scope"
@@ -660,10 +586,6 @@ fn redact_partner_strips_confidential_edge_properties() {
     assert_l1_valid(&output);
 }
 
-// ---------------------------------------------------------------------------
-// T-028-09: Edge property stripping — public scope removes restricted
-// ---------------------------------------------------------------------------
-
 #[test]
 fn redact_public_strips_restricted_edge_properties() {
     let nodes = vec![
@@ -671,9 +593,9 @@ fn redact_public_strips_restricted_edge_properties() {
         make_org_node("org-b", vec![lei_id("529900T8BM49AURSDO55")]),
     ];
     let props = EdgeProperties {
-        contract_ref: Some("C-001".to_owned()), // restricted
-        volume: Some(5000.0),                   // restricted
-        volume_unit: Some("mt".to_owned()),     // public
+        contract_ref: Some("C-001".to_owned()),
+        volume: Some(5000.0),
+        volume_unit: Some("mt".to_owned()),
         ..EdgeProperties::default()
     };
 
@@ -710,10 +632,6 @@ fn redact_public_strips_restricted_edge_properties() {
     assert_l1_valid(&output);
 }
 
-// ---------------------------------------------------------------------------
-// T-028-10: No dangling edges after person node omission
-// ---------------------------------------------------------------------------
-
 #[test]
 fn redact_no_dangling_edges_after_person_omission() {
     let nodes = vec![
@@ -732,21 +650,14 @@ fn redact_no_dangling_edges_after_person_omission() {
 
     let output = redact(&file, DisclosureScope::Public, &retain_ids).expect("redact must succeed");
 
-    // person-1 is omitted; e-bo must be omitted too.
     assert!(find_node(&output, "person-1").is_none());
     assert!(!output.edges.iter().any(|e| e.id == eid("e-bo")));
 
-    // Verify via L1 validation (L1-GDM-03 checks for dangling edges).
     assert_l1_valid(&output);
 }
 
-// ---------------------------------------------------------------------------
-// T-028-11: Deterministic boundary_ref hash for same public ids
-// ---------------------------------------------------------------------------
-
 #[test]
 fn redact_deterministic_boundary_ref_hash() {
-    // Two identical files produce the same boundary_ref value for the same node.
     let nodes = vec![
         make_org_node("org-keep", vec![lei_id("5493006MHB84DD0ZWV18")]),
         make_org_node("org-replace", vec![lei_id("529900T8BM49AURSDO55")]),
@@ -765,10 +676,6 @@ fn redact_deterministic_boundary_ref_hash() {
     assert_eq!(val1, val2, "boundary_ref hash must be deterministic");
 }
 
-// ---------------------------------------------------------------------------
-// T-028-12: Full-featured fixture — redact to partner
-// ---------------------------------------------------------------------------
-
 #[test]
 fn redact_full_featured_fixture_to_partner() {
     let fixture_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -776,8 +683,6 @@ fn redact_full_featured_fixture_to_partner() {
     let content = std::fs::read_to_string(&fixture_path).expect("fixture readable");
     let file: OmtsFile = serde_json::from_str(&content).expect("fixture parses");
 
-    // Retain org-alpha, org-beta, fac-sheffield; replace good-bolts, att-sa8000,
-    // con-batch-001; person-doe retained (partner) with stripped identifiers.
     let mut retain_ids: HashSet<NodeId> = HashSet::new();
     retain_ids.insert(nid("org-alpha"));
     retain_ids.insert(nid("org-beta"));
@@ -790,11 +695,8 @@ fn redact_full_featured_fixture_to_partner() {
     assert_eq!(output.disclosure_scope, Some(DisclosureScope::Partner));
     assert_eq!(output.file_salt, file.file_salt);
 
-    // org-alpha: confidential identifier stripped, public+restricted kept.
     let alpha = find_node(&output, "org-alpha").expect("org-alpha present");
     let alpha_ids = alpha.identifiers.as_deref().unwrap_or(&[]);
-    // lei (public), duns (public), nat-reg (restricted), vat (restricted), internal (restricted)
-    // — confidential explicitly marked ids would be stripped; here all are public/restricted.
     assert!(
         !alpha_ids
             .iter()
@@ -802,14 +704,12 @@ fn redact_full_featured_fixture_to_partner() {
         "no confidential identifiers in partner output"
     );
 
-    // bref-redacted passes through unchanged as boundary_ref.
     let bref = find_node(&output, "bref-redacted").expect("bref-redacted present");
     assert!(matches!(
         &bref.node_type,
         NodeTypeTag::Known(NodeType::BoundaryRef)
     ));
 
-    // person-doe present (partner retains with filtered identifiers).
     assert!(
         find_node(&output, "person-doe").is_some(),
         "person-doe present in partner scope"
@@ -817,10 +717,6 @@ fn redact_full_featured_fixture_to_partner() {
 
     assert_l1_valid(&output);
 }
-
-// ---------------------------------------------------------------------------
-// T-028-13: Full-featured fixture — redact to public
-// ---------------------------------------------------------------------------
 
 #[test]
 fn redact_full_featured_fixture_to_public() {
@@ -840,7 +736,6 @@ fn redact_full_featured_fixture_to_public() {
     assert_eq!(output.disclosure_scope, Some(DisclosureScope::Public));
     assert_eq!(output.file_salt, file.file_salt);
 
-    // No person nodes.
     assert!(
         output
             .nodes
@@ -849,7 +744,6 @@ fn redact_full_featured_fixture_to_public() {
         "no person nodes in public output"
     );
 
-    // No beneficial_ownership edges.
     assert!(
         output.edges.iter().all(|e| !matches!(
             &e.edge_type,
@@ -858,7 +752,6 @@ fn redact_full_featured_fixture_to_public() {
         "no beneficial_ownership edges in public output"
     );
 
-    // org-alpha: only public identifiers kept (lei, duns).
     let alpha = find_node(&output, "org-alpha").expect("org-alpha present");
     let alpha_ids = alpha.identifiers.as_deref().unwrap_or(&[]);
     for id in alpha_ids {
@@ -869,7 +762,6 @@ fn redact_full_featured_fixture_to_public() {
         );
     }
 
-    // bref-redacted passes through.
     let bref = find_node(&output, "bref-redacted").expect("bref-redacted present");
     assert!(matches!(
         &bref.node_type,

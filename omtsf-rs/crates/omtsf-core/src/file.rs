@@ -24,10 +24,6 @@ use crate::enums::DisclosureScope;
 use crate::newtypes::{CalendarDate, FileSalt, NodeId, SemVer};
 use crate::structures::{Edge, Node};
 
-// ---------------------------------------------------------------------------
-// OmtsFile
-// ---------------------------------------------------------------------------
-
 /// The top-level OMTSF file representation.
 ///
 /// Deserialise from JSON with [`serde_json::from_str`] /
@@ -102,10 +98,6 @@ pub struct OmtsFile {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -116,10 +108,6 @@ mod tests {
     use crate::enums::{EdgeType, EdgeTypeTag, NodeType, NodeTypeTag};
     use crate::newtypes::EdgeId;
     use crate::structures::EdgeProperties;
-
-    // -----------------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------------
 
     /// A valid 64-char lowercase hex string for use as `file_salt`.
     const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
@@ -221,10 +209,6 @@ mod tests {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // T-001 Minimal OmtsFile (required fields only)
-    // -----------------------------------------------------------------------
-
     /// Parse a minimal JSON fixture (no optional fields, empty arrays).
     #[test]
     fn omts_file_minimal_parse() {
@@ -255,10 +239,6 @@ mod tests {
     fn omts_file_minimal_round_trip() {
         round_trip(&minimal_file());
     }
-
-    // -----------------------------------------------------------------------
-    // T-002 Full OmtsFile with all optional fields
-    // -----------------------------------------------------------------------
 
     /// Parse a fixture that sets every optional top-level field.
     #[test]
@@ -307,10 +287,6 @@ mod tests {
         round_trip(&f);
     }
 
-    // -----------------------------------------------------------------------
-    // T-003 Round-trip: deserialize → serialize → structural equality
-    // -----------------------------------------------------------------------
-
     /// Parse a complete JSON fixture with nodes and edges, re-serialise, and
     /// compare the re-parsed result for structural equality.
     #[test]
@@ -349,10 +325,6 @@ mod tests {
         assert_eq!(reparsed.disclosure_scope, Some(DisclosureScope::Internal));
     }
 
-    // -----------------------------------------------------------------------
-    // T-004 Unknown field preservation in round-trip
-    // -----------------------------------------------------------------------
-
     /// Unknown top-level fields survive a deserialise → serialise cycle.
     #[test]
     fn omts_file_unknown_fields_preserved() {
@@ -369,7 +341,6 @@ mod tests {
         );
         let f: OmtsFile = serde_json::from_str(&json).expect("deserialize");
 
-        // Unknown fields are captured in `extra`.
         assert_eq!(
             f.extra.get("x_custom_field").and_then(|v| v.as_str()),
             Some("hello")
@@ -381,7 +352,6 @@ mod tests {
             Some(42)
         );
 
-        // Re-serialisation re-emits the unknown fields.
         let serialised = serde_json::to_string(&f).expect("serialize");
         assert!(
             serialised.contains("x_custom_field"),
@@ -392,7 +362,6 @@ mod tests {
             "unknown field missing from serialised output"
         );
 
-        // And a full round-trip preserves equality.
         round_trip(&f);
     }
 
@@ -416,10 +385,6 @@ mod tests {
         round_trip(&f);
     }
 
-    // -----------------------------------------------------------------------
-    // T-005 Field ordering: omtsf_version first
-    // -----------------------------------------------------------------------
-
     /// The first JSON key in the serialised output must be `omtsf_version`.
     ///
     /// `serde_json` preserves struct field declaration order.  This test
@@ -429,9 +394,7 @@ mod tests {
         let f = minimal_file();
         let json = serde_json::to_string(&f).expect("serialize");
 
-        // The very first key in the JSON object.
         let first_key_pos = json.find("omtsf_version").expect("omtsf_version in output");
-        // No other known field should appear before it.
         for other_key in &[
             "snapshot_date",
             "file_salt",
@@ -468,10 +431,6 @@ mod tests {
         assert!(pos_salt < pos_nodes, "file_salt must precede nodes");
         assert!(pos_nodes < pos_edges, "nodes must precede edges");
     }
-
-    // -----------------------------------------------------------------------
-    // T-006 Missing required field causes deserialization error
-    // -----------------------------------------------------------------------
 
     /// Missing `omtsf_version` must fail deserialization.
     #[test]
@@ -546,10 +505,6 @@ mod tests {
         assert!(result.is_err(), "missing edges should fail");
     }
 
-    // -----------------------------------------------------------------------
-    // T-007 Empty nodes/edges arrays are valid
-    // -----------------------------------------------------------------------
-
     /// An `OmtsFile` with empty `nodes` and `edges` arrays is valid.
     #[test]
     fn omts_file_empty_arrays_valid() {
@@ -561,10 +516,6 @@ mod tests {
         assert!(json.contains(r#""edges":[]"#));
         round_trip(&f);
     }
-
-    // -----------------------------------------------------------------------
-    // T-008 Optional fields omitted from serialised output when None
-    // -----------------------------------------------------------------------
 
     /// Optional fields absent from a minimal file do not appear in the JSON.
     #[test]
@@ -583,10 +534,6 @@ mod tests {
             );
         }
     }
-
-    // -----------------------------------------------------------------------
-    // T-009 All three DisclosureScope variants deserialise correctly
-    // -----------------------------------------------------------------------
 
     #[test]
     fn omts_file_disclosure_scope_variants() {
@@ -611,10 +558,6 @@ mod tests {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // T-010 snapshot_sequence = 0 is valid
-    // -----------------------------------------------------------------------
-
     #[test]
     fn omts_file_snapshot_sequence_zero_valid() {
         let f = OmtsFile {
@@ -625,10 +568,6 @@ mod tests {
         assert!(json.contains(r#""snapshot_sequence":0"#));
         round_trip(&f);
     }
-
-    // -----------------------------------------------------------------------
-    // T-011 Programmatic construction round-trips
-    // -----------------------------------------------------------------------
 
     /// Programmatically construct an [`OmtsFile`] with nodes and edges and
     /// verify structural round-trip equality.
@@ -655,10 +594,6 @@ mod tests {
         assert_eq!(rt.nodes[0].id, node_id("org-supplier"));
         assert_eq!(rt.edges[0].source, node_id("org-supplier"));
     }
-
-    // -----------------------------------------------------------------------
-    // T-012 Invalid required-field values cause deserialization error
-    // -----------------------------------------------------------------------
 
     /// An invalid `omtsf_version` format fails deserialization.
     #[test]
@@ -706,10 +641,6 @@ mod tests {
         assert!(result.is_err(), "invalid file_salt should fail");
     }
 
-    // -----------------------------------------------------------------------
-    // T-013 Extra map is empty for a clean known fixture
-    // -----------------------------------------------------------------------
-
     #[test]
     fn omts_file_extra_empty_for_known_fixture() {
         let f = minimal_file();
@@ -720,10 +651,6 @@ mod tests {
             "no extra fields expected for a clean fixture"
         );
     }
-
-    // -----------------------------------------------------------------------
-    // T-014 Large unknown-field round-trip
-    // -----------------------------------------------------------------------
 
     /// Multiple unknown fields of different JSON types all survive round-trip.
     #[test]
@@ -750,7 +677,6 @@ mod tests {
         let back: OmtsFile = serde_json::from_str(&serialised).expect("re-deserialize");
         assert_eq!(f, back);
 
-        // Spot-check nested value.
         assert_eq!(
             back.extra
                 .get("x_object")
@@ -759,10 +685,6 @@ mod tests {
             Some("value")
         );
     }
-
-    // -----------------------------------------------------------------------
-    // T-015 serde_json::Value round-trip (via from_value / to_value)
-    // -----------------------------------------------------------------------
 
     /// Constructing via [`serde_json::to_value`] / [`serde_json::from_value`]
     /// also round-trips correctly.
