@@ -72,6 +72,18 @@ pub enum Direction {
     Both,
 }
 
+/// Target serialization encoding for the `convert` subcommand.
+///
+/// Only `json` and `cbor` are valid targets; zstd is the compression layer,
+/// not an encoding, and is controlled separately via `--compress`.
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum TargetEncoding {
+    /// JSON encoding (default).
+    Json,
+    /// CBOR encoding with self-describing tag 55799.
+    Cbor,
+}
+
 /// All top-level subcommands exposed by the `omtsf` binary.
 #[derive(Subcommand)]
 pub enum Command {
@@ -142,12 +154,22 @@ pub enum Command {
         /// Path to an .omts file, or `-` for stdin.
         #[arg(value_name = "FILE")]
         file: PathOrStdin,
-        /// Pretty-print JSON output with 2-space indentation (default).
+        /// Target encoding: json (default) or cbor.
+        #[arg(long, default_value = "json", value_enum)]
+        to: TargetEncoding,
+        /// Pretty-print JSON output with 2-space indentation (default when --to json).
+        ///
+        /// Ignored when `--to cbor`.
         #[arg(long, default_value = "true")]
         pretty: bool,
         /// Emit minified JSON with no extraneous whitespace.
+        ///
+        /// Mutually exclusive with `--pretty`. Ignored when `--to cbor`.
         #[arg(long, conflicts_with = "pretty")]
         compact: bool,
+        /// Compress output with zstd after serialization.
+        #[arg(long)]
+        compress: bool,
     },
 
     /// List all nodes reachable from a source node via directed edges.

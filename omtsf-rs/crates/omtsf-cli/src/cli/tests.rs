@@ -125,7 +125,7 @@ fn test_diff_help() {
     );
 }
 
-/// `omtsf convert --help` must mention both `--compact` and `--pretty`.
+/// `omtsf convert --help` must mention `--compact`, `--pretty`, `--to`, and `--compress`.
 #[test]
 fn test_convert_help() {
     let mut cmd = Cli::command();
@@ -141,6 +141,89 @@ fn test_convert_help() {
         help.contains("--pretty"),
         "convert help should mention --pretty"
     );
+    assert!(help.contains("--to"), "convert help should mention --to");
+    assert!(
+        help.contains("--compress"),
+        "convert help should mention --compress"
+    );
+}
+
+/// `omtsf convert --to json` parses correctly and defaults to pretty output.
+#[test]
+fn test_convert_to_json_flag() {
+    let cli = Cli::try_parse_from(["omtsf", "convert", "--to", "json", "supply-chain.omts"])
+        .expect("should parse --to json");
+    match cli.command {
+        Command::Convert {
+            to,
+            pretty,
+            compact,
+            compress,
+            ..
+        } => {
+            assert!(
+                matches!(to, super::TargetEncoding::Json),
+                "to should be Json"
+            );
+            assert!(pretty, "default pretty should be true");
+            assert!(!compact, "compact should default to false");
+            assert!(!compress, "compress should default to false");
+        }
+        _ => panic!("expected Convert subcommand"),
+    }
+}
+
+/// `omtsf convert --to cbor` parses correctly.
+#[test]
+fn test_convert_to_cbor_flag() {
+    let cli = Cli::try_parse_from(["omtsf", "convert", "--to", "cbor", "supply-chain.omts"])
+        .expect("should parse --to cbor");
+    match cli.command {
+        Command::Convert { to, .. } => {
+            assert!(
+                matches!(to, super::TargetEncoding::Cbor),
+                "to should be Cbor"
+            );
+        }
+        _ => panic!("expected Convert subcommand"),
+    }
+}
+
+/// `omtsf convert --compress` parses correctly.
+#[test]
+fn test_convert_compress_flag() {
+    let cli = Cli::try_parse_from(["omtsf", "convert", "--compress", "supply-chain.omts"])
+        .expect("should parse --compress");
+    match cli.command {
+        Command::Convert { compress, .. } => {
+            assert!(compress, "compress should be true");
+        }
+        _ => panic!("expected Convert subcommand"),
+    }
+}
+
+/// `omtsf convert --to cbor --compress` is accepted.
+#[test]
+fn test_convert_cbor_with_compress() {
+    let cli = Cli::try_parse_from([
+        "omtsf",
+        "convert",
+        "--to",
+        "cbor",
+        "--compress",
+        "supply-chain.omts",
+    ])
+    .expect("should parse --to cbor --compress");
+    match cli.command {
+        Command::Convert { to, compress, .. } => {
+            assert!(
+                matches!(to, super::TargetEncoding::Cbor),
+                "to should be Cbor"
+            );
+            assert!(compress, "compress should be true");
+        }
+        _ => panic!("expected Convert subcommand"),
+    }
 }
 
 /// `omtsf reach --help` must mention `--depth`, `--direction`, and `NODE_ID`.

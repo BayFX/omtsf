@@ -4,7 +4,10 @@ pub mod error;
 pub mod format;
 pub mod io;
 
-pub use cli::{Cli, Command, Direction, DisclosureScope, MergeStrategy, OutputFormat, PathOrStdin};
+pub use cli::{
+    Cli, Command, Direction, DisclosureScope, MergeStrategy, OutputFormat, PathOrStdin,
+    TargetEncoding,
+};
 
 use clap::Parser;
 
@@ -46,9 +49,15 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
             cmd::inspect::run(&omts_file, &cli.format)
         }
 
-        Command::Convert { file, compact, .. } => {
+        Command::Convert {
+            file,
+            to,
+            pretty,
+            compact,
+            compress,
+        } => {
             let (omts_file, _encoding) = io::read_and_parse(file, cli.max_file_size, cli.verbose)?;
-            cmd::convert::run(&omts_file, *compact)
+            cmd::convert::run(&omts_file, to, *pretty, *compact, *compress)
         }
 
         Command::Init { example } => cmd::init::run(*example),
