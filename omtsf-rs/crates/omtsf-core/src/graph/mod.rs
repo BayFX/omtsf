@@ -151,6 +151,8 @@ impl std::error::Error for GraphBuildError {}
 pub struct OmtsGraph {
     graph: StableDiGraph<NodeWeight, EdgeWeight>,
     id_to_index: HashMap<String, NodeIndex>,
+    nodes_by_type: HashMap<NodeTypeTag, Vec<NodeIndex>>,
+    edges_by_type: HashMap<EdgeTypeTag, Vec<EdgeIndex>>,
 }
 
 impl OmtsGraph {
@@ -188,6 +190,20 @@ impl OmtsGraph {
     pub fn graph(&self) -> &StableDiGraph<NodeWeight, EdgeWeight> {
         &self.graph
     }
+
+    /// Returns the [`NodeIndex`] values for all nodes of the given type.
+    ///
+    /// Returns an empty slice if no nodes of that type exist.
+    pub fn nodes_of_type(&self, t: &NodeTypeTag) -> &[NodeIndex] {
+        self.nodes_by_type.get(t).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    /// Returns the [`EdgeIndex`] values for all edges of the given type.
+    ///
+    /// Returns an empty slice if no edges of that type exist.
+    pub fn edges_of_type(&self, t: &EdgeTypeTag) -> &[EdgeIndex] {
+        self.edges_by_type.get(t).map(Vec::as_slice).unwrap_or(&[])
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -223,6 +239,8 @@ pub fn build_graph(file: &OmtsFile) -> Result<OmtsGraph, GraphBuildError> {
     let mut graph: StableDiGraph<NodeWeight, EdgeWeight> =
         StableDiGraph::with_capacity(node_count, edge_count);
     let mut id_to_index: HashMap<String, NodeIndex> = HashMap::with_capacity(node_count);
+    let mut nodes_by_type: HashMap<NodeTypeTag, Vec<NodeIndex>> = HashMap::new();
+    let mut edges_by_type: HashMap<EdgeTypeTag, Vec<EdgeIndex>> = HashMap::new();
 
     // Pass 1: insert all nodes.
     for (data_index, node) in file.nodes.iter().enumerate() {
@@ -240,6 +258,10 @@ pub fn build_graph(file: &OmtsFile) -> Result<OmtsGraph, GraphBuildError> {
 
         let idx = graph.add_node(weight);
         id_to_index.insert(local_id, idx);
+        nodes_by_type
+            .entry(node.node_type.clone())
+            .or_default()
+            .push(idx);
     }
 
     // Pass 2: insert all edges.
@@ -268,10 +290,19 @@ pub fn build_graph(file: &OmtsFile) -> Result<OmtsGraph, GraphBuildError> {
             data_index,
         };
 
-        graph.add_edge(source_idx, target_idx, weight);
+        let edge_idx = graph.add_edge(source_idx, target_idx, weight);
+        edges_by_type
+            .entry(edge.edge_type.clone())
+            .or_default()
+            .push(edge_idx);
     }
 
-    Ok(OmtsGraph { graph, id_to_index })
+    Ok(OmtsGraph {
+        graph,
+        id_to_index,
+        nodes_by_type,
+        edges_by_type,
+    })
 }
 
 // ---------------------------------------------------------------------------

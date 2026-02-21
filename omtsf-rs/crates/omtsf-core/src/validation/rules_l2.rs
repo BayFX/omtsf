@@ -69,6 +69,14 @@ fn facility_ids_with_org_connection<'a>(file: &'a OmtsFile) -> HashSet<&'a str> 
         .map(|n| n.id.as_ref() as &str)
         .collect();
 
+    // Collect all facility node IDs for quick lookup (mirrors org_ids above).
+    let facility_ids: HashSet<&str> = file
+        .nodes
+        .iter()
+        .filter(|n| n.node_type == NodeTypeTag::Known(NodeType::Facility))
+        .map(|n| n.id.as_ref() as &str)
+        .collect();
+
     let mut connected: HashSet<&'a str> = HashSet::new();
 
     // Check the `operator` property on facility nodes.
@@ -119,12 +127,7 @@ fn facility_ids_with_org_connection<'a>(file: &'a OmtsFile) -> HashSet<&'a str> 
 
         // Only count the connection when the "org side" is actually an organisation
         // and the "facility side" is actually a facility.
-        let facility_is_facility = file.nodes.iter().any(|n| {
-            (n.id.as_ref() as &str) == facility_side
-                && n.node_type == NodeTypeTag::Known(NodeType::Facility)
-        });
-
-        if facility_is_facility && org_ids.contains(org_side) {
+        if facility_ids.contains(facility_side) && org_ids.contains(org_side) {
             connected.insert(facility_side);
         }
     }

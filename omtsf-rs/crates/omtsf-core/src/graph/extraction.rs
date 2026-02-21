@@ -30,7 +30,7 @@
 use std::collections::{HashSet, VecDeque};
 
 use petgraph::stable_graph::NodeIndex;
-use petgraph::visit::{EdgeRef, IntoEdgeReferences};
+use petgraph::visit::EdgeRef;
 
 use crate::file::OmtsFile;
 use crate::graph::OmtsGraph;
@@ -290,31 +290,56 @@ pub fn selector_subgraph(
         return assemble_subgraph(graph, file, &all_nodes);
     }
 
-    // Phase 1: Seed scan — linear pass over all nodes and edges.
-    // Nodes are only scanned when the selector set has at least one
-    // node-applicable selector; likewise edges.  This prevents edge-only
-    // selectors from accidentally seeding all nodes (and vice-versa).
+    // Phase 1: Seed scan — find matching nodes and edges.
+    // Fast path: when the only node-applicable selectors are node_types,
+    // use the type index instead of scanning all nodes.
     let mut seed_nodes: HashSet<NodeIndex> = HashSet::new();
 
     if selectors.has_node_selectors() {
-        for node in &file.nodes {
-            if selectors.matches_node(node) {
-                if let Some(&idx) = graph.node_index(node.id.as_ref()) {
+        if can_use_node_type_index(selectors) {
+            for node_type in &selectors.node_types {
+                for &idx in graph.nodes_of_type(node_type) {
                     seed_nodes.insert(idx);
+                }
+            }
+        } else {
+            for node in &file.nodes {
+                if selectors.matches_node(node) {
+                    if let Some(&idx) = graph.node_index(node.id.as_ref()) {
+                        seed_nodes.insert(idx);
+                    }
                 }
             }
         }
     }
 
     // Collect matching edge indices so we can resolve endpoints in phase 2.
+    // Fast path: when the only edge-applicable selectors are edge_types,
+    // use the type index instead of scanning all edges.
     let mut seed_edge_node_ids: Vec<(String, String)> = Vec::new();
     let mut any_edge_matched = false;
 
     if selectors.has_edge_selectors() {
-        for edge in &file.edges {
-            if selectors.matches_edge(edge) {
-                any_edge_matched = true;
-                seed_edge_node_ids.push((edge.source.to_string(), edge.target.to_string()));
+        if can_use_edge_type_index(selectors) {
+            let g = graph.graph();
+            for edge_type in &selectors.edge_types {
+                for &edge_idx in graph.edges_of_type(edge_type) {
+                    if let Some((src, tgt)) = g.edge_endpoints(edge_idx) {
+                        any_edge_matched = true;
+                        if let (Some(sw), Some(tw)) =
+                            (graph.node_weight(src), graph.node_weight(tgt))
+                        {
+                            seed_edge_node_ids.push((sw.local_id.clone(), tw.local_id.clone()));
+                        }
+                    }
+                }
+            }
+        } else {
+            for edge in &file.edges {
+                if selectors.matches_edge(edge) {
+                    any_edge_matched = true;
+                    seed_edge_node_ids.push((edge.source.to_string(), edge.target.to_string()));
+                }
             }
         }
     }
@@ -371,6 +396,28 @@ pub fn selector_subgraph(
 }
 
 // ---------------------------------------------------------------------------
+// Internal: type-index eligibility checks
+// ---------------------------------------------------------------------------
+
+/// Returns `true` when `node_types` is the only non-empty node-applicable
+/// selector group, allowing the type index to replace a full linear scan.
+fn can_use_node_type_index(ss: &SelectorSet) -> bool {
+    !ss.node_types.is_empty()
+        && ss.label_keys.is_empty()
+        && ss.label_key_values.is_empty()
+        && ss.identifier_schemes.is_empty()
+        && ss.identifier_scheme_values.is_empty()
+        && ss.jurisdictions.is_empty()
+        && ss.names.is_empty()
+}
+
+/// Returns `true` when `edge_types` is the only non-empty edge-applicable
+/// selector group, allowing the type index to replace a full linear scan.
+fn can_use_edge_type_index(ss: &SelectorSet) -> bool {
+    !ss.edge_types.is_empty() && ss.label_keys.is_empty() && ss.label_key_values.is_empty()
+}
+
+// ---------------------------------------------------------------------------
 // Internal: assemble OmtsFile from a NodeIndex set
 // ---------------------------------------------------------------------------
 
@@ -408,14 +455,14 @@ fn assemble_subgraph(
         .collect();
 
     // Collect included edges: only edges whose both endpoints are in index_set.
-    // We also build a data_index set for included edges.
+    // Instead of scanning ALL edges in the graph, iterate only outgoing edges
+    // of included nodes — O(sum of out-degrees of included nodes) vs O(E_total).
     let mut included_edge_data_indices: HashSet<usize> = HashSet::new();
-    for edge_ref in g.edge_references() {
-        let source = edge_ref.source();
-        let target = edge_ref.target();
-        if index_set.contains(&source) && index_set.contains(&target) {
-            let data_index = edge_ref.weight().data_index;
-            included_edge_data_indices.insert(data_index);
+    for &node_idx in index_set {
+        for edge_ref in g.edges(node_idx) {
+            if index_set.contains(&edge_ref.target()) {
+                included_edge_data_indices.insert(edge_ref.weight().data_index);
+            }
         }
     }
 
