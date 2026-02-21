@@ -230,6 +230,12 @@ pub enum Command {
         /// Include neighbors up to N hops from the specified nodes (default: 0).
         #[arg(long, default_value = "0")]
         expand: u32,
+        /// Target output encoding: json (default) or cbor.
+        #[arg(long, default_value = "json", value_enum)]
+        to: TargetEncoding,
+        /// Compress output with zstd after serialization.
+        #[arg(long)]
+        compress: bool,
     },
 
     /// Scaffold a new minimal .omts file.

@@ -87,9 +87,11 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
             file,
             node_ids,
             expand,
+            to,
+            compress,
         } => {
             let (omts_file, _encoding) = io::read_and_parse(file, cli.max_file_size, cli.verbose)?;
-            cmd::subgraph::run(&omts_file, node_ids, *expand)
+            cmd::subgraph::run(&omts_file, node_ids, *expand, to, *compress)
         }
 
         Command::Merge {

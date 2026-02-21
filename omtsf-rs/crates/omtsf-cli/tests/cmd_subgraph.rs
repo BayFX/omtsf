@@ -232,3 +232,144 @@ fn subgraph_invalid_json_exits_2() {
         "expected exit 2 for invalid JSON"
     );
 }
+
+#[test]
+fn subgraph_to_cbor_exits_0() {
+    let out = Command::new(omtsf_bin())
+        .args([
+            "subgraph",
+            "--to",
+            "cbor",
+            fixture("graph-query.omts").to_str().expect("path"),
+            "org-a",
+            "org-b",
+        ])
+        .output()
+        .expect("run omtsf subgraph --to cbor");
+    assert!(out.status.success(), "exit code: {:?}", out.status.code());
+}
+
+#[test]
+fn subgraph_to_cbor_starts_with_cbor_tag() {
+    let out = Command::new(omtsf_bin())
+        .args([
+            "subgraph",
+            "--to",
+            "cbor",
+            fixture("graph-query.omts").to_str().expect("path"),
+            "org-a",
+            "org-b",
+        ])
+        .output()
+        .expect("run omtsf subgraph --to cbor");
+    assert!(out.status.success(), "exit code: {:?}", out.status.code());
+    assert!(
+        out.stdout.len() >= 3,
+        "CBOR output should have at least 3 bytes"
+    );
+    assert_eq!(
+        &out.stdout[..3],
+        &[0xD9, 0xD9, 0xF7],
+        "CBOR output must start with self-describing tag 55799"
+    );
+}
+
+#[test]
+fn subgraph_compress_exits_0() {
+    let out = Command::new(omtsf_bin())
+        .args([
+            "subgraph",
+            "--compress",
+            fixture("graph-query.omts").to_str().expect("path"),
+            "org-a",
+            "org-b",
+        ])
+        .output()
+        .expect("run omtsf subgraph --compress");
+    assert!(out.status.success(), "exit code: {:?}", out.status.code());
+}
+
+#[test]
+fn subgraph_compress_starts_with_zstd_magic() {
+    let out = Command::new(omtsf_bin())
+        .args([
+            "subgraph",
+            "--compress",
+            fixture("graph-query.omts").to_str().expect("path"),
+            "org-a",
+            "org-b",
+        ])
+        .output()
+        .expect("run omtsf subgraph --compress");
+    assert!(out.status.success(), "exit code: {:?}", out.status.code());
+    assert!(
+        out.stdout.len() >= 4,
+        "compressed output should have at least 4 bytes"
+    );
+    assert_eq!(
+        &out.stdout[..4],
+        &[0x28, 0xB5, 0x2F, 0xFD],
+        "compressed output must start with zstd magic bytes"
+    );
+}
+
+#[test]
+fn subgraph_to_cbor_compress_starts_with_zstd_magic() {
+    let out = Command::new(omtsf_bin())
+        .args([
+            "subgraph",
+            "--to",
+            "cbor",
+            "--compress",
+            fixture("graph-query.omts").to_str().expect("path"),
+            "org-a",
+            "org-b",
+        ])
+        .output()
+        .expect("run omtsf subgraph --to cbor --compress");
+    assert!(out.status.success(), "exit code: {:?}", out.status.code());
+    assert!(
+        out.stdout.len() >= 4,
+        "compressed output should have at least 4 bytes"
+    );
+    assert_eq!(
+        &out.stdout[..4],
+        &[0x28, 0xB5, 0x2F, 0xFD],
+        "compressed CBOR output must start with zstd magic bytes"
+    );
+}
+
+#[test]
+fn subgraph_output_passes_validate() {
+    // Write the subgraph JSON to a temp file and pipe it through `omtsf validate`.
+    use std::io::Write as _;
+
+    let out = Command::new(omtsf_bin())
+        .args([
+            "subgraph",
+            fixture("graph-query.omts").to_str().expect("path"),
+            "org-a",
+            "org-b",
+        ])
+        .output()
+        .expect("run omtsf subgraph");
+    assert!(
+        out.status.success(),
+        "subgraph exit code: {:?}",
+        out.status.code()
+    );
+
+    let mut tmp = tempfile::NamedTempFile::new().expect("temp file");
+    tmp.write_all(&out.stdout).expect("write subgraph output");
+
+    let validate_out = Command::new(omtsf_bin())
+        .args(["validate", tmp.path().to_str().expect("path")])
+        .output()
+        .expect("run omtsf validate on subgraph output");
+    assert!(
+        validate_out.status.success(),
+        "subgraph output should pass validation, exit code: {:?}\nstderr: {}",
+        validate_out.status.code(),
+        String::from_utf8_lossy(&validate_out.stderr)
+    );
+}
