@@ -7,18 +7,23 @@
 //! Flags:
 //! - `--expand <n>` (default 0): include neighbours up to `n` hops from the
 //!   specified nodes before computing the induced subgraph.
+//! - `--to <encoding>` (default json): output encoding (`json` or `cbor`).
+//! - `--compress`: wrap serialized output in a zstd frame.
 //!
-//! Output: a valid `.omts` JSON file.  The `--format` flag does not change
-//! the output format here (the spec requires `.omts` output regardless of
-//! `--format`).
+//! Output: a valid `.omts` file written to stdout in the requested encoding.
+//! The `--format` flag does not affect this command (the spec requires `.omts`
+//! output regardless of `--format`).
 //!
 //! Exit codes: 0 = success, 1 = one or more node IDs not found,
 //! 2 = parse/build failure.
+use std::io::Write as _;
+
 use omtsf_core::OmtsFile;
 use omtsf_core::graph::queries::Direction as CoreDirection;
 use omtsf_core::graph::{QueryError, build_graph, ego_graph, induced_subgraph};
 use omtsf_core::newtypes::CalendarDate;
 
+use crate::TargetEncoding;
 use crate::cmd::init::today_string;
 use crate::error::CliError;
 
@@ -29,13 +34,20 @@ use crate::error::CliError;
 /// listed node (within `expand` hops in both directions) is added to the node
 /// set before the induced subgraph is computed.
 ///
-/// The resulting `.omts` file is written as pretty-printed JSON to stdout.
+/// The resulting `.omts` file is serialized to stdout using `to` and,
+/// optionally, compressed with zstd when `compress` is `true`.
 ///
 /// # Errors
 ///
-/// - [`CliError`] exit code 2 if the graph cannot be built.
+/// - [`CliError`] exit code 2 if the graph cannot be built or serialization fails.
 /// - [`CliError`] exit code 1 if any node ID is not found in the graph.
-pub fn run(file: &OmtsFile, node_ids: &[String], expand: u32) -> Result<(), CliError> {
+pub fn run(
+    file: &OmtsFile,
+    node_ids: &[String],
+    expand: u32,
+    to: &TargetEncoding,
+    compress: bool,
+) -> Result<(), CliError> {
     let graph = build_graph(file).map_err(|e| CliError::GraphBuildError {
         detail: e.to_string(),
     })?;
@@ -57,13 +69,56 @@ pub fn run(file: &OmtsFile, node_ids: &[String], expand: u32) -> Result<(), CliE
             detail: format!("generated date is invalid: {e}"),
         })?;
 
-    let output = serde_json::to_string_pretty(&subgraph_file).map_err(|e| CliError::IoError {
-        source: "<output>".to_owned(),
-        detail: format!("JSON serialize error: {e}"),
+    let bytes = serialize(&subgraph_file, to, compress)?;
+
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+
+    out.write_all(&bytes).map_err(|e| CliError::IoError {
+        source: "stdout".to_owned(),
+        detail: e.to_string(),
     })?;
 
-    println!("{output}");
+    // Append a trailing newline for uncompressed JSON so the shell prompt
+    // appears on a new line.  Binary outputs (CBOR, any compressed payload)
+    // must not have an appended newline because that would corrupt the stream.
+    let is_text_output = matches!(to, TargetEncoding::Json) && !compress;
+    if is_text_output {
+        out.write_all(b"\n").map_err(|e| CliError::IoError {
+            source: "stdout".to_owned(),
+            detail: e.to_string(),
+        })?;
+    }
+
     Ok(())
+}
+
+/// Serializes `file` to bytes using the requested encoding and optional
+/// compression.
+///
+/// - `--to json` (default): pretty-printed JSON.
+/// - `--to cbor`: CBOR with self-describing tag 55799.
+/// - `--compress`: wraps the serialized bytes in a zstd frame.
+fn serialize(file: &OmtsFile, to: &TargetEncoding, compress: bool) -> Result<Vec<u8>, CliError> {
+    match to {
+        TargetEncoding::Cbor => omtsf_core::convert(file, omtsf_core::Encoding::Cbor, compress)
+            .map_err(|e| CliError::InternalError {
+                detail: e.to_string(),
+            }),
+        TargetEncoding::Json => {
+            let json_bytes =
+                serde_json::to_vec_pretty(file).map_err(|e| CliError::InternalError {
+                    detail: format!("JSON pretty-print failed: {e}"),
+                })?;
+            if compress {
+                omtsf_core::compress_zstd(&json_bytes).map_err(|e| CliError::InternalError {
+                    detail: format!("zstd compression failed: {e}"),
+                })
+            } else {
+                Ok(json_bytes)
+            }
+        }
+    }
 }
 
 /// Computes the induced subgraph after expanding each node in `node_ids` by
