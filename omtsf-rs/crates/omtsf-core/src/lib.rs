@@ -4,6 +4,7 @@ pub mod boundary_hash;
 pub mod canonical;
 pub mod check_digits;
 pub mod diff;
+pub mod encoding;
 pub mod enums;
 pub mod file;
 pub mod graph;
@@ -27,6 +28,7 @@ pub use diff::{
     IdentifierSetDiff, LabelSetDiff, NodeDiff, NodeRef, NodesDiff, PropertyChange, diff,
     diff_filtered,
 };
+pub use encoding::{Encoding, EncodingDetectionError, detect_encoding};
 pub use enums::{
     AttestationOutcome, AttestationStatus, AttestationType, Confidence, ConsolidationBasis,
     ControlType, DisclosureScope, EdgeType, EdgeTypeTag, EmissionFactorSource, EventType, NodeType,
