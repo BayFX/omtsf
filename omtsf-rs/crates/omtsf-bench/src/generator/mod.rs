@@ -39,6 +39,8 @@ pub struct GeneratorConfig {
     pub branching_factor: usize,
     /// Average identifiers per node (1.0-3.0).
     pub identifier_density: f64,
+    /// Average labels per node (1.0-3.0).
+    pub label_density: f64,
     /// Fraction of edges with full properties (0.0-1.0).
     pub edge_property_fullness: f64,
     /// Fraction of cross-tier edges (0.0-0.3).
@@ -78,6 +80,7 @@ impl SizeTier {
                 ownership_depth: 2,
                 branching_factor: 3,
                 identifier_density: 1.5,
+                label_density: 1.5,
                 edge_property_fullness: 0.5,
                 mesh_density: 0.1,
                 inject_cycles: false,
@@ -95,6 +98,7 @@ impl SizeTier {
                 ownership_depth: 3,
                 branching_factor: 4,
                 identifier_density: 2.0,
+                label_density: 1.5,
                 edge_property_fullness: 0.6,
                 mesh_density: 0.15,
                 inject_cycles: false,
@@ -112,6 +116,7 @@ impl SizeTier {
                 ownership_depth: 4,
                 branching_factor: 5,
                 identifier_density: 2.0,
+                label_density: 2.0,
                 edge_property_fullness: 0.7,
                 mesh_density: 0.15,
                 inject_cycles: false,
@@ -129,6 +134,7 @@ impl SizeTier {
                 ownership_depth: 5,
                 branching_factor: 6,
                 identifier_density: 2.5,
+                label_density: 2.0,
                 edge_property_fullness: 0.8,
                 mesh_density: 0.2,
                 inject_cycles: false,

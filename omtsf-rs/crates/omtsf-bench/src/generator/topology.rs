@@ -24,7 +24,13 @@ pub fn build_supply_chain(config: &GeneratorConfig, rng: &mut StdRng) -> OmtsFil
     // Phase 1: Build all nodes
     let mut org_ids: Vec<NodeId> = Vec::new();
     for i in 0..config.num_organizations {
-        let node = nodes::build_organization(rng, i, &mut id_counter, config.identifier_density);
+        let node = nodes::build_organization(
+            rng,
+            i,
+            &mut id_counter,
+            config.identifier_density,
+            config.label_density,
+        );
         org_ids.push(node.id.clone());
         all_nodes.push(node);
     }
@@ -37,29 +43,53 @@ pub fn build_supply_chain(config: &GeneratorConfig, rng: &mut StdRng) -> OmtsFil
         } else {
             Some(&org_ids[rng.gen_range(0..org_ids.len())])
         };
-        let node =
-            nodes::build_facility(rng, i, &mut id_counter, config.identifier_density, operator);
+        let node = nodes::build_facility(
+            rng,
+            i,
+            &mut id_counter,
+            config.identifier_density,
+            config.label_density,
+            operator,
+        );
         fac_ids.push(node.id.clone());
         all_nodes.push(node);
     }
 
     let mut good_ids: Vec<NodeId> = Vec::new();
     for i in 0..config.num_goods {
-        let node = nodes::build_good(rng, i, &mut id_counter, config.identifier_density);
+        let node = nodes::build_good(
+            rng,
+            i,
+            &mut id_counter,
+            config.identifier_density,
+            config.label_density,
+        );
         good_ids.push(node.id.clone());
         all_nodes.push(node);
     }
 
     let mut person_ids: Vec<NodeId> = Vec::new();
     for i in 0..config.num_persons {
-        let node = nodes::build_person(rng, i, &mut id_counter, config.identifier_density);
+        let node = nodes::build_person(
+            rng,
+            i,
+            &mut id_counter,
+            config.identifier_density,
+            config.label_density,
+        );
         person_ids.push(node.id.clone());
         all_nodes.push(node);
     }
 
     let mut att_ids: Vec<NodeId> = Vec::new();
     for i in 0..config.num_attestations {
-        let node = nodes::build_attestation(rng, i, &mut id_counter, config.identifier_density);
+        let node = nodes::build_attestation(
+            rng,
+            i,
+            &mut id_counter,
+            config.identifier_density,
+            config.label_density,
+        );
         att_ids.push(node.id.clone());
         all_nodes.push(node);
     }
@@ -76,6 +106,7 @@ pub fn build_supply_chain(config: &GeneratorConfig, rng: &mut StdRng) -> OmtsFil
             i,
             &mut id_counter,
             config.identifier_density,
+            config.label_density,
             installation,
         );
         con_ids.push(node.id.clone());

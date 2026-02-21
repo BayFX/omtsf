@@ -6,6 +6,7 @@ use omtsf_core::enums::{
 };
 use omtsf_core::newtypes::{CalendarDate, CountryCode, NodeId};
 use omtsf_core::structures::Node;
+use omtsf_core::types::Label;
 use rand::Rng;
 use rand::rngs::StdRng;
 
@@ -75,6 +76,100 @@ const STANDARDS: &[&str] = &[
     "BSCI",
     "WRAP",
 ];
+
+/// ISO 3166-1 alpha-2 codes that are EU member states (subset present in `COUNTRIES`).
+const EU_COUNTRIES: &[&str] = &["DE", "FR", "NL", "SE"];
+
+/// Generates a list of [`Label`] values for a node.
+///
+/// The set of labels assigned depends on the node type and, for jurisdiction-
+/// based labels, on the node's jurisdiction. The `label_density` parameter
+/// controls how many labels are generated on average.
+///
+/// Label vocabulary:
+/// - `certified` (key-only flag, ~30 % of all nodes)
+/// - `tier` with value `"1"`–`"5"` (organization nodes only)
+/// - `risk-level` with value `"low"` / `"medium"` / `"high"` (~50 % of nodes)
+/// - `eu-regulated` (key-only flag, nodes whose jurisdiction is an EU country)
+/// - `sector` with value `"mining"` / `"manufacturing"` / `"logistics"` /
+///   `"agriculture"` / `"chemicals"` (organization nodes only)
+pub fn gen_labels(
+    rng: &mut StdRng,
+    label_density: f64,
+    node_type: &NodeTypeTag,
+    jurisdiction: Option<&CountryCode>,
+) -> Vec<Label> {
+    let mut labels: Vec<Label> = Vec::new();
+
+    let is_org = matches!(node_type, NodeTypeTag::Known(NodeType::Organization));
+
+    // `certified` flag — ~30 % probability, scaled by label_density
+    let certified_p = (0.3 * label_density / 1.5).clamp(0.0, 1.0);
+    if rng.gen_bool(certified_p) {
+        labels.push(Label {
+            key: "certified".to_owned(),
+            value: None,
+            extra: serde_json::Map::new(),
+        });
+    }
+
+    // `tier` and `sector` — organization nodes only
+    if is_org {
+        let tier_values = ["1", "2", "3", "4", "5"];
+        let tier_p = (0.6 * label_density / 1.5).clamp(0.0, 1.0);
+        if rng.gen_bool(tier_p) {
+            let v = tier_values[rng.gen_range(0..tier_values.len())];
+            labels.push(Label {
+                key: "tier".to_owned(),
+                value: Some(v.to_owned()),
+                extra: serde_json::Map::new(),
+            });
+        }
+
+        let sectors = [
+            "mining",
+            "manufacturing",
+            "logistics",
+            "agriculture",
+            "chemicals",
+        ];
+        let sector_p = (0.5 * label_density / 1.5).clamp(0.0, 1.0);
+        if rng.gen_bool(sector_p) {
+            let v = sectors[rng.gen_range(0..sectors.len())];
+            labels.push(Label {
+                key: "sector".to_owned(),
+                value: Some(v.to_owned()),
+                extra: serde_json::Map::new(),
+            });
+        }
+    }
+
+    // `risk-level` — ~50 % of all nodes
+    let risk_p = (0.5 * label_density / 1.5).clamp(0.0, 1.0);
+    if rng.gen_bool(risk_p) {
+        let risk_values = ["low", "medium", "high"];
+        let v = risk_values[rng.gen_range(0..risk_values.len())];
+        labels.push(Label {
+            key: "risk-level".to_owned(),
+            value: Some(v.to_owned()),
+            extra: serde_json::Map::new(),
+        });
+    }
+
+    // `eu-regulated` — nodes in an EU jurisdiction
+    if let Some(jur) = jurisdiction {
+        let jur_str: &str = jur;
+        if EU_COUNTRIES.iter().any(|&eu| eu == jur_str) {
+            labels.push(Label {
+                key: "eu-regulated".to_owned(),
+                value: None,
+                extra: serde_json::Map::new(),
+            });
+        }
+    }
+
+    labels
+}
 
 fn country(rng: &mut StdRng) -> CountryCode {
     let c = COUNTRIES[rng.gen_range(0..COUNTRIES.len())];
@@ -151,6 +246,7 @@ pub fn build_organization(
     index: usize,
     counter: &mut usize,
     identifier_density: f64,
+    label_density: f64,
 ) -> Node {
     let id = node_id("org", index);
     let ids = gen_identifiers(rng, *counter, identifier_density);
@@ -165,11 +261,24 @@ pub fn build_organization(
         OrganizationStatus::Suspended,
     ];
 
+    let jur = country(rng);
+    let labels = gen_labels(
+        rng,
+        label_density,
+        &NodeTypeTag::Known(NodeType::Organization),
+        Some(&jur),
+    );
+
     let mut node = blank_node(id, NodeTypeTag::Known(NodeType::Organization));
     node.identifiers = Some(ids);
     node.name = Some(format!("{} #{index}", ORG_NAMES[name_idx]));
-    node.jurisdiction = Some(country(rng));
+    node.jurisdiction = Some(jur);
     node.status = Some(statuses[rng.gen_range(0..statuses.len())].clone());
+    node.labels = if labels.is_empty() {
+        None
+    } else {
+        Some(labels)
+    };
     node
 }
 
@@ -179,6 +288,7 @@ pub fn build_facility(
     index: usize,
     counter: &mut usize,
     identifier_density: f64,
+    label_density: f64,
     operator_id: Option<&NodeId>,
 ) -> Node {
     let id = node_id("fac", index);
@@ -186,6 +296,13 @@ pub fn build_facility(
     *counter += 1;
 
     let city_idx = rng.gen_range(0..CITIES.len());
+    let jur = country(rng);
+    let labels = gen_labels(
+        rng,
+        label_density,
+        &NodeTypeTag::Known(NodeType::Facility),
+        Some(&jur),
+    );
 
     let mut node = blank_node(id, NodeTypeTag::Known(NodeType::Facility));
     node.identifiers = Some(ids);
@@ -196,7 +313,12 @@ pub fn build_facility(
         rng.gen_range(1..999),
         CITIES[city_idx]
     ));
-    node.jurisdiction = Some(country(rng));
+    node.jurisdiction = Some(jur);
+    node.labels = if labels.is_empty() {
+        None
+    } else {
+        Some(labels)
+    };
     node
 }
 
@@ -206,6 +328,7 @@ pub fn build_good(
     index: usize,
     counter: &mut usize,
     identifier_density: f64,
+    label_density: f64,
 ) -> Node {
     let id = node_id("good", index);
     let ids = gen_identifiers(rng, *counter, identifier_density);
@@ -213,12 +336,23 @@ pub fn build_good(
 
     let cc_idx = rng.gen_range(0..COMMODITY_CODES.len());
     let units = ["kg", "tonne", "m3", "piece", "litre"];
+    let labels = gen_labels(
+        rng,
+        label_density,
+        &NodeTypeTag::Known(NodeType::Good),
+        None,
+    );
 
     let mut node = blank_node(id, NodeTypeTag::Known(NodeType::Good));
     node.identifiers = Some(ids);
     node.name = Some(format!("Product #{index}"));
     node.commodity_code = Some(COMMODITY_CODES[cc_idx].to_owned());
     node.unit = Some(units[rng.gen_range(0..units.len())].to_owned());
+    node.labels = if labels.is_empty() {
+        None
+    } else {
+        Some(labels)
+    };
     node
 }
 
@@ -228,17 +362,29 @@ pub fn build_person(
     index: usize,
     counter: &mut usize,
     identifier_density: f64,
+    label_density: f64,
 ) -> Node {
     let id = node_id("person", index);
     let ids = gen_identifiers(rng, *counter, identifier_density);
     *counter += 1;
 
     let role_idx = rng.gen_range(0..ROLES.len());
+    let labels = gen_labels(
+        rng,
+        label_density,
+        &NodeTypeTag::Known(NodeType::Person),
+        None,
+    );
 
     let mut node = blank_node(id, NodeTypeTag::Known(NodeType::Person));
     node.identifiers = Some(ids);
     node.name = Some(format!("Person #{index}"));
     node.role = Some(ROLES[role_idx].to_owned());
+    node.labels = if labels.is_empty() {
+        None
+    } else {
+        Some(labels)
+    };
     node
 }
 
@@ -248,6 +394,7 @@ pub fn build_attestation(
     index: usize,
     counter: &mut usize,
     identifier_density: f64,
+    label_density: f64,
 ) -> Node {
     let id = node_id("att", index);
     let ids = gen_identifiers(rng, *counter, identifier_density);
@@ -289,6 +436,12 @@ pub fn build_attestation(
     let std_idx = rng.gen_range(0..STANDARDS.len());
     let valid_from = calendar_date(rng, 2023);
     let valid_to = calendar_date(rng, 2025);
+    let labels = gen_labels(
+        rng,
+        label_density,
+        &NodeTypeTag::Known(NodeType::Attestation),
+        None,
+    );
 
     let mut node = blank_node(id, NodeTypeTag::Known(NodeType::Attestation));
     node.identifiers = Some(ids);
@@ -302,6 +455,11 @@ pub fn build_attestation(
     node.reference = Some(format!("REF-{}", rng.gen_range(10000..99999)));
     node.risk_severity = Some(severities[rng.gen_range(0..severities.len())].clone());
     node.risk_likelihood = Some(likelihoods[rng.gen_range(0..likelihoods.len())].clone());
+    node.labels = if labels.is_empty() {
+        None
+    } else {
+        Some(labels)
+    };
     node
 }
 
@@ -311,6 +469,7 @@ pub fn build_consignment(
     index: usize,
     counter: &mut usize,
     identifier_density: f64,
+    label_density: f64,
     installation_id: Option<&NodeId>,
 ) -> Node {
     let id = node_id("con", index);
@@ -322,6 +481,12 @@ pub fn build_consignment(
         EmissionFactorSource::DefaultEu,
         EmissionFactorSource::DefaultCountry,
     ];
+    let labels = gen_labels(
+        rng,
+        label_density,
+        &NodeTypeTag::Known(NodeType::Consignment),
+        None,
+    );
 
     let mut node = blank_node(id, NodeTypeTag::Known(NodeType::Consignment));
     node.identifiers = Some(ids);
@@ -334,6 +499,11 @@ pub fn build_consignment(
     node.emission_factor_source =
         Some(emission_sources[rng.gen_range(0..emission_sources.len())].clone());
     node.installation_id = installation_id.cloned();
+    node.labels = if labels.is_empty() {
+        None
+    } else {
+        Some(labels)
+    };
     node
 }
 

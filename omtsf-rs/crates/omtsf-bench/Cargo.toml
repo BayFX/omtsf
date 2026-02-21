@@ -51,5 +51,9 @@ harness = false
 name = "diff"
 harness = false
 
+[[bench]]
+name = "selector_query"
+harness = false
+
 [lints]
 workspace = true
