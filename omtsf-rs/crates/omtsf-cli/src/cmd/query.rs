@@ -25,8 +25,8 @@ use crate::error::CliError;
 
 /// Runs the `query` command.
 ///
-/// Parses `content` as an OMTSF file, builds a `SelectorSet` from the
-/// supplied flag vectors, and calls `selector_match` to find matching nodes
+/// Builds a `SelectorSet` from the supplied flag vectors and calls
+/// `selector_match` against the pre-parsed `file` to find matching nodes
 /// and edges.
 ///
 /// # Output
@@ -37,12 +37,11 @@ use crate::error::CliError;
 ///
 /// # Errors
 ///
-/// - [`CliError`] exit code 2 if `content` cannot be parsed or no selector
-///   flags were provided.
+/// - [`CliError`] exit code 2 if no selector flags were provided.
 /// - [`CliError`] exit code 1 if no elements match the selectors.
 #[allow(clippy::too_many_arguments)]
 pub fn run(
-    content: &str,
+    file: &OmtsFile,
     node_types: &[String],
     edge_types: &[String],
     labels: &[String],
@@ -52,10 +51,6 @@ pub fn run(
     count: bool,
     format: &OutputFormat,
 ) -> Result<(), CliError> {
-    let file: OmtsFile = serde_json::from_str(content).map_err(|e| CliError::ParseFailed {
-        detail: format!("line {}, column {}: {e}", e.line(), e.column()),
-    })?;
-
     let selector_set = build_selector_set(
         node_types,
         edge_types,
@@ -65,7 +60,7 @@ pub fn run(
         names,
     )?;
 
-    let result = selector_match(&file, &selector_set);
+    let result = selector_match(file, &selector_set);
 
     let matched_nodes: Vec<&omtsf_core::Node> = result
         .node_indices
@@ -225,11 +220,16 @@ mod tests {
         v.iter().map(std::string::ToString::to_string).collect()
     }
 
+    fn parse(s: &str) -> OmtsFile {
+        serde_json::from_str(s).expect("valid OMTS JSON")
+    }
+
     /// Matching by node type returns exit code 0.
     #[test]
     fn test_query_organization_succeeds() {
+        let file = parse(SAMPLE_FILE);
         let result = run(
-            SAMPLE_FILE,
+            &file,
             &strs(&["organization"]),
             &empty(),
             &empty(),
@@ -248,8 +248,9 @@ mod tests {
     /// Matching by edge type returns exit code 0.
     #[test]
     fn test_query_edge_type_supplies_succeeds() {
+        let file = parse(SAMPLE_FILE);
         let result = run(
-            SAMPLE_FILE,
+            &file,
             &empty(),
             &strs(&["supplies"]),
             &empty(),
@@ -265,8 +266,9 @@ mod tests {
     /// No match returns `NoResults` error (exit code 1).
     #[test]
     fn test_query_no_match_returns_exit_1() {
+        let file = parse(SAMPLE_FILE);
         let result = run(
-            SAMPLE_FILE,
+            &file,
             &strs(&["good"]),
             &empty(),
             &empty(),
@@ -283,8 +285,9 @@ mod tests {
     /// `--count` mode returns exit code 0 and does not error.
     #[test]
     fn test_query_count_mode() {
+        let file = parse(SAMPLE_FILE);
         let result = run(
-            SAMPLE_FILE,
+            &file,
             &strs(&["organization"]),
             &empty(),
             &empty(),
@@ -300,8 +303,9 @@ mod tests {
     /// JSON mode returns exit code 0 for a valid query.
     #[test]
     fn test_query_json_mode() {
+        let file = parse(SAMPLE_FILE);
         let result = run(
-            SAMPLE_FILE,
+            &file,
             &strs(&["organization"]),
             &empty(),
             &empty(),
@@ -317,8 +321,9 @@ mod tests {
     /// Empty selectors → `InvalidArgument` (exit code 2).
     #[test]
     fn test_query_no_selectors_returns_exit_2() {
+        let file = parse(SAMPLE_FILE);
         let result = run(
-            SAMPLE_FILE,
+            &file,
             &empty(),
             &empty(),
             &empty(),
@@ -329,24 +334,6 @@ mod tests {
             &OutputFormat::Human,
         );
         let err = result.expect_err("no selectors → error");
-        assert_eq!(err.exit_code(), 2);
-    }
-
-    /// Invalid JSON → `ParseFailed` (exit code 2).
-    #[test]
-    fn test_query_invalid_json_returns_exit_2() {
-        let result = run(
-            "not json at all",
-            &strs(&["organization"]),
-            &empty(),
-            &empty(),
-            &empty(),
-            &empty(),
-            &empty(),
-            false,
-            &OutputFormat::Human,
-        );
-        let err = result.expect_err("bad JSON → ParseFailed");
         assert_eq!(err.exit_code(), 2);
     }
 

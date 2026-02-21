@@ -108,18 +108,14 @@ impl InspectStats {
 
 /// Runs the `inspect` command.
 ///
-/// Parses `content` as an OMTSF file, computes statistics, and writes them
-/// to `stdout` in the requested format. Returns the exit code (0 or 2).
+/// Computes statistics from the pre-parsed `file` and writes them to stdout
+/// in the requested format.
 ///
 /// # Errors
 ///
-/// Returns [`CliError`] with exit code 2 if the content cannot be parsed.
-pub fn run(content: &str, format: &OutputFormat) -> Result<(), CliError> {
-    let file: OmtsFile = serde_json::from_str(content).map_err(|e| CliError::ParseFailed {
-        detail: format!("line {}, column {}: {e}", e.line(), e.column()),
-    })?;
-
-    let stats = InspectStats::from_file(&file);
+/// Returns [`CliError`] with exit code 2 if a stdout write fails.
+pub fn run(file: &OmtsFile, format: &OutputFormat) -> Result<(), CliError> {
+    let stats = InspectStats::from_file(file);
 
     let stdout = std::io::stdout();
     let mut out = stdout.lock();

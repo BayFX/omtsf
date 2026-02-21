@@ -26,23 +26,21 @@ use crate::error::CliError;
 
 /// Runs the `diff` command.
 ///
-/// Parses `content_a` and `content_b` as OMTSF files, constructs the
-/// [`DiffFilter`] from CLI flags, calls [`diff_filtered`], and writes the
-/// result to stdout in the requested format.
+/// Constructs the [`DiffFilter`] from CLI flags, calls [`diff_filtered`] on
+/// the pre-parsed files, and writes the result to stdout in the requested
+/// format.
 ///
 /// Returns `Ok(())` when the files are identical (exit 0).
 /// Returns [`CliError::DiffHasDifferences`] (exit 1) when differences are found.
-/// Returns [`CliError::ParseFailed`] (exit 2) when either file cannot be parsed.
 ///
 /// # Errors
 ///
-/// - [`CliError::ParseFailed`] — either file is not a valid OMTSF file.
 /// - [`CliError::DiffHasDifferences`] — the diff is non-empty.
 /// - [`CliError::IoError`] — stdout write failed.
 #[allow(clippy::too_many_arguments)]
 pub fn run(
-    content_a: &str,
-    content_b: &str,
+    file_a: &OmtsFile,
+    file_b: &OmtsFile,
     ids_only: bool,
     summary_only: bool,
     node_types: &[String],
@@ -50,13 +48,6 @@ pub fn run(
     ignore_fields: &[String],
     format: &OutputFormat,
 ) -> Result<(), CliError> {
-    let file_a: OmtsFile = serde_json::from_str(content_a).map_err(|e| CliError::ParseFailed {
-        detail: format!("file A, line {}, column {}: {e}", e.line(), e.column()),
-    })?;
-    let file_b: OmtsFile = serde_json::from_str(content_b).map_err(|e| CliError::ParseFailed {
-        detail: format!("file B, line {}, column {}: {e}", e.line(), e.column()),
-    })?;
-
     let filter = DiffFilter {
         node_types: if node_types.is_empty() {
             None
@@ -71,7 +62,7 @@ pub fn run(
         ignore_fields: ignore_fields.iter().cloned().collect::<HashSet<_>>(),
     };
 
-    let result = diff_filtered(&file_a, &file_b, Some(&filter));
+    let result = diff_filtered(file_a, file_b, Some(&filter));
 
     write_result(&result, ids_only, summary_only, format)?;
 
@@ -158,76 +149,15 @@ mod tests {
         "edges": []
     }"#;
 
-    const NOT_JSON: &str = "this is not json";
-
-    #[test]
-    fn run_bad_file_a_returns_parse_failed() {
-        let result = run(
-            NOT_JSON,
-            EMPTY,
-            false,
-            false,
-            &[],
-            &[],
-            &[],
-            &OutputFormat::Human,
-        );
-        match result {
-            Err(CliError::ParseFailed { detail }) => {
-                assert!(detail.contains("file A"), "detail: {detail}");
-            }
-            other => panic!("expected ParseFailed, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn run_bad_file_b_returns_parse_failed() {
-        let result = run(
-            EMPTY,
-            NOT_JSON,
-            false,
-            false,
-            &[],
-            &[],
-            &[],
-            &OutputFormat::Human,
-        );
-        match result {
-            Err(CliError::ParseFailed { detail }) => {
-                assert!(detail.contains("file B"), "detail: {detail}");
-            }
-            other => panic!("expected ParseFailed, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn run_parse_failure_exit_code_is_2() {
-        let err = run(
-            NOT_JSON,
-            EMPTY,
-            false,
-            false,
-            &[],
-            &[],
-            &[],
-            &OutputFormat::Human,
-        )
-        .expect_err("should fail");
-        assert_eq!(err.exit_code(), 2);
+    fn parse(s: &str) -> OmtsFile {
+        serde_json::from_str(s).expect("valid OMTS JSON")
     }
 
     #[test]
     fn run_identical_empty_files_returns_ok() {
-        let result = run(
-            EMPTY,
-            EMPTY,
-            false,
-            false,
-            &[],
-            &[],
-            &[],
-            &OutputFormat::Human,
-        );
+        let a = parse(EMPTY);
+        let b = parse(EMPTY);
+        let result = run(&a, &b, false, false, &[], &[], &[], &OutputFormat::Human);
         assert!(
             result.is_ok(),
             "expected Ok for identical files: {result:?}"
@@ -236,31 +166,17 @@ mod tests {
 
     #[test]
     fn run_identical_files_exit_code_is_0() {
-        let result = run(
-            WITH_ORG_SAME_EXT_ID,
-            WITH_ORG_SAME_EXT_ID,
-            false,
-            false,
-            &[],
-            &[],
-            &[],
-            &OutputFormat::Human,
-        );
+        let a = parse(WITH_ORG_SAME_EXT_ID);
+        let b = parse(WITH_ORG_SAME_EXT_ID);
+        let result = run(&a, &b, false, false, &[], &[], &[], &OutputFormat::Human);
         assert!(result.is_ok(), "identical files should exit 0: {result:?}");
     }
 
     #[test]
     fn run_different_files_returns_diff_has_differences() {
-        let result = run(
-            EMPTY,
-            WITH_ORG,
-            false,
-            false,
-            &[],
-            &[],
-            &[],
-            &OutputFormat::Human,
-        );
+        let a = parse(EMPTY);
+        let b = parse(WITH_ORG);
+        let result = run(&a, &b, false, false, &[], &[], &[], &OutputFormat::Human);
         match result {
             Err(CliError::DiffHasDifferences) => {}
             other => panic!("expected DiffHasDifferences, got {other:?}"),
@@ -269,79 +185,44 @@ mod tests {
 
     #[test]
     fn run_different_files_exit_code_is_1() {
-        let err = run(
-            EMPTY,
-            WITH_ORG,
-            false,
-            false,
-            &[],
-            &[],
-            &[],
-            &OutputFormat::Human,
-        )
-        .expect_err("should fail with differences");
+        let a = parse(EMPTY);
+        let b = parse(WITH_ORG);
+        let err = run(&a, &b, false, false, &[], &[], &[], &OutputFormat::Human)
+            .expect_err("should fail with differences");
         assert_eq!(err.exit_code(), 1);
     }
 
     #[test]
     fn run_ids_only_still_exits_1_for_differences() {
-        let err = run(
-            EMPTY,
-            WITH_ORG,
-            true,
-            false,
-            &[],
-            &[],
-            &[],
-            &OutputFormat::Human,
-        )
-        .expect_err("should still exit 1");
+        let a = parse(EMPTY);
+        let b = parse(WITH_ORG);
+        let err = run(&a, &b, true, false, &[], &[], &[], &OutputFormat::Human)
+            .expect_err("should still exit 1");
         assert_eq!(err.exit_code(), 1);
     }
 
     #[test]
     fn run_summary_only_exits_1_for_differences() {
-        let err = run(
-            EMPTY,
-            WITH_ORG,
-            false,
-            true,
-            &[],
-            &[],
-            &[],
-            &OutputFormat::Human,
-        )
-        .expect_err("should exit 1");
+        let a = parse(EMPTY);
+        let b = parse(WITH_ORG);
+        let err = run(&a, &b, false, true, &[], &[], &[], &OutputFormat::Human)
+            .expect_err("should exit 1");
         assert_eq!(err.exit_code(), 1);
     }
 
     #[test]
     fn run_json_identical_files_returns_ok() {
-        let result = run(
-            EMPTY,
-            EMPTY,
-            false,
-            false,
-            &[],
-            &[],
-            &[],
-            &OutputFormat::Json,
-        );
+        let a = parse(EMPTY);
+        let b = parse(EMPTY);
+        let result = run(&a, &b, false, false, &[], &[], &[], &OutputFormat::Json);
         assert!(result.is_ok(), "expected Ok: {result:?}");
     }
 
     #[test]
     fn run_json_different_files_returns_diff_has_differences() {
-        let result = run(
-            EMPTY,
-            WITH_ORG,
-            false,
-            false,
-            &[],
-            &[],
-            &[],
-            &OutputFormat::Json,
-        );
+        let a = parse(EMPTY);
+        let b = parse(WITH_ORG);
+        let result = run(&a, &b, false, false, &[], &[], &[], &OutputFormat::Json);
         assert!(
             matches!(result, Err(CliError::DiffHasDifferences)),
             "expected DiffHasDifferences: {result:?}"

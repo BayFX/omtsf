@@ -63,6 +63,24 @@ pub enum CliError {
         detail: String,
     },
 
+    /// The decompressed size of a zstd input exceeded the configured limit.
+    ///
+    /// This guard prevents decompression bombs from exhausting available memory.
+    DecompressedTooLarge {
+        /// A human-readable label for the source.
+        source: String,
+        /// The configured limit in bytes (`4 * max_file_size`).
+        limit: usize,
+    },
+
+    /// The initial bytes of the input do not match any known encoding.
+    EncodingDetectionFailed {
+        /// A human-readable label for the source.
+        source: String,
+        /// The first bytes that were inspected (up to 4 bytes), hex-formatted.
+        first_bytes_hex: String,
+    },
+
     /// The input is not a valid OMTSF file (not valid JSON or missing required
     /// fields).
     ///
@@ -154,6 +172,8 @@ impl CliError {
             | Self::InvalidUtf8 { .. }
             | Self::StdinReadError { .. }
             | Self::IoError { .. }
+            | Self::DecompressedTooLarge { .. }
+            | Self::EncodingDetectionFailed { .. }
             | Self::ParseFailed { .. } => 2,
 
             Self::ValidationErrors
@@ -226,6 +246,22 @@ impl CliError {
             }
             Self::IoError { source, detail } => {
                 format!("error: I/O error reading {source}: {detail}")
+            }
+            Self::DecompressedTooLarge { source, limit } => {
+                format!(
+                    "error: decompressed size of {source} exceeds limit of {limit} bytes\n\
+                     hint: this may be a decompression bomb; use --max-file-size to raise the \
+                     limit only if the source is trusted"
+                )
+            }
+            Self::EncodingDetectionFailed {
+                source,
+                first_bytes_hex,
+            } => {
+                format!(
+                    "error: unrecognized encoding in {source}: first bytes are {first_bytes_hex}\n\
+                     hint: ensure the file is a valid .omts file in JSON, CBOR, or zstd-compressed format"
+                )
             }
             Self::ParseFailed { detail } => {
                 format!(

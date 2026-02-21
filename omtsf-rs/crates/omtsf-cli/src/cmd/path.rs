@@ -23,29 +23,24 @@ use crate::error::CliError;
 
 /// Runs the `path` command.
 ///
-/// Parses `content` as an OMTSF file, builds the graph, and finds up to
-/// `max_paths` paths from `from` to `to` with a maximum length of
-/// `max_depth` edges.  Paths are ordered shortest-first.
+/// Builds the graph from the pre-parsed `file` and finds up to `max_paths`
+/// paths from `from` to `to` with a maximum length of `max_depth` edges.
+/// Paths are ordered shortest-first.
 ///
 /// # Errors
 ///
-/// - [`CliError`] exit code 2 if the content cannot be parsed or the graph
-///   cannot be built.
+/// - [`CliError`] exit code 2 if the graph cannot be built.
 /// - [`CliError`] exit code 1 if either node ID is not found, or no path
 ///   exists.
 pub fn run(
-    content: &str,
+    file: &OmtsFile,
     from: &str,
     to: &str,
     max_paths: usize,
     max_depth: u32,
     format: &OutputFormat,
 ) -> Result<(), CliError> {
-    let file: OmtsFile = serde_json::from_str(content).map_err(|e| CliError::ParseFailed {
-        detail: format!("line {}, column {}: {e}", e.line(), e.column()),
-    })?;
-
-    let graph = build_graph(&file).map_err(|e| CliError::GraphBuildError {
+    let graph = build_graph(file).map_err(|e| CliError::GraphBuildError {
         detail: e.to_string(),
     })?;
 

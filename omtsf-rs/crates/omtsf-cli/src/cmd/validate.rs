@@ -9,7 +9,7 @@
 //! Exit codes:
 //! - 0 = valid (no L1 errors)
 //! - 1 = validation errors (at least one L1 violation)
-//! - 2 = parse failure (not valid JSON or missing required fields)
+//! - 2 = parse/encoding failure (handled by the dispatch layer)
 use omtsf_core::{OmtsFile, ValidationConfig, validate};
 
 use crate::OutputFormat;
@@ -18,33 +18,27 @@ use crate::format::{FormatMode, FormatterConfig, write_diagnostic, write_summary
 
 /// Runs the `validate` command.
 ///
-/// Parses `content` as an OMTSF file, runs the validation engine at the
-/// requested `level`, and emits diagnostics to stderr. The summary line is
-/// written to stderr in human mode (or as a final NDJSON object in JSON mode).
+/// Runs the validation engine at the requested `level` on the pre-parsed
+/// `file`, and emits diagnostics to stderr. The summary line is written to
+/// stderr in human mode (or as a final NDJSON object in JSON mode).
 ///
 /// Returns `Ok(())` when the file is conformant (no L1 errors). Returns
-/// [`CliError::ValidationErrors`] (exit code 1) when L1 errors are found, or
-/// [`CliError::ParseFailed`] (exit code 2) when the content cannot be parsed.
+/// [`CliError::ValidationErrors`] (exit code 1) when L1 errors are found.
 ///
 /// # Errors
 ///
-/// - [`CliError::ParseFailed`] — content is not a valid OMTSF file.
 /// - [`CliError::ValidationErrors`] — one or more L1 errors were found.
 pub fn run(
-    content: &str,
+    file: &OmtsFile,
     level: u8,
     format: &OutputFormat,
     quiet: bool,
     verbose: bool,
     no_color: bool,
 ) -> Result<(), CliError> {
-    let file: OmtsFile = serde_json::from_str(content).map_err(|e| CliError::ParseFailed {
-        detail: format!("line {}, column {}: {e}", e.line(), e.column()),
-    })?;
-
     let config = config_for_level(level);
 
-    let result = validate(&file, &config, None);
+    let result = validate(file, &config, None);
 
     let mode = match format {
         OutputFormat::Human => FormatMode::Human,
@@ -141,7 +135,9 @@ mod tests {
         ]
     }"#;
 
-    const NOT_JSON: &str = "this is not json";
+    fn parse(s: &str) -> OmtsFile {
+        serde_json::from_str(s).expect("valid OMTS JSON")
+    }
 
     #[test]
     fn config_level_1_runs_only_l1() {
@@ -169,49 +165,15 @@ mod tests {
 
     #[test]
     fn run_valid_file_returns_ok() {
-        let result = run(MINIMAL_VALID, 2, &OutputFormat::Human, false, false, true);
+        let file = parse(MINIMAL_VALID);
+        let result = run(&file, 2, &OutputFormat::Human, false, false, true);
         assert!(result.is_ok(), "expected Ok for clean file: {result:?}");
     }
 
     #[test]
-    fn run_invalid_json_returns_parse_failed() {
-        let result = run(NOT_JSON, 2, &OutputFormat::Human, false, false, true);
-        match result {
-            Err(CliError::ParseFailed { .. }) => {}
-            other => panic!("expected ParseFailed, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn run_parse_failure_exit_code_is_2() {
-        let result = run(NOT_JSON, 2, &OutputFormat::Human, false, false, true);
-        let err = result.expect_err("should fail");
-        assert_eq!(err.exit_code(), 2);
-    }
-
-    #[test]
-    fn run_parse_error_message_includes_line_and_column() {
-        let bad_json = "{\n  \"omtsf_version\": !!bad\n}";
-        let err = run(bad_json, 2, &OutputFormat::Human, false, false, true)
-            .expect_err("should fail to parse");
-        let msg = err.message();
-        assert!(msg.contains("line"), "message should contain 'line': {msg}");
-        assert!(
-            msg.contains("column"),
-            "message should contain 'column': {msg}"
-        );
-    }
-
-    #[test]
     fn run_invalid_edge_returns_validation_errors() {
-        let result = run(
-            INVALID_EDGE_TARGET,
-            2,
-            &OutputFormat::Human,
-            false,
-            false,
-            true,
-        );
+        let file = parse(INVALID_EDGE_TARGET);
+        let result = run(&file, 2, &OutputFormat::Human, false, false, true);
         match result {
             Err(CliError::ValidationErrors) => {}
             other => panic!("expected ValidationErrors, got {other:?}"),
@@ -220,46 +182,37 @@ mod tests {
 
     #[test]
     fn run_validation_error_exit_code_is_1() {
-        let result = run(
-            INVALID_EDGE_TARGET,
-            2,
-            &OutputFormat::Human,
-            false,
-            false,
-            true,
-        );
+        let file = parse(INVALID_EDGE_TARGET);
+        let result = run(&file, 2, &OutputFormat::Human, false, false, true);
         let err = result.expect_err("should fail");
         assert_eq!(err.exit_code(), 1);
     }
 
     #[test]
     fn run_level_1_returns_ok_for_clean_file() {
-        let result = run(MINIMAL_VALID, 1, &OutputFormat::Human, false, false, true);
+        let file = parse(MINIMAL_VALID);
+        let result = run(&file, 1, &OutputFormat::Human, false, false, true);
         assert!(result.is_ok());
     }
 
     #[test]
     fn run_level_3_returns_ok_for_clean_file() {
-        let result = run(MINIMAL_VALID, 3, &OutputFormat::Human, false, false, true);
+        let file = parse(MINIMAL_VALID);
+        let result = run(&file, 3, &OutputFormat::Human, false, false, true);
         assert!(result.is_ok());
     }
 
     #[test]
     fn run_json_format_valid_file_returns_ok() {
-        let result = run(MINIMAL_VALID, 2, &OutputFormat::Json, false, false, true);
+        let file = parse(MINIMAL_VALID);
+        let result = run(&file, 2, &OutputFormat::Json, false, false, true);
         assert!(result.is_ok());
     }
 
     #[test]
     fn run_json_format_invalid_edge_returns_validation_errors() {
-        let result = run(
-            INVALID_EDGE_TARGET,
-            2,
-            &OutputFormat::Json,
-            false,
-            false,
-            true,
-        );
+        let file = parse(INVALID_EDGE_TARGET);
+        let result = run(&file, 2, &OutputFormat::Json, false, false, true);
         match result {
             Err(CliError::ValidationErrors) => {}
             other => panic!("expected ValidationErrors, got {other:?}"),

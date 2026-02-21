@@ -1,4 +1,4 @@
-/// File and stdin reading with size enforcement and UTF-8 validation.
+/// File and stdin reading with size enforcement and multi-encoding parse support.
 ///
 /// This module is the single entry point for all input I/O in the `omtsf`
 /// binary. `omtsf-core` never touches the filesystem; all reading happens here.
@@ -7,9 +7,13 @@
 /// - Disk files: size checked via `std::fs::metadata` before any read.
 /// - Stdin: buffered with a `Read::take` cap so allocation is bounded.
 /// - UTF-8 validation via `std::str::from_utf8` with byte-offset reporting.
+/// - Multi-encoding parse via `omtsf_core::parse_omts` (JSON, CBOR, zstd).
+/// - Decompression bomb guard: `max_decompressed = 4 * max_file_size`.
 /// - All I/O errors are converted to [`CliError`] variants with exit code 2.
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
+
+use omtsf_core::{Encoding, OmtsDecodeError, OmtsFile, parse_omts};
 
 use crate::PathOrStdin;
 use crate::error::CliError;
@@ -36,8 +40,132 @@ pub fn read_input(source: &PathOrStdin, max_size: u64) -> Result<String, CliErro
     }
 }
 
+/// Reads raw bytes from `source`, enforcing the size limit but without UTF-8
+/// validation.
+///
+/// This is the correct low-level reader for binary formats (CBOR, zstd).
+/// The returned `Vec<u8>` is passed directly to [`parse_omts`].
+///
+/// # Errors
+///
+/// Returns [`CliError`] (exit code 2) for:
+/// - file not found
+/// - permission denied
+/// - file/stdin exceeds `max_size`
+/// - any other I/O error
+pub fn read_input_bytes(source: &PathOrStdin, max_size: u64) -> Result<Vec<u8>, CliError> {
+    match source {
+        PathOrStdin::Path(path) => read_file_bytes(path, max_size),
+        PathOrStdin::Stdin => read_stdin_bytes(max_size),
+    }
+}
+
+/// Reads raw bytes from `source` and parses them as an OMTSF file.
+///
+/// The complete read pipeline per SPEC-007 Section 4.6:
+/// 1. Read bytes (size-checked).
+/// 2. Call [`parse_omts`] to auto-detect encoding, decompress if zstd, and
+///    parse as JSON or CBOR.
+/// 3. If `verbose`, print `encoding: <name>` to stderr.
+///
+/// The decompression bomb guard applies a limit of `4 * max_file_size` on the
+/// decompressed size of any zstd-wrapped input.
+///
+/// Returns the parsed [`OmtsFile`] and the detected innermost [`Encoding`].
+///
+/// # Errors
+///
+/// Returns [`CliError`] (exit code 2) for any read or parse failure.
+pub fn read_and_parse(
+    source: &PathOrStdin,
+    max_file_size: u64,
+    verbose: bool,
+) -> Result<(OmtsFile, Encoding), CliError> {
+    let source_label = source_label(source);
+    let bytes = read_input_bytes(source, max_file_size)?;
+
+    let max_decompressed = max_decompressed_limit(max_file_size);
+
+    let (file, encoding) =
+        parse_omts(&bytes, max_decompressed).map_err(|e| decode_error_to_cli(e, &source_label))?;
+
+    if verbose {
+        let enc_name = match encoding {
+            Encoding::Json => "json",
+            Encoding::Cbor => "cbor",
+            Encoding::Zstd => "zstd",
+        };
+        eprintln!("encoding: {enc_name}");
+    }
+
+    Ok((file, encoding))
+}
+
+/// Computes the decompressed-size limit from `max_file_size`.
+///
+/// The limit is `4 * max_file_size`, capped at `usize::MAX` to avoid
+/// overflow on 32-bit targets.
+fn max_decompressed_limit(max_file_size: u64) -> usize {
+    let four_x = max_file_size.saturating_mul(4);
+    if four_x > usize::MAX as u64 {
+        usize::MAX
+    } else {
+        four_x as usize
+    }
+}
+
+/// Returns a human-readable label for the source.
+fn source_label(source: &PathOrStdin) -> String {
+    match source {
+        PathOrStdin::Path(path) => path.display().to_string(),
+        PathOrStdin::Stdin => "-".to_owned(),
+    }
+}
+
+/// Maps an [`OmtsDecodeError`] to a [`CliError`].
+fn decode_error_to_cli(e: OmtsDecodeError, source: &str) -> CliError {
+    match e {
+        OmtsDecodeError::EncodingDetection(inner) => CliError::EncodingDetectionFailed {
+            source: source.to_owned(),
+            first_bytes_hex: format!("{:02X?}", inner.first_bytes),
+        },
+        OmtsDecodeError::Cbor(inner) => CliError::ParseFailed {
+            detail: format!("CBOR decode failed: {inner}"),
+        },
+        OmtsDecodeError::Json(inner) => CliError::ParseFailed {
+            detail: format!("line {}, column {}: {inner}", inner.line(), inner.column()),
+        },
+        OmtsDecodeError::Compression(inner) => {
+            use omtsf_core::CompressionError;
+            match inner {
+                CompressionError::SizeLimitExceeded { max_size } => {
+                    CliError::DecompressedTooLarge {
+                        source: source.to_owned(),
+                        limit: max_size,
+                    }
+                }
+                CompressionError::CompressionFailed(e) => CliError::ParseFailed {
+                    detail: format!("compression failed: {e}"),
+                },
+                CompressionError::DecompressionFailed(e) => CliError::ParseFailed {
+                    detail: format!("decompression failed: {e}"),
+                },
+            }
+        }
+        OmtsDecodeError::NestedCompression => CliError::ParseFailed {
+            detail: "nested zstd compression is not supported".to_owned(),
+        },
+    }
+}
+
 /// Reads a disk file, enforcing the size limit and UTF-8 requirement.
 fn read_file(path: &PathBuf, max_size: u64) -> Result<String, CliError> {
+    let bytes = read_file_bytes(path, max_size)?;
+    bytes_to_string(&bytes, &path.display().to_string())
+}
+
+/// Reads a disk file as raw bytes, enforcing the size limit.
+fn read_file_bytes(path: &PathBuf, max_size: u64) -> Result<Vec<u8>, CliError> {
     let file_size = match std::fs::metadata(path) {
         Ok(meta) => meta.len(),
         Err(e) => {
@@ -53,14 +181,10 @@ fn read_file(path: &PathBuf, max_size: u64) -> Result<String, CliError> {
         });
     }
 
-    let bytes = match std::fs::read(path) {
-        Ok(b) => b,
-        Err(e) => {
-            return Err(io_error_to_cli(&e, path));
-        }
-    };
-
-    bytes_to_string(&bytes, &path.display().to_string())
+    match std::fs::read(path) {
+        Ok(b) => Ok(b),
+        Err(e) => Err(io_error_to_cli(&e, path)),
+    }
 }
 
 /// Maps a `std::io::Error` arising from a disk-file operation to a [`CliError`].
@@ -122,6 +246,16 @@ fn io_error_to_cli(e: &std::io::Error, path: &Path) -> CliError {
 /// produces exactly `max_size` bytes we perform one final byte read to
 /// distinguish "exactly at the limit" from "over the limit".
 fn read_stdin(max_size: u64) -> Result<String, CliError> {
+    let buf = read_stdin_bytes(max_size)?;
+    bytes_to_string(&buf, "-")
+}
+
+/// Reads the entire stdin stream as raw bytes, capped at `max_size`.
+///
+/// Uses `Read::take` so the buffer allocation is bounded. If the stream
+/// produces exactly `max_size` bytes we perform one final byte read to
+/// distinguish "exactly at the limit" from "over the limit".
+fn read_stdin_bytes(max_size: u64) -> Result<Vec<u8>, CliError> {
     let stdin = std::io::stdin();
     let handle = stdin.lock();
 
@@ -154,7 +288,7 @@ fn read_stdin(max_size: u64) -> Result<String, CliError> {
         }
     }
 
-    bytes_to_string(&buf, "-")
+    Ok(buf)
 }
 
 /// Converts a byte buffer to a `String`, returning a [`CliError`] with the

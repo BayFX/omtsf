@@ -24,32 +24,27 @@ use crate::error::CliError;
 
 /// Runs the `subgraph` command.
 ///
-/// Parses `content` as an OMTSF file, builds the graph, and extracts the
-/// induced subgraph for `node_ids`.  When `expand > 0`, the neighbourhood of
-/// each listed node (within `expand` hops in both directions) is added to the
-/// node set before the induced subgraph is computed.
+/// Builds the graph from the pre-parsed `file` and extracts the induced
+/// subgraph for `node_ids`.  When `expand > 0`, the neighbourhood of each
+/// listed node (within `expand` hops in both directions) is added to the node
+/// set before the induced subgraph is computed.
 ///
 /// The resulting `.omts` file is written as pretty-printed JSON to stdout.
 ///
 /// # Errors
 ///
-/// - [`CliError`] exit code 2 if the content cannot be parsed or the graph
-///   cannot be built.
+/// - [`CliError`] exit code 2 if the graph cannot be built.
 /// - [`CliError`] exit code 1 if any node ID is not found in the graph.
-pub fn run(content: &str, node_ids: &[String], expand: u32) -> Result<(), CliError> {
-    let file: OmtsFile = serde_json::from_str(content).map_err(|e| CliError::ParseFailed {
-        detail: format!("line {}, column {}: {e}", e.line(), e.column()),
-    })?;
-
-    let graph = build_graph(&file).map_err(|e| CliError::GraphBuildError {
+pub fn run(file: &OmtsFile, node_ids: &[String], expand: u32) -> Result<(), CliError> {
+    let graph = build_graph(file).map_err(|e| CliError::GraphBuildError {
         detail: e.to_string(),
     })?;
 
     let mut subgraph_file = if expand == 0 {
         let id_refs: Vec<&str> = node_ids.iter().map(String::as_str).collect();
-        induced_subgraph(&graph, &file, &id_refs).map_err(query_error_to_cli)?
+        induced_subgraph(&graph, file, &id_refs).map_err(query_error_to_cli)?
     } else {
-        compute_expanded_subgraph(&graph, &file, node_ids, expand)?
+        compute_expanded_subgraph(&graph, file, node_ids, expand)?
     };
 
     let today = today_string().map_err(|e| CliError::IoError {

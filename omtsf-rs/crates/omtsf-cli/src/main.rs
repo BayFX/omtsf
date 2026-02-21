@@ -30,9 +30,9 @@ fn main() {
 fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
     match &cli.command {
         Command::Validate { file, level } => {
-            let content = io::read_input(file, cli.max_file_size)?;
+            let (omts_file, _encoding) = io::read_and_parse(file, cli.max_file_size, cli.verbose)?;
             cmd::validate::run(
-                &content,
+                &omts_file,
                 *level,
                 &cli.format,
                 cli.quiet,
@@ -42,13 +42,13 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
         }
 
         Command::Inspect { file } => {
-            let content = io::read_input(file, cli.max_file_size)?;
-            cmd::inspect::run(&content, &cli.format)
+            let (omts_file, _encoding) = io::read_and_parse(file, cli.max_file_size, cli.verbose)?;
+            cmd::inspect::run(&omts_file, &cli.format)
         }
 
         Command::Convert { file, compact, .. } => {
-            let content = io::read_input(file, cli.max_file_size)?;
-            cmd::convert::run(&content, *compact)
+            let (omts_file, _encoding) = io::read_and_parse(file, cli.max_file_size, cli.verbose)?;
+            cmd::convert::run(&omts_file, *compact)
         }
 
         Command::Init { example } => cmd::init::run(*example),
@@ -59,8 +59,8 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
             depth,
             direction,
         } => {
-            let content = io::read_input(file, cli.max_file_size)?;
-            cmd::reach::run(&content, node_id, *depth, direction, &cli.format)
+            let (omts_file, _encoding) = io::read_and_parse(file, cli.max_file_size, cli.verbose)?;
+            cmd::reach::run(&omts_file, node_id, *depth, direction, &cli.format)
         }
 
         Command::Path {
@@ -70,8 +70,8 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
             max_paths,
             max_depth,
         } => {
-            let content = io::read_input(file, cli.max_file_size)?;
-            cmd::path::run(&content, from, to, *max_paths, *max_depth, &cli.format)
+            let (omts_file, _encoding) = io::read_and_parse(file, cli.max_file_size, cli.verbose)?;
+            cmd::path::run(&omts_file, from, to, *max_paths, *max_depth, &cli.format)
         }
 
         Command::Subgraph {
@@ -79,15 +79,17 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
             node_ids,
             expand,
         } => {
-            let content = io::read_input(file, cli.max_file_size)?;
-            cmd::subgraph::run(&content, node_ids, *expand)
+            let (omts_file, _encoding) = io::read_and_parse(file, cli.max_file_size, cli.verbose)?;
+            cmd::subgraph::run(&omts_file, node_ids, *expand)
         }
 
-        Command::Merge { files, strategy } => cmd::merge::run(files, strategy, cli.max_file_size),
+        Command::Merge { files, strategy } => {
+            cmd::merge::run(files, strategy, cli.max_file_size, cli.verbose)
+        }
 
         Command::Redact { file, scope } => {
-            let content = io::read_input(file, cli.max_file_size)?;
-            cmd::redact::run(&content, scope)
+            let (omts_file, _encoding) = io::read_and_parse(file, cli.max_file_size, cli.verbose)?;
+            cmd::redact::run(&omts_file, scope)
         }
 
         Command::Diff {
@@ -99,11 +101,11 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
             edge_type,
             ignore_field,
         } => {
-            let content_a = io::read_input(a, cli.max_file_size)?;
-            let content_b = io::read_input(b, cli.max_file_size)?;
+            let (file_a, _enc_a) = io::read_and_parse(a, cli.max_file_size, cli.verbose)?;
+            let (file_b, _enc_b) = io::read_and_parse(b, cli.max_file_size, cli.verbose)?;
             cmd::diff::run(
-                &content_a,
-                &content_b,
+                &file_a,
+                &file_b,
                 *ids_only,
                 *summary_only,
                 node_type,
@@ -123,9 +125,9 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
             name,
             count,
         } => {
-            let content = io::read_input(file, cli.max_file_size)?;
+            let (omts_file, _encoding) = io::read_and_parse(file, cli.max_file_size, cli.verbose)?;
             cmd::query::run(
-                &content,
+                &omts_file,
                 node_type,
                 edge_type,
                 label,
@@ -147,9 +149,9 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
             name,
             expand,
         } => {
-            let content = io::read_input(file, cli.max_file_size)?;
+            let (omts_file, _encoding) = io::read_and_parse(file, cli.max_file_size, cli.verbose)?;
             cmd::extract_subchain::run(
-                &content,
+                &omts_file,
                 node_type,
                 edge_type,
                 label,

@@ -16,13 +16,14 @@ use omtsf_core::{OmtsFile, merge};
 use crate::MergeStrategy;
 use crate::PathOrStdin;
 use crate::error::CliError;
-use crate::io::read_input;
+use crate::io::read_and_parse;
 
 /// Runs the `merge` command.
 ///
-/// Reads each path in `files`, runs L1 validation on each, runs the merge
-/// engine, and writes the merged output to stdout as pretty-printed JSON.
-/// Warnings and conflict statistics are written to stderr.
+/// Reads each path in `files` using the multi-encoding pipeline, runs L1
+/// validation on each, runs the merge engine, and writes the merged output to
+/// stdout as pretty-printed JSON. Warnings and conflict statistics are written
+/// to stderr.
 ///
 /// # Errors
 ///
@@ -33,6 +34,7 @@ pub fn run(
     files: &[PathOrStdin],
     strategy: &MergeStrategy,
     max_file_size: u64,
+    verbose: bool,
 ) -> Result<(), CliError> {
     if matches!(strategy, MergeStrategy::Intersect) {
         eprintln!("error: intersect strategy is not yet implemented");
@@ -51,10 +53,7 @@ pub fn run(
 
     let mut parsed: Vec<OmtsFile> = Vec::with_capacity(files.len());
     for source in files {
-        let content = read_input(source, max_file_size)?;
-        let file: OmtsFile = serde_json::from_str(&content).map_err(|e| CliError::ParseFailed {
-            detail: format!("line {}, column {}: {e}", e.line(), e.column()),
-        })?;
+        let (file, _encoding) = read_and_parse(source, max_file_size, verbose)?;
 
         let validation_result = validate(&file, &l1_config, None);
         if validation_result.has_errors() {
