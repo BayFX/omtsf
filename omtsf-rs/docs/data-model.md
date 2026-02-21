@@ -1,7 +1,7 @@
 # omtsf-core Technical Specification: Data Model
 
 **Status:** Draft
-**Date:** 2026-02-20
+**Date:** 2026-02-21
 
 ---
 
@@ -68,6 +68,8 @@ All newtypes implement `Deref<Target = str>` for ergonomic read access, `Display
 **Why strings, not structured types?** `CalendarDate` wraps a `String`, not a `chrono::NaiveDate`. The spec mandates the `YYYY-MM-DD` format exactly, and round-trip fidelity requires emitting exactly what was parsed. A `chrono` type would normalize the representation and could silently alter values like `2026-02-01` vs. `2026-2-1`. Validation (confirming the string is a real date) happens in the validation engine, not in the type constructor. The type constructor only enforces the regex shape.
 
 `SemVer` follows the same rationale. It validates the `MAJOR.MINOR.PATCH` shape but does not parse into three integers at construction time. A `fn major(&self) -> u32` accessor method parses on demand.
+
+**Regex initialization.** Each newtype has a corresponding `LazyLock<Regex>` static. The workspace bans `unwrap()` and `expect()` in production code, so the regex initialization uses a chain of `unwrap_or_else` fallbacks that are logically unreachable but satisfy the linter. The alternative of `const`-compiled regexes (`regex-lite` or `regex::Regex::new` in a `const` context) was evaluated but adds a dependency for marginal benefit, since each regex is initialized at most once.
 
 ---
 
@@ -152,10 +154,6 @@ pub enum OrganizationStatus {
     Active, Dissolved, Merged, Suspended,
 }
 
-pub enum GovernanceStructure {
-    SoleSubsidiary, JointVenture, Consortium, Cooperative,
-}
-
 pub enum AttestationOutcome {
     Pass, ConditionalPass, Fail, Pending, NotApplicable,
 }
@@ -193,11 +191,13 @@ pub enum ServiceType {
 }
 ```
 
+All enums derive `Debug`, `Clone`, `PartialEq`, `Eq`, `Hash`, `Serialize`, and `Deserialize`. The `GovernanceStructure` enum (`SoleSubsidiary`, `JointVenture`, `Consortium`, `Cooperative`) from the spec is not yet implemented as a typed enum; the `governance_structure` field on `Node` is currently `Option<serde_json::Value>` to avoid blocking other work on this type definition. It will be narrowed to a typed enum in a future task.
+
 ### 4.5 The `control_type` Disambiguation
 
 SPEC-001 defines two edge types that carry a `control_type` property with different variant sets: `operational_control` (Section 5.2: `franchise`, `management`, `tolling`, `licensed_manufacturing`, `other`) and `beneficial_ownership` (Section 5.5: `voting_rights`, `capital`, `other_means`, `senior_management`). These are semantically distinct and share no variants.
 
-We type the `control_type` field on `EdgeProperties` as `serde_json::Value` rather than a single enum. This avoids forcing a union enum that would accept invalid values for both edge types. The validation engine enforces that the correct variant set is used for the edge's type. An alternative was two separate `Option` fields (`operational_control_type` and `beneficial_ownership_control_type`), but this breaks JSON fidelity since both appear as `"control_type"` in the wire format.
+We type the `control_type` field on `EdgeProperties` as `Option<serde_json::Value>` rather than a single enum. This avoids forcing a union enum that would accept invalid values for both edge types. The validation engine enforces that the correct variant set is used for the edge's type. An alternative was two separate `Option` fields (`operational_control_type` and `beneficial_ownership_control_type`), but this breaks JSON fidelity since both appear as `"control_type"` in the wire format.
 
 ---
 
@@ -229,7 +229,7 @@ pub struct Node {
     pub name: Option<String>,
     pub jurisdiction: Option<CountryCode>,
     pub status: Option<OrganizationStatus>,
-    pub governance_structure: Option<GovernanceStructure>,
+    pub governance_structure: Option<serde_json::Value>,
 
     // facility
     pub operator: Option<NodeId>,
@@ -250,7 +250,6 @@ pub struct Node {
     pub valid_from: Option<CalendarDate>,
     pub valid_to: Option<Option<CalendarDate>>,
     pub outcome: Option<AttestationOutcome>,
-    #[serde(rename = "status")]
     pub attestation_status: Option<AttestationStatus>,
     pub reference: Option<String>,
     pub risk_severity: Option<RiskSeverity>,
@@ -272,6 +271,16 @@ pub struct Node {
 }
 ```
 
+The `Node` struct also provides a helper method for typed geo access:
+
+```rust
+impl Node {
+    pub fn geo_parsed(&self) -> Option<Result<Geo, GeoParseError>> {
+        self.geo.as_ref().map(parse_geo)
+    }
+}
+```
+
 ### 5.2 The NodeTypeTag Type
 
 The `type` field must accept both known enum variants and arbitrary extension strings.
@@ -283,15 +292,15 @@ pub enum NodeTypeTag {
 }
 ```
 
-A custom `Deserialize` impl attempts to match against `NodeType` variants first. If no variant matches and the string contains a dot (extension convention), it deserializes as `Extension`. If the string contains no dot and is not a known type, it still deserializes as `Extension` -- rejection is a validation concern, not a deserialization concern.
+A custom `Deserialize` impl attempts to match against `NodeType` variants first. If no variant matches and the string contains a dot (extension convention), it deserializes as `Extension`. If the string contains no dot and is not a known type, it still deserializes as `Extension` -- rejection is a validation concern, not a deserialization concern. The custom `Serialize` impl delegates to `NodeType::serialize` for `Known` and emits the raw string for `Extension`.
 
-### 5.3 The `status` / `attestation_status` Name Collision
+### 5.3 The `status` / `attestation_status` Field Handling
 
-Both `organization` and `attestation` node types use a JSON field named `"status"`, but with different enum variant sets (`OrganizationStatus` vs `AttestationStatus`). On the flat `Node` struct, these cannot coexist as two fields both named `status` in Rust nor both mapping to `"status"` in JSON.
+Both `organization` and `attestation` node types use a JSON field named `"status"`, but with different enum variant sets (`OrganizationStatus` vs `AttestationStatus`). On the flat `Node` struct, the `status` field holds `Option<OrganizationStatus>` and the `attestation_status` field holds `Option<AttestationStatus>`.
 
-Resolution: the `status` field maps to `OrganizationStatus` and the `attestation_status` field uses `#[serde(rename = "status")]`. Because these are on the same struct, serde cannot naively map both. We use a custom deserializer that reads the `"status"` string and, based on the node's `type` tag, routes it to the correct field. On serialization, the active field (whichever is `Some`) emits as `"status"`. The validation engine ensures only the appropriate field is populated for each node type.
+In the current implementation, both fields are `Option<T>` with `skip_serializing_if = "Option::is_none"`. The `attestation_status` field does not carry a `#[serde(rename = "status")]` attribute; it serializes under its own key `"attestation_status"`. This means the JSON wire format uses `"status"` for organization status and `"attestation_status"` for attestation status. This is a pragmatic simplification: a single `#[serde(flatten)]` struct cannot map two Rust fields to the same JSON key without a fully custom deserializer. The validation engine enforces that the correct status field is populated for each node type.
 
-An alternative design would store `status` as `Option<serde_json::Value>` and provide typed accessor methods, but this pushes deserialization cost to every call site. The custom deserializer pays the cost once.
+If a future spec revision requires both to serialize as `"status"`, a custom `Deserialize` impl on `Node` that reads the `"status"` string and routes it based on the node's `type` tag would be needed. The current approach avoids that complexity at the cost of a slightly different JSON key name for attestation status.
 
 ### 5.4 The `valid_to` Null vs. Absent Distinction
 
@@ -301,7 +310,7 @@ The spec assigns distinct meaning to `"valid_to": null` (no expiration, explicit
 - Field present as `null`: outer is `Some`, inner is `None`
 - Field present with a value: `Some(Some(date))`
 
-A custom serde deserializer with `#[serde(default, deserialize_with = "nullable_field")]` handles this. The serializer skips the field entirely when the outer option is `None` and writes `null` when the inner option is `None`.
+A custom serde deserializer with `#[serde(default, deserialize_with = "deserialize_optional_nullable")]` handles this. The serializer skips the field entirely when the outer option is `None` and writes `null` when the inner option is `None`.
 
 ---
 
@@ -321,6 +330,8 @@ pub struct Edge {
     pub source: NodeId,
     pub target: NodeId,
     pub identifiers: Option<Vec<Identifier>>,
+
+    #[serde(default)]
     pub properties: EdgeProperties,
 
     #[serde(flatten)]
@@ -328,11 +339,14 @@ pub struct Edge {
 }
 ```
 
+The `properties` field uses `#[serde(default)]` so that edges without a `"properties"` key in JSON still deserialize successfully, with all property fields set to their `Default` values (`None` for `Option<T>`, empty map for `extra`).
+
 ### 6.2 EdgeProperties
 
-Like nodes, edge properties use a flat struct rather than a per-edge-type enum. All type-specific properties are `Option<T>`. The `data_quality` and `labels` fields live here, not on the top-level `Edge`, matching the JSON serialization convention.
+Like nodes, edge properties use a flat struct rather than a per-edge-type enum. All type-specific properties are `Option<T>`. The `data_quality` and `labels` fields live here, not on the top-level `Edge`, matching the JSON serialization convention where they appear inside the `"properties"` wrapper.
 
 ```rust
+#[derive(Default)]
 pub struct EdgeProperties {
     pub data_quality: Option<DataQuality>,
     pub labels: Option<Vec<Label>>,
@@ -380,6 +394,8 @@ pub struct EdgeProperties {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 ```
+
+`EdgeProperties` derives `Default` to support the `#[serde(default)]` annotation on `Edge::properties`.
 
 ### 6.3 EdgeTypeTag
 
@@ -431,6 +447,8 @@ pub struct DataQuality {
 }
 ```
 
+The spec states that `confidence` defaults to `reported` when absent. This default is a validation/interpretation concern, not a deserialization concern. The field is `Option<Confidence>` in the Rust type, and the default is applied by consumers that need it.
+
 ### 7.3 Label
 
 ```rust
@@ -443,9 +461,11 @@ pub struct Label {
 }
 ```
 
+Labels live at different levels depending on entity type: top-level on nodes, inside the `properties` wrapper on edges. This asymmetry is handled by the struct placement (`Node::labels` vs. `EdgeProperties::labels`), not by any special serde logic.
+
 ### 7.4 Geo
 
-The `geo` field on facility nodes accepts either `{lat, lon}` or arbitrary GeoJSON (SPEC-001 Section 4.2). It is typed as `serde_json::Value` on the `Node` struct. A helper method provides typed access:
+The `geo` field on facility nodes accepts either `{lat, lon}` or arbitrary GeoJSON (SPEC-001 Section 4.2). It is typed as `Option<serde_json::Value>` on the `Node` struct. A standalone parsing function and typed enum provide typed access:
 
 ```rust
 pub enum Geo {
@@ -453,12 +473,12 @@ pub enum Geo {
     GeoJson(serde_json::Value),
 }
 
-impl Node {
-    pub fn geo_parsed(&self) -> Option<Result<Geo, GeoParseError>> { .. }
+pub fn parse_geo(value: &serde_json::Value) -> Result<Geo, GeoParseError> {
+    // If the value has lat/lon keys, parse as Point; otherwise pass through as GeoJson.
 }
 ```
 
-This avoids forcing a schema on the `geo` field during deserialization while providing a typed API for consumers that need it.
+This avoids forcing a schema on the `geo` field during deserialization while providing a typed API for consumers that need it. The heuristic: if the JSON object contains `lat` or `lon` keys, it is treated as a point (both must be present and numeric). Otherwise it is treated as GeoJSON.
 
 ---
 
@@ -472,28 +492,44 @@ All structs use `#[serde(rename_all = "snake_case")]`. This is the default JSON 
 
 Every struct carries `#[serde(flatten)] pub extra: serde_json::Map<String, serde_json::Value>`. This ensures that fields added in future spec versions, or fields from extension types, survive a deserialize-serialize round trip without data loss.
 
-The `#[serde(flatten)]` approach has a known performance cost: serde must buffer the entire JSON object to separate known from unknown fields. For files within the advisory size limits (SPEC-001 Section 9.4), this is acceptable. For pathological files (millions of nodes), profiling will determine if a streaming two-pass approach is needed.
+The `#[serde(flatten)]` approach has a known performance cost: serde must buffer the entire JSON object to separate known from unknown fields. For files within the advisory size limits (SPEC-001 Section 9.4: 1M nodes, 5M edges), this is acceptable. For pathological files, profiling will determine if a streaming two-pass approach is needed.
 
 ### 8.3 Null vs. Absent
 
 Three categories:
 
-1. **Required fields** (e.g., `id`, `name`): typed directly, no `Option`. Deserialization fails if absent.
+1. **Required fields** (e.g., `id`, `name` on most node types): typed directly, no `Option`. Deserialization fails if absent.
 2. **Optional fields where null is not meaningful** (e.g., `jurisdiction`, `commodity_code`): `Option<T>`, serialized with `#[serde(skip_serializing_if = "Option::is_none")]`.
 3. **Optional fields where null carries meaning** (e.g., `valid_to`): `Option<Option<T>>` with a custom deserializer. `None` = absent (skip on serialize), `Some(None)` = explicit null (serialize as `null`), `Some(Some(v))` = present with value.
+
+The custom deserializer `deserialize_optional_nullable` in `serde_helpers.rs` implements category (3). It is annotated on each field that uses it:
+
+```rust
+#[serde(
+    default,
+    skip_serializing_if = "Option::is_none",
+    deserialize_with = "crate::serde_helpers::deserialize_optional_nullable"
+)]
+pub valid_to: Option<Option<CalendarDate>>,
+```
+
+The `#[serde(default)]` attribute sets the field to `None` (outer `Option`'s default) when the key is absent. When the key is present, the custom function is called and wraps the result in `Some`.
 
 ### 8.4 Custom Deserializers
 
 Custom `Deserialize` implementations are required for:
 
-- `NodeTypeTag` / `EdgeTypeTag`: attempt known enum match, fall back to extension string.
-- `SemVer`, `CalendarDate`, `FileSalt`, `CountryCode`: shape validation on deserialize.
-- `Option<Option<T>>` fields: distinguish null from absent.
-- `Node` struct: route the `"status"` JSON field to the correct Rust field based on node type.
+- `NodeTypeTag` / `EdgeTypeTag`: attempt known enum match via `de::IntoDeserializer`, fall back to extension string.
+- `SemVer`, `CalendarDate`, `FileSalt`, `CountryCode`, `NodeId`: shape validation on deserialize via `TryFrom<&str>` in the `Deserialize` impl.
+- `Option<Option<T>>` fields: `deserialize_optional_nullable` helper distinguishes null from absent.
 
 ### 8.5 Serialization Order
 
 The spec states that `omtsf_version` MUST be the first key in the top-level JSON object (SPEC-001 Section 2.1). `serde_json` serializes struct fields in declaration order, so the field order in `OmtsFile` is load-bearing. The `extra` flattened map is emitted last.
+
+### 8.6 skip_serializing_if Convention
+
+Every `Option<T>` field on `Node`, `Edge`, `EdgeProperties`, `Identifier`, `DataQuality`, and `Label` uses `#[serde(skip_serializing_if = "Option::is_none")]`. This ensures that absent optional fields do not appear in the serialized output as `null`, which would violate the absent-vs-null distinction for non-nullable optional fields.
 
 ---
 
@@ -531,8 +567,9 @@ Every type in this document is `Send + Sync` under standard Rust rules (all fiel
 The types depend on:
 - `serde` (no-std compatible with `alloc` feature)
 - `serde_json` (requires `alloc`, no OS dependencies)
+- `regex` (used by newtype validators; compiles to WASM)
 
-No other dependencies are permitted in the data model module.
+No other dependencies are permitted in the data model module. The `omtsf-core` crate enforces this boundary with `#![deny(clippy::print_stdout, clippy::print_stderr)]` at the crate level.
 
 ### 11.2 wasm-bindgen Surface
 
@@ -544,7 +581,24 @@ For WASM consumers that need the full parsed tree on the JS side, `serde-wasm-bi
 
 ---
 
-## 12. Summary of Key Decisions
+## 12. Module Layout
+
+The data model types are split across four source modules in `omtsf-core`:
+
+| Module | Contents | Spec Section |
+|--------|----------|--------------|
+| `newtypes.rs` | `SemVer`, `CalendarDate`, `FileSalt`, `NodeId`, `EdgeId`, `CountryCode`, `NewtypeError` | Section 3 |
+| `enums.rs` | `DisclosureScope`, `NodeType`, `NodeTypeTag`, `EdgeType`, `EdgeTypeTag`, all property-level enums | Section 4 |
+| `types.rs` | `Identifier`, `DataQuality`, `Label`, `Geo`, `GeoParseError`, `parse_geo` | Section 7 |
+| `structures.rs` | `Node`, `Edge`, `EdgeProperties` | Sections 5, 6 |
+| `file.rs` | `OmtsFile` | Section 2 |
+| `serde_helpers.rs` | `deserialize_optional_nullable` | Section 8.3 |
+
+All public types are re-exported from `lib.rs` for ergonomic import paths.
+
+---
+
+## 13. Summary of Key Decisions
 
 | Decision | Rationale |
 |----------|-----------|
@@ -555,6 +609,8 @@ For WASM consumers that need the full parsed tree on the JS side, `serde-wasm-bi
 | `serde_json::Map` catch-all on every struct | Round-trip preservation of unknown fields (SPEC-001 Section 2.2, 11.2) |
 | Owned data, no lifetimes | Merge/redaction require mutation; async/graph-engine storage requires `'static` |
 | `NodeId` string references, not indices | Direct 1:1 mapping to JSON; index structures are a graph-engine concern |
-| No `#[serde(deny_unknown_fields)]` anywhere | Spec requires forward-compatible consumers (SPEC-001 Section 11.2) |
-| Custom `Node` deserializer for `"status"` routing | Two node types share the JSON key with different enum variant sets |
+| No `#[serde(deny_unknown_fields)]` anywhere | Spec requires forward-compatible consumers (SPEC-001 Section 2.2) |
+| `EdgeProperties` derives `Default` | Enables `#[serde(default)]` on `Edge::properties` for edges without a properties object |
 | `control_type` as `Value`, not a union enum | Two edge types define disjoint variant sets under the same JSON key |
+| `governance_structure` as `Value` (temporary) | Type not yet finalized; `serde_json::Value` avoids blocking other work |
+| `name` shared across node types | Organization, facility, good, person, attestation, and consignment all use `name`; separate fields would be redundant |

@@ -1,29 +1,15 @@
 # omtsf-core Technical Specification: Graph Engine
 
 **Status:** Draft
-**Date:** 2026-02-20
+**Date:** 2026-02-21
 
 ---
 
 ## 1. Purpose
 
-This document specifies the graph construction, representation, and query subsystem within `omtsf-core`. The graph engine converts a deserialized `OmtsFile` into a directed labeled property multigraph backed by `petgraph`, then provides traversal and query algorithms that implement the `reach`, `path`, `subgraph`, and `inspect` CLI commands. It also provides cycle detection used by the validation engine to enforce structural constraints (SPEC-001 Section 9.3, L3-MRG-02).
+This document specifies the graph construction, query, and cycle-detection subsystem within `omtsf-core`. The engine converts a deserialized `OmtsFile` into a directed labeled property multigraph backed by `petgraph`, then provides traversal algorithms that implement the `reach`, `path`, `subgraph`, `query`, and `extract-subchain` CLI commands and the cycle detection used by validation rule L3-MRG-02.
 
-The engine is a library component. It accepts in-memory data structures and returns in-memory results. It has no I/O dependencies and compiles to `wasm32-unknown-unknown`.
-
-**Spec requirement coverage:**
-
-| Requirement | Source | Section |
-|---|---|---|
-| Directed labeled property multigraph | SPEC-001 Section 1 | 2 |
-| 7 node types, 16 edge types (15 core + `same_as`) | SPEC-001 Sections 4-7, SPEC-003 Section 7 | 2.2 |
-| Multiple edges of same type between same nodes | SPEC-001 Section 3.2 | 2.1 |
-| Graph type constraints (permitted source/target) | SPEC-001 Section 9.5 | 2.4 |
-| Cycle rules per edge type | SPEC-001 Section 9.3 | 6 |
-| `legal_parentage` forest constraint | L3-MRG-02 | 6 |
-| Advisory size limits (1M nodes, 5M edges) | SPEC-001 Section 9.4 | 8.1 |
-| Node/edge ID uniqueness | SPEC-001 Section 9.1 | 2.4 |
-| Post-merge invariants | SPEC-003 Section 5.1 | 7 |
+The engine is a pure library component with no I/O dependencies. It compiles to `wasm32-unknown-unknown`.
 
 ---
 
@@ -33,52 +19,42 @@ The engine is a library component. It accepts in-memory data structures and retu
 
 The engine uses `petgraph::stable_graph::StableDiGraph<NodeWeight, EdgeWeight>`.
 
-**Why `StableDiGraph` over `DiGraph`:** The standard `DiGraph` invalidates node and edge indices on removal. OMTSF operations that mutate the graph after construction -- redaction (SPEC-004) removes nodes and edges, subgraph extraction produces a filtered copy -- require stable indices. When a node is removed from a `StableDiGraph`, other indices remain valid. This avoids a class of subtle bugs where a stored `NodeIndex` silently refers to the wrong node after a removal operation. The cost is a small per-slot overhead (a tombstone marker), which is acceptable given that the graph is constructed once and queried many times.
+**Why `StableDiGraph` over `DiGraph`:** `DiGraph` invalidates node and edge indices on removal. OMTSF operations that mutate the graph after construction -- redaction removes nodes, subgraph extraction filters copies -- require stable indices. `StableDiGraph` uses tombstones to preserve index validity at the cost of a small per-slot overhead, acceptable since the graph is constructed once and queried many times.
 
-**Why not `GraphMap`:** `GraphMap` provides adjacency-map-backed lookup but does not support multigraphs (multiple edges of the same type between the same node pair), which is a hard requirement of the OMTSF data model (SPEC-001 Section 3.2).
+**Why not `GraphMap`:** `GraphMap` does not support multigraphs (multiple edges of the same type between the same node pair), which is a hard requirement (SPEC-001 Section 3.2).
 
 ### 2.2 Weight Types
-
-**Node weight.** Each `petgraph` node carries a `NodeWeight` struct:
 
 ```rust
 #[derive(Debug, Clone)]
 pub struct NodeWeight {
-    /// Graph-local ID from the .omts file (e.g., "org-acme").
     pub local_id: String,
-    /// Parsed node type: known built-in or extension string.
     pub node_type: NodeTypeTag,
-    /// Index into the OmtsFile::nodes Vec for the full deserialized node.
     pub data_index: usize,
 }
-```
 
-**Edge weight.** Each `petgraph` edge carries an `EdgeWeight` struct:
-
-```rust
 #[derive(Debug, Clone)]
 pub struct EdgeWeight {
-    /// Graph-local ID from the .omts file (e.g., "edge-001").
     pub local_id: String,
-    /// Parsed edge type: known built-in or extension string.
     pub edge_type: EdgeTypeTag,
-    /// Index into the OmtsFile::edges Vec for the full deserialized edge.
     pub data_index: usize,
 }
 ```
 
-The indirection via `data_index` is deliberate. `petgraph` stores weights inline in its node and edge slab arrays. Keeping the weight small (three fields, roughly 56 bytes on 64-bit) means that BFS and DFS traversals -- which iterate over node/edge slabs sequentially -- stay cache-friendly. The full property data lives in a parallel `Vec` and is accessed only when needed for output serialization or property inspection.
+The `data_index` indirection keeps weights small (~56 bytes on 64-bit) for cache-friendly BFS/DFS traversal. Full property data lives in the parallel `OmtsFile::nodes`/`OmtsFile::edges` vectors and is accessed only for output serialization.
 
-`NodeTypeTag` and `EdgeTypeTag` are the serde-facing type tags that handle both the 7 known node types (`organization`, `facility`, `good`, `person`, `attestation`, `consignment`, `boundary_ref`) and the 16 edge types (`ownership`, `operational_control`, `legal_parentage`, `former_identity`, `beneficial_ownership`, `supplies`, `subcontracts`, `tolls`, `distributes`, `brokers`, `operates`, `produces`, `composed_of`, `sells_to`, `attested_by`, `same_as`) as well as arbitrary extension types via reverse-domain notation strings.
+`NodeTypeTag` covers the 7 known node types (`organization`, `facility`, `good`, `person`, `attestation`, `consignment`, `boundary_ref`) plus extension strings. `EdgeTypeTag` covers the 16 known edge types (`ownership`, `operational_control`, `legal_parentage`, `former_identity`, `beneficial_ownership`, `supplies`, `subcontracts`, `tolls`, `distributes`, `brokers`, `operates`, `produces`, `composed_of`, `sells_to`, `attested_by`, `same_as`) plus extensions.
 
-### 2.3 Index Mapping
+### 2.3 Index Mapping and Type Indexes
 
-During construction the engine builds a bidirectional lookup:
+Construction builds four lookup structures:
 
-- `HashMap<String, NodeIndex>` -- maps graph-local ID strings to petgraph `NodeIndex` values. Used to resolve edge `source`/`target` references during construction and to translate user-supplied node IDs in CLI commands.
-- The reverse mapping (index to local ID) is stored in the `NodeWeight` itself (`local_id` field).
+- `id_to_index: HashMap<String, NodeIndex>` -- resolves graph-local ID strings to petgraph indices. Used for edge endpoint resolution and CLI node-ID lookups.
+- `nodes_by_type: HashMap<NodeTypeTag, Vec<NodeIndex>>` -- O(1) access to all nodes of a given type. Enables fast-path selector-based extraction.
+- `edges_by_type: HashMap<EdgeTypeTag, Vec<EdgeIndex>>` -- O(1) access to all edges of a given type. Used by selector extraction and cycle detection.
+- The reverse mapping (index to ID) lives in `NodeWeight::local_id`.
 
-This map is constructed once during `build_graph` and is immutable thereafter.
+All maps are immutable after construction.
 
 ### 2.4 Construction from `OmtsFile`
 
@@ -86,21 +62,20 @@ This map is constructed once during `build_graph` and is immutable thereafter.
 pub fn build_graph(file: &OmtsFile) -> Result<OmtsGraph, GraphBuildError>
 ```
 
-Construction is a two-pass process:
+Two-pass O(N + E) construction:
 
-1. **Node pass.** Iterate `file.nodes`. For each node, insert into the `StableDiGraph` with a `NodeWeight`, and record the `local_id -> NodeIndex` mapping. Fail with `GraphBuildError::DuplicateNodeId` if a local ID appears twice. This is also an L1-GDM-01 validation error, but the graph engine does not assume pre-validation.
+1. **Node pass.** Insert each node with a `NodeWeight`, record in `id_to_index` and `nodes_by_type`. Fail on duplicate IDs (`GraphBuildError::DuplicateNodeId`).
+2. **Edge pass.** Resolve `source`/`target` via `id_to_index`, insert edge with `EdgeWeight`, record in `edges_by_type`. Fail on dangling references (`GraphBuildError::DanglingEdgeRef`).
 
-2. **Edge pass.** Iterate `file.edges`. For each edge, look up `source` and `target` in the ID map. Fail with `GraphBuildError::DanglingEdgeRef` if either is missing (corresponding to L1-GDM-03). Insert the edge into the `StableDiGraph` with an `EdgeWeight`.
-
-Construction is O(N + E) where N is node count and E is edge count. The `HashMap` lookup is amortized O(1). Both the `StableDiGraph` and the `HashMap` are pre-allocated with `with_capacity` to avoid incremental reallocation. For the advisory upper bound of 1,000,000 nodes and 5,000,000 edges (SPEC-001 Section 9.4), construction allocates roughly 56 MB for node weights plus 56 MB for edge weights, plus the `HashMap` overhead.
-
-The returned `OmtsGraph` struct bundles the `StableDiGraph`, the ID-to-index map, and accessor methods:
+Both `StableDiGraph` and `HashMap` are pre-allocated with `with_capacity` to avoid reallocation.
 
 ```rust
 #[derive(Debug)]
 pub struct OmtsGraph {
     graph: StableDiGraph<NodeWeight, EdgeWeight>,
     id_to_index: HashMap<String, NodeIndex>,
+    nodes_by_type: HashMap<NodeTypeTag, Vec<NodeIndex>>,
+    edges_by_type: HashMap<EdgeTypeTag, Vec<EdgeIndex>>,
 }
 
 impl OmtsGraph {
@@ -110,6 +85,8 @@ impl OmtsGraph {
     pub fn node_weight(&self, idx: NodeIndex) -> Option<&NodeWeight>;
     pub fn edge_weight(&self, idx: EdgeIndex) -> Option<&EdgeWeight>;
     pub fn graph(&self) -> &StableDiGraph<NodeWeight, EdgeWeight>;
+    pub fn nodes_of_type(&self, t: &NodeTypeTag) -> &[NodeIndex];
+    pub fn edges_of_type(&self, t: &EdgeTypeTag) -> &[EdgeIndex];
 }
 ```
 
@@ -117,15 +94,9 @@ impl OmtsGraph {
 
 ## 3. Reachability
 
-Implements the `omtsf reach <file> <node-id>` command.
+### 3.1 Algorithm Choice: BFS
 
-### 3.1 Algorithm: BFS
-
-The engine uses breadth-first search (BFS) for reachability. Justification:
-
-- BFS visits nodes in order of increasing hop distance, which is a natural and useful ordering for supply chain analysis (tier 1 suppliers before tier 2).
-- BFS uses O(V) memory for the visited set and the queue, same as DFS. There is no stack overflow risk from deep recursion, which matters for pathological chain-shaped graphs at the advisory limit of 1M nodes.
-- DFS would be equally correct for the boolean reachability question but provides no distance ordering.
+The engine uses breadth-first search for reachability. BFS visits nodes in order of increasing hop distance, which is the natural ordering for supply chain analysis (tier 1 suppliers before tier 2). BFS uses O(V) memory for the visited set and the queue, identical to DFS, but avoids stack overflow risk from deep recursion on pathological chain-shaped graphs at the advisory limit of 1M nodes. DFS would be equally correct for the boolean reachability question but provides no distance ordering.
 
 ### 3.2 API
 
@@ -139,34 +110,22 @@ pub fn reachable_from(
 ```
 
 - `start` is a graph-local node ID string. Returns `QueryError::NodeNotFound` if absent.
-- `direction` controls traversal:
-  - `Direction::Forward` -- follow outgoing edges (downstream from the start node).
-  - `Direction::Backward` -- follow incoming edges (upstream from the start node).
-  - `Direction::Both` -- follow edges in either direction (treating the graph as undirected). Useful for connected-component queries.
-- The returned set includes all reachable nodes but excludes the start node itself.
-
-The `Direction` enum is defined in the `queries` module:
+- `direction` controls which edges are followed during traversal:
 
 ```rust
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Direction {
-    Forward,
-    Backward,
-    Both,
+    Forward,   // outgoing edges (downstream)
+    Backward,  // incoming edges (upstream)
+    Both,      // undirected view, useful for connected-component queries
 }
 ```
 
-### 3.3 Edge-Type Filtering
-
-The optional `edge_filter: Option<&HashSet<EdgeTypeTag>>` parameter restricts traversal to edges whose type is in the given set. When `None`, all edge types are traversed. This supports queries such as "all organizations reachable via supply relationship edges only" by passing `{Supplies, Subcontracts, Tolls, Distributes, Brokers, SellsTo}`.
-
-Filtering is evaluated per-edge during traversal rather than by pre-building per-edge-type subgraphs, which would multiply memory usage by the number of edge types.
+The returned set includes all reachable nodes but excludes the start node itself. The optional `edge_filter` restricts traversal to edges whose type is in the given set; `None` traverses all types. This supports queries such as "all organizations reachable via supply relationship edges only." Filtering is evaluated per-edge during traversal rather than by materializing per-type subgraphs, which would multiply memory by the number of edge types.
 
 ---
 
 ## 4. Path Finding
-
-Implements the `omtsf path <file> <from> <to>` command.
 
 ### 4.1 Shortest Path: BFS
 
@@ -182,11 +141,11 @@ pub fn shortest_path(
 ) -> Result<Option<Vec<NodeIndex>>, QueryError>
 ```
 
-Returns `None` if no path exists. Returns `Some(vec)` where the vector is the sequence of node indices from `from` to `to` inclusive. When `from == to`, returns `Some(vec![from_idx])`.
+Returns `None` if no path exists. `Some(vec![from_idx])` when `from == to`.
 
 ### 4.2 All Paths with Depth Limit
 
-Enumerating all simple paths between two nodes is NP-hard in general (it is equivalent to counting Hamiltonian paths). The engine provides an all-paths query with a mandatory depth limit to keep runtime bounded.
+Iterative-deepening DFS with explicit stack (no recursion). Each frame carries the current node, depth, path, and visited-on-path set for simple-path enforcement. Paths are deduplicated via `HashSet<Vec<NodeIndex>>`.
 
 ```rust
 pub const DEFAULT_MAX_DEPTH: usize = 20;
@@ -201,23 +160,13 @@ pub fn all_paths(
 ) -> Result<Vec<Vec<NodeIndex>>, QueryError>
 ```
 
-The implementation uses iterative-deepening DFS (IDDFS) with an explicit stack to avoid recursive function calls and any stack-overflow risk on large graphs. Each stack frame holds the current node, the depth consumed, the current path, and a visited-on-path set that enforces simple paths (no node revisited within a single path). Paths are collected into a `HashSet<Vec<NodeIndex>>` to deduplicate across depth iterations.
-
-Time complexity is bounded by O(V^d) where d is `max_depth`, which is acceptable for the small depths (typically 3-8 hops) meaningful in supply chain analysis. The default depth limit of 20 hops is large enough to traverse any realistic supply chain while preventing combinatorial explosion on dense subgraphs.
-
-### 4.3 Edge-Type Filtering
-
-Both `shortest_path` and `all_paths` accept the same optional `edge_filter` parameter as `reachable_from`, constraining traversal to specific relationship types.
+Complexity is O(V^d) bounded by `max_depth`. The default of 20 hops covers any realistic supply chain.
 
 ---
 
 ## 5. Subgraph Extraction
 
-Implements the `omtsf subgraph <file> <node-id>...` command.
-
 ### 5.1 Induced Subgraph
-
-Given a set of node IDs, the engine extracts the induced subgraph: the specified nodes and every edge in the original graph whose source and target are both in the node set.
 
 ```rust
 pub fn induced_subgraph(
@@ -231,15 +180,12 @@ Algorithm:
 
 1. Resolve each string ID to a `NodeIndex`. Fail with `QueryError::NodeNotFound` on any unknown ID.
 2. Collect the `NodeIndex` values into a `HashSet` for O(1) membership testing.
-3. Build a `HashSet<usize>` of included `data_index` values for efficient filtering of the `file.nodes` vec.
-4. Iterate all edges in the graph via `edge_references()`. For each edge where both endpoints are in the index set, record its `data_index`.
-5. Assemble the result as a valid `OmtsFile` with the original header fields (version, snapshot date, file salt, disclosure scope, previous snapshot ref, snapshot sequence, extra) and the filtered node and edge arrays. Nodes are emitted in their original file order (by `data_index`) for deterministic output.
+3. Iterate outgoing edges of each included node via `g.edges(node_idx)`. For each edge where the target is also in the set, record its `data_index`. This is O(K * D) where K is included nodes and D is average out-degree, rather than O(E_total) -- a significant improvement when extracting small subgraphs from large graphs.
+4. Assemble a valid `OmtsFile` with original header fields preserved and nodes emitted in file order for deterministic output. The `reporting_entity` header is set to `None` if the referenced node is absent (preventing L1-GDM-05 violation).
 
-The edge iteration is O(E) which dominates construction. For the advisory limit of 5,000,000 edges this completes in tens of milliseconds.
+The output round-trips cleanly through serde: `serde_json::to_string` followed by `serde_json::from_str` produces an identical `OmtsFile`.
 
-### 5.2 Ego-Graph (Node + Radius)
-
-The ego-graph is a convenience built on top of bounded BFS and induced subgraph:
+### 5.2 Ego-Graph
 
 ```rust
 pub fn ego_graph(
@@ -251,21 +197,9 @@ pub fn ego_graph(
 ) -> Result<OmtsFile, QueryError>
 ```
 
-Algorithm: run a bounded BFS from the center node using a `VecDeque<(NodeIndex, usize)>` queue where each entry tracks hops consumed. Collect all nodes within `radius` hops (inclusive of the center). Then extract the induced subgraph of the collected set via the shared `assemble_subgraph` internal function.
+Bounded BFS from center with `VecDeque<(NodeIndex, usize)>` tracking hop count. Collects all nodes within `radius` hops, then delegates to the shared `assemble_subgraph` function.
 
-Radius 0 returns only the center node. Radius 1 returns the center plus its direct neighbours in the specified direction. The BFS respects the `direction` parameter (forward, backward, or both) when expanding each frontier.
-
-### 5.3 Output Validity
-
-The output of both extraction functions is a valid `OmtsFile`. Graph-local IDs are preserved from the source file, so edge `source`/`target` references remain correct. The `reporting_entity` header field is retained only if the referenced node is present in the subgraph; otherwise it is set to `None`. This prevents a dangling `reporting_entity` reference that would violate L1-GDM-05.
-
-The output round-trips cleanly through serde: `serde_json::to_string` followed by `serde_json::from_str` produces an identical `OmtsFile`.
-
-### 5.4 Selector-Based Subgraph Extraction
-
-The selector-based extraction extends the induced subgraph and ego-graph functions to support property-based node/edge selection. The full specification is in `query.md`; this section covers the algorithm and its integration with the existing extraction infrastructure.
-
-#### 5.4.1 Algorithm
+### 5.3 Selector-Based Extraction
 
 ```rust
 pub fn selector_subgraph(
@@ -276,64 +210,32 @@ pub fn selector_subgraph(
 ) -> Result<OmtsFile, QueryError>
 ```
 
-The algorithm has four phases:
+The algorithm runs four sequential phases:
 
-1. **Seed scan.** Linear scan of `file.nodes` and `file.edges`, evaluating `SelectorSet::matches_node` and `SelectorSet::matches_edge` per element. Produces two sets: `seed_nodes: HashSet<NodeIndex>` and `seed_edges: HashSet<EdgeIndex>`. Complexity: O((N + E) * S) where S is the selector count.
+1. **Seed scan.** Identify matching nodes and edges. When the only active node selectors are type filters, the `nodes_by_type` index is used (O(matched) instead of O(N)). Otherwise, a linear scan evaluates `SelectorSet::matches_node` per element. Edge matching follows the same pattern with `edges_by_type`. Complexity: O((N + E) * S) worst case, where S is the selector count.
 
-2. **Seed edge resolution.** For each seed edge, add its source and target to `seed_nodes`. This ensures that directly matched edges contribute their endpoints to the expansion frontier. Complexity: O(|seed_edges|).
+2. **Seed edge resolution.** For each seed edge, add its source and target to the seed node set. This ensures matched edges contribute their endpoints to the BFS frontier.
 
-3. **BFS expansion.** Starting from `seed_nodes`, perform bounded BFS for `expand` hops using the same traversal logic as `ego_graph` (Section 5.2). Edges are traversed in both directions (treating the graph as undirected) to capture both upstream and downstream neighbors. Complexity: O(V + E) per hop, bounded by graph size.
+3. **BFS expansion.** Starting from seed nodes, perform bounded BFS for `expand` hops treating the graph as undirected (`Direction::Both`). This captures both upstream and downstream neighbors of seed elements.
 
-4. **Induced subgraph assembly.** Delegate to the shared `assemble_subgraph` internal function (Section 5.1, step 5). The expanded node set defines the induced subgraph. Complexity: O(E).
+4. **Induced subgraph assembly.** Delegate to the shared `assemble_subgraph` function. The expanded node set defines the induced subgraph.
 
-The phases are sequential; the total complexity is O((N + E) * S + expand * (V + E)).
-
-#### 5.4.2 Shared Infrastructure
-
-The `assemble_subgraph` function used by `induced_subgraph`, `ego_graph`, and `selector_subgraph` is the same internal function. It accepts a `HashSet<NodeIndex>` and the source `OmtsFile`, and produces a filtered `OmtsFile`. This ensures consistent output validity (Section 5.3) across all extraction paths.
-
-#### 5.4.3 `selector_match` (Scan Only)
-
-For the `query` CLI command, which displays matches without producing a subgraph:
-
-```rust
-pub fn selector_match(
-    file: &OmtsFile,
-    selectors: &SelectorSet,
-) -> SelectorMatchResult
-```
-
-This function performs only phase 1 (seed scan) and returns indices into the `file.nodes` and `file.edges` vectors. It does not build the graph, making it faster for display-only queries. Complexity: O((N + E) * S).
+For display-only queries (`omtsf query`), `selector_match` performs only the seed scan and returns file-vector indices without building the graph, making it faster when no subgraph output is needed.
 
 ---
 
 ## 6. Cycle Detection
 
-### 6.1 Structural Constraints (SPEC-001 Section 9.3)
+### 6.1 Constraints
 
-SPEC-001 Section 9.3 defines per-edge-type cycle rules:
-
-| Edge-type subgraph | Cycles permitted? | Rationale |
+| Edge-type subgraph | Cycles? | Rationale |
 |---|---|---|
-| Supply relationships (`supplies`, `subcontracts`, `tolls`, `distributes`, `brokers`, `sells_to`) | Yes | Circular supply chains exist (e.g., recycling loops) |
-| `ownership` | Yes | Cross-holdings are common in corporate structures |
-| `legal_parentage` | No -- must form a forest (L3-MRG-02) | A subsidiary cannot be its own parent |
-| `attested_by`, `operates`, `produces`, `composed_of` | Not specified; structurally unlikely | |
-| `former_identity` | Not specified; semantically acyclic | |
-
-The validation engine calls into the graph engine to check the `legal_parentage` constraint and, optionally, to report cycles in other subgraphs as informational findings.
+| `supplies`, `subcontracts`, `tolls`, `distributes`, `brokers`, `sells_to` | Yes | Recycling loops, circular trade |
+| `ownership`, `beneficial_ownership` | Yes | Cross-holdings |
+| `legal_parentage` | **No** (L3-MRG-02) | A subsidiary cannot be its own parent |
+| Other types | Not specified | |
 
 ### 6.2 Algorithm: Kahn's Topological Sort
-
-For `legal_parentage` acyclicity, the engine extracts the edge-type-filtered subgraph and runs Kahn's algorithm (iterative BFS-based topological sort). The choice of Kahn's over DFS-based cycle detection is deliberate: Kahn's provides a natural byproduct -- when the algorithm stalls (no zero-in-degree nodes remain), the remaining nodes form the strongly connected components containing the cycles, making it straightforward to identify participants.
-
-Algorithm:
-
-1. Build an in-degree map (`HashMap<NodeIndex, usize>`) for every node with respect to the filtered edge set. All graph nodes start at in-degree 0; only filtered edges increment the count.
-2. Seed a BFS queue with all zero-in-degree nodes.
-3. Repeatedly dequeue a node, decrement the in-degrees of its successors (via filtered edges). When a successor's in-degree reaches 0, enqueue it.
-4. If all nodes are consumed, the subgraph is acyclic. If nodes remain, they participate in cycles.
-5. Extract individual cycles from the remaining nodes via DFS, restricted to the cyclic-node set and the filtered edge types.
 
 ```rust
 pub fn detect_cycles(
@@ -342,65 +244,42 @@ pub fn detect_cycles(
 ) -> Vec<Vec<NodeIndex>>
 ```
 
-Returns an empty vector if acyclic. Otherwise returns one or more cycles as node sequences. Each cycle is a closed representation: the first and last node are the same (e.g., `[A, B, C, A]`).
+Kahn's algorithm computes in-degree per node for the filtered edge set, seeds a queue with zero-in-degree nodes, and peels them off while decrementing successor in-degrees. If unvisited nodes remain, they participate in cycles.
 
-### 6.3 Individual Cycle Extraction
+Individual cycles are extracted from the cyclic-node set via iterative DFS with `globally_visited` tracking. The `filtered_successors` helper restricts neighbor enumeration to cyclic nodes and matching edge types. Each returned cycle is closed: first and last node are identical (e.g., `[A, B, C, A]`).
 
-When Kahn's algorithm leaves unvisited nodes, the engine partitions them into individual cycles using iterative DFS with an explicit stack. The DFS is restricted to nodes in the cyclic set and edges matching the filter. When a back-edge is detected (a successor that is already on the current DFS path), the path segment from that successor to the current position is extracted as a cycle.
+Kahn's was chosen over DFS-based detection because the residual node set (those not consumed by topological sort) naturally identifies all cycle participants, simplifying extraction.
 
-The extraction uses `globally_visited` tracking to avoid reporting the same cycle from multiple starting nodes.
+### 6.3 Reporting
 
-### 6.4 Reporting
-
-When a cycle is detected in a forbidden subgraph, the validation engine translates the `Vec<NodeIndex>` sequences into diagnostics containing:
-
-- The rule identifier (`L3-MRG-02` for legal parentage).
-- The cycle as a sequence of node local IDs connected by edge local IDs.
-- The edge type(s) involved.
-
-When cycles are detected in permitted subgraphs (supply relationships, ownership), the engine can optionally report them as informational findings for graph exploration, but they do not constitute validation failures.
+The validation engine translates `Vec<NodeIndex>` cycles into diagnostics with rule ID (`L3-MRG-02`), node local IDs, and edge types. Cycles in permitted subgraphs are optionally reported as informational findings.
 
 ---
 
 ## 7. Relation to Merge
 
-The graph engine is used during merge for one specific computation after the merge procedure completes: post-merge validation. The merge engine itself uses union-find (disjoint-set with path compression and union by rank) for the transitive closure of merge candidates (SPEC-003 Section 4, step 3), not the petgraph-backed graph.
+The merge engine uses union-find (disjoint-set with path-halving and union-by-rank) for transitive closure of merge candidates, not the petgraph graph. Union-find is preferred because the identifier overlap graph is dense and short-lived, and amortized near-O(1) operations suffice. The `UnionFind` implementation uses deterministic tie-breaking (lower ordinal wins) to ensure commutativity.
 
-Union-find is preferred for identity resolution because:
-
-- The identifier overlap graph is dense and short-lived. Building a full `StableDiGraph` for it adds unnecessary overhead.
-- Union-find provides amortized near-O(1) per operation and answers "are these two nodes in the same group?" without materializing the full graph.
-- After merge groups are determined, the merged graph is constructed from scratch using `build_graph` on the merged `OmtsFile`.
-
-Post-merge, the graph engine is invoked for:
-
-- **L3-MRG-02:** Cycle detection on the `legal_parentage` subgraph of the merged output.
-- **L3-MRG-01:** Ownership percentage sum checks, which iterate inbound `ownership` edges per node.
-- **General L1 invariants:** All graph invariants (node ID uniqueness, edge ID uniqueness, edge endpoints reference existing nodes) must hold on the merged output.
+Post-merge, the graph engine validates the merged output:
+- **L3-MRG-02:** `legal_parentage` cycle detection.
+- **L3-MRG-01:** Ownership percentage sums via `edges_by_type` index.
+- **L1 invariants:** Node/edge ID uniqueness, referential integrity.
 
 ---
 
-## 8. Performance Considerations
+## 8. Performance
 
-### 8.1 Allocation Strategy
+### 8.1 Advisory Limits and Allocation
 
-For graphs approaching the advisory limits (1M nodes, 5M edges), allocation patterns matter. The engine:
+The advisory limits are 1M nodes and 5M edges (SPEC-001 Section 9.4). Construction allocates roughly 56 MB for node weights and 56 MB for edge weights in the petgraph slab arrays, plus HashMap overhead for the ID and type indexes. Pre-allocation via `with_capacity(node_count, edge_count)` prevents incremental reallocation during construction.
 
-- Pre-allocates `StableDiGraph` capacity using `with_capacity(node_count, edge_count)` to avoid incremental reallocation during construction.
-- Pre-allocates the ID-to-index `HashMap` with `HashMap::with_capacity(node_count)`.
-- Uses `data_index` indirection (Section 2.2) to keep the petgraph slab entries small and cache-line-friendly during traversal.
+The small weight structs (~56 bytes each) keep several weights within a single 64-byte cache line, reducing cache misses during BFS/DFS neighbor iteration. Edge-type filtering adds one branch per edge during traversal, which is cheaper than pre-building per-edge-type subgraphs that would multiply memory by the number of edge types (up to 16 core types plus extensions).
 
-### 8.2 Traversal Performance
+### 8.2 WASM Compatibility
 
-BFS and DFS traversals access the node and edge slab arrays in roughly sequential order (modulo graph topology). The small weight structs (roughly 56 bytes each) mean that several weights fit in a single cache line (64 bytes), reducing cache misses during neighbor iteration.
+All algorithms use stack-allocated or heap-allocated Rust structures. No OS-level threading, no filesystem access, no system calls. `petgraph` compiles cleanly to `wasm32-unknown-unknown`. The `HashMap` hasher falls back to a fixed seed in WASM builds, which is acceptable since keys are graph-local ID strings controlled by the file author and bounded by the advisory size limits.
 
-Edge-type filtering during traversal adds a branch per edge. This is preferable to pre-building per-edge-type subgraphs, which would multiply memory usage by the number of edge types (up to 16 core types plus extensions).
-
-### 8.3 WASM Compatibility
-
-All algorithms use stack-allocated or heap-allocated Rust structures. No OS-level threading, no filesystem access, no system calls. The `petgraph` crate compiles cleanly to `wasm32-unknown-unknown`. The `HashMap` uses the standard library's `RandomState` hasher; in WASM builds this falls back to a fixed seed, which is acceptable since the hash map is not exposed to adversarial input (keys are graph-local ID strings controlled by the file author, and the advisory size limits bound the number of entries).
-
-### 8.4 Complexity Summary
+### 8.3 Complexity Summary
 
 | Operation | Time | Space |
 |---|---|---|
@@ -408,7 +287,7 @@ All algorithms use stack-allocated or heap-allocated Rust structures. No OS-leve
 | `reachable_from` | O(V + E) | O(V) |
 | `shortest_path` | O(V + E) | O(V) |
 | `all_paths` (depth d) | O(V^d) | O(V * d) |
-| `induced_subgraph` | O(E) | O(N + E) |
+| `induced_subgraph` (K nodes) | O(K * D) | O(K + included edges) |
 | `ego_graph` (radius r) | O(V + E) | O(V + E) |
 | `selector_match` | O((N + E) * S) | O(N + E) |
 | `selector_subgraph` | O((N + E) * S + expand * (V + E)) | O(V + E) |

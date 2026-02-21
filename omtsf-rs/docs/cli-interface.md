@@ -1,13 +1,13 @@
 # omtsf-cli Technical Specification: CLI Interface
 
 **Status:** Draft
-**Date:** 2026-02-20
+**Date:** 2026-02-21
 
 ---
 
 ## 1. Purpose
 
-This document specifies the complete command-line interface for `omtsf-cli`: argument structure, flags, file I/O behavior, output formatting, and exit codes. It is the authoritative reference for the binary surface area. The library API (`omtsf-core`) is specified in separate documents; this document covers only the CLI layer.
+This document specifies the complete command-line interface for `omtsf-cli`: argument structure, flags, file I/O behavior, encoding detection, output formatting, and exit codes. It is the authoritative reference for the binary surface area. The library API (`omtsf-core`) is specified in separate documents; this document covers only the CLI layer.
 
 All commands follow the form `omtsf <subcommand> [options] [arguments]`.
 
@@ -77,9 +77,9 @@ Validates a single `.omts` file against the OMTSF specification suite.
 **Flags:**
 - `--level <n>` -- Maximum validation level to run. `1` = L1 only, `2` = L1+L2 (default), `3` = L1+L2+L3.
 
-**Behavior:** Parses the file, runs the validation engine at the requested level, and emits diagnostics to stderr. Produces no stdout output. Exit code reflects the worst finding severity.
+**Behavior:** Parses the file (auto-detecting encoding per SPEC-007 Section 2), runs the validation engine at the requested level, and emits diagnostics to stderr. Produces no stdout output. Exit code reflects the worst finding severity.
 
-**Exit codes:** 0 = valid (no L1 errors), 1 = validation errors (L1 violations), 2 = parse failure (not valid JSON or missing required fields).
+**Exit codes:** 0 = valid (no L1 errors), 1 = validation errors (L1 violations), 2 = parse failure (not valid JSON/CBOR, encoding detection failure, or missing required fields).
 
 **Examples:**
 ```
@@ -87,6 +87,7 @@ omtsf validate supply-chain.omts
 omtsf validate --level 3 supply-chain.omts
 cat supply-chain.omts | omtsf validate -
 omtsf validate -f json supply-chain.omts 2> findings.ndjson
+omtsf validate supply-chain.omts.zst
 ```
 
 ### 3.2 `omtsf merge <file>...`
@@ -98,8 +99,10 @@ Merges two or more `.omts` files into a single graph per SPEC-003.
 
 **Flags:**
 - `--strategy <s>` -- Merge strategy: `union` (default) or `intersect`. Controls how non-overlapping nodes are handled.
+- `--compress` -- Compress output with zstd (Section 4.3).
+- `--to <encoding>` -- Output encoding: `json` (default) or `cbor`. Controls the serialization format of the merged result.
 
-**Behavior:** Reads all input files, runs L1 validation on each (rejecting any that fail), executes the merge engine, and writes the merged `.omts` to stdout. Diagnostics (merge decisions, identity matches, conflict reports) go to stderr.
+**Behavior:** Reads all input files (auto-detecting encoding on each), runs L1 validation on each (rejecting any that fail), executes the merge engine, and writes the merged `.omts` to stdout in the requested encoding. Diagnostics (merge decisions, identity matches, conflict reports) go to stderr.
 
 **Exit codes:** 0 = success, 1 = merge conflict (unresolvable property collision), 2 = parse/validation failure on any input file.
 
@@ -107,6 +110,7 @@ Merges two or more `.omts` files into a single graph per SPEC-003.
 ```
 omtsf merge file-a.omts file-b.omts > merged.omts
 omtsf merge --strategy intersect a.omts b.omts c.omts > common.omts
+omtsf merge --to cbor --compress a.omts b.omts > merged.omts.zst
 cat remote.omts | omtsf merge - local.omts > combined.omts
 ```
 
@@ -119,6 +123,8 @@ Produces a redacted copy of a graph for a target disclosure scope per SPEC-004.
 
 **Flags:**
 - `--scope <scope>` (required) -- Target disclosure scope: `public`, `partner`, or `internal`.
+- `--compress` -- Compress output with zstd.
+- `--to <encoding>` -- Output encoding: `json` (default) or `cbor`.
 
 **Behavior:** Parses the file, applies redaction rules for the target scope (stripping sensitive identifiers, replacing redacted nodes with `boundary_ref` stubs, omitting sensitive edge properties), sets `disclosure_scope` in the output header, and writes the redacted `.omts` to stdout. Reports redaction statistics (nodes redacted, identifiers stripped, boundary refs generated) to stderr.
 
@@ -128,6 +134,7 @@ Produces a redacted copy of a graph for a target disclosure scope per SPEC-004.
 ```
 omtsf redact --scope public supply-chain.omts > public.omts
 omtsf redact --scope partner internal.omts | omtsf validate -
+omtsf redact --scope public --to cbor --compress data.omts > public.omts.zst
 ```
 
 ### 3.4 `omtsf inspect <file>`
@@ -137,7 +144,7 @@ Prints summary statistics for a graph.
 **Arguments:**
 - `<file>` (required) -- Path to an `.omts` file, or `-` for stdin.
 
-**Behavior:** Parses the file and prints a summary to stdout including: node count by type, edge count by type, identifier count by scheme, disclosure scope, file version, snapshot date, and reporting entity. In `--format json` mode, emits a single JSON object with these fields.
+**Behavior:** Parses the file and prints a summary to stdout including: node count by type, edge count by type, identifier count by scheme, disclosure scope, file version, snapshot date, reporting entity, and detected encoding (JSON or CBOR, compressed or uncompressed). In `--format json` mode, emits a single JSON object with these fields.
 
 **Exit codes:** 0 = success, 2 = parse failure.
 
@@ -145,6 +152,7 @@ Prints summary statistics for a graph.
 ```
 omtsf inspect supply-chain.omts
 omtsf inspect -f json supply-chain.omts | jq .node_counts
+omtsf inspect data.omts.zst
 ```
 
 ### 3.5 `omtsf diff <a> <b>`
@@ -157,8 +165,12 @@ Computes a structural diff between two `.omts` files.
 
 **Flags:**
 - `--ids-only` -- Only report added/removed/changed node and edge IDs, not property-level detail.
+- `--summary-only` -- Only print the summary statistics line.
+- `--node-type <type>` -- Restrict diff to nodes of this type (repeatable).
+- `--edge-type <type>` -- Restrict diff to edges of this type (repeatable).
+- `--ignore-field <field>` -- Exclude this property from comparison (repeatable).
 
-**Behavior:** Parses both files, matches nodes and edges by identity predicate (reusing SPEC-003 matching rules), and reports additions, removals, and property changes to stdout. In human mode, output uses `+`/`-`/`~` prefix lines. In JSON mode, emits a structured diff object with `nodes` and `edges` sections.
+**Behavior:** Parses both files (each may use a different encoding), matches nodes and edges by identity predicate (reusing SPEC-003 matching rules), and reports additions, removals, and property changes to stdout. In human mode, output uses `+`/`-`/`~` prefix lines. In JSON mode, emits a structured diff object with `nodes` and `edges` sections.
 
 **Exit codes:** 0 = files are identical, 1 = differences found, 2 = parse failure on either file.
 
@@ -167,20 +179,23 @@ Computes a structural diff between two `.omts` files.
 omtsf diff v1.omts v2.omts
 omtsf diff --ids-only baseline.omts current.omts
 omtsf diff -f json old.omts new.omts > changes.json
+omtsf diff json-version.omts cbor-version.omts
 ```
 
 ### 3.6 `omtsf convert <file>`
 
-Re-serializes an `.omts` file. Useful for normalizing whitespace, key ordering, and verifying round-trip fidelity.
+Transcodes an `.omts` file between encodings and/or normalizes formatting.
 
 **Arguments:**
 - `<file>` (required) -- Path to an `.omts` file, or `-` for stdin.
 
 **Flags:**
-- `--pretty` -- Pretty-print JSON output with 2-space indentation (default).
-- `--compact` -- Emit minified JSON with no extraneous whitespace.
+- `--to <encoding>` -- Target encoding: `json` (default) or `cbor`. When the input and target encoding are the same, the file is re-serialized (normalizing key order for JSON, round-tripping through the data model for CBOR).
+- `--pretty` -- Pretty-print JSON output with 2-space indentation (default when `--to json`).
+- `--compact` -- Emit minified JSON with no extraneous whitespace. Mutually exclusive with `--pretty`.
+- `--compress` -- Compress output with zstd.
 
-**Behavior:** Parses the file into the typed data model, re-serializes to JSON, and writes to stdout. Unknown fields captured via `serde(flatten)` are preserved. The default is pretty-printed output; `--compact` produces single-line JSON.
+**Behavior:** Parses the file (auto-detecting encoding), deserializes into the typed data model, re-serializes to the target encoding, and writes to stdout. Unknown fields captured via `serde(flatten)` are preserved. When converting CBOR to JSON, the output uses pretty-printed JSON by default. When converting JSON to CBOR, the self-describing tag 55799 is prepended per SPEC-007 Section 4.1.
 
 **Exit codes:** 0 = success, 2 = parse failure.
 
@@ -188,6 +203,9 @@ Re-serializes an `.omts` file. Useful for normalizing whitespace, key ordering, 
 ```
 omtsf convert messy.omts > clean.omts
 omtsf convert --compact supply-chain.omts | wc -c
+omtsf convert --to cbor supply-chain.omts > supply-chain.cbor.omts
+omtsf convert --to cbor --compress data.omts > data.omts.zst
+omtsf convert --to json data.cbor.omts > data.omts
 cat untrusted.omts | omtsf convert - > normalized.omts
 ```
 
@@ -247,6 +265,8 @@ Extracts the induced subgraph for a set of nodes.
 
 **Flags:**
 - `--expand <n>` -- Include neighbors up to `n` hops from the specified nodes (default: 0, meaning only the listed nodes and edges between them).
+- `--compress` -- Compress output with zstd.
+- `--to <encoding>` -- Output encoding: `json` (default) or `cbor`.
 
 **Behavior:** Builds the graph, selects the specified nodes (plus neighbors within `--expand` distance via BFS), collects all edges where both endpoints are in the selected set, and writes a valid `.omts` file to stdout. The output header is copied from the input with an updated `snapshot_date`. The `reporting_entity` is retained only if the referenced node is in the subgraph.
 
@@ -256,6 +276,7 @@ Extracts the induced subgraph for a set of nodes.
 ```
 omtsf subgraph supply-chain.omts org-001 org-002 > pair.omts
 omtsf subgraph --expand 2 graph.omts org-001 > neighborhood.omts
+omtsf subgraph --to cbor --compress graph.omts org-001 org-002 > pair.omts.zst
 ```
 
 ### 3.10 `omtsf init`
@@ -266,6 +287,8 @@ Scaffolds a new `.omts` file.
 
 **Flags:**
 - `--example` -- Generate a realistic example file instead of a minimal skeleton.
+- `--to <encoding>` -- Output encoding: `json` (default) or `cbor`.
+- `--compress` -- Compress output with zstd.
 
 **Behavior:** Writes a valid `.omts` file to stdout. Without `--example`, the output is a minimal file: header with a freshly generated `file_salt` (32 bytes from CSPRNG, hex-encoded), today's date as `snapshot_date`, empty `nodes` and `edges` arrays. With `--example`, the output includes sample organization, facility, and product nodes with realistic identifiers and edges.
 
@@ -276,6 +299,7 @@ Scaffolds a new `.omts` file.
 omtsf init > new-graph.omts
 omtsf init --example > demo.omts
 omtsf init --example | omtsf validate -
+omtsf init --to cbor > new-graph.cbor.omts
 ```
 
 ### 3.11 `omtsf query <file> [selectors]`
@@ -321,6 +345,8 @@ Extracts the subgraph matching property-based selectors and writes a valid `.omt
 
 **Additional flags:**
 - `--expand <n>` -- Include neighbors up to `n` hops from the seed set (default: 1). Setting `--expand 0` returns only the seed nodes/edges and their immediate incident neighbors.
+- `--compress` -- Compress output with zstd.
+- `--to <encoding>` -- Output encoding: `json` (default) or `cbor`.
 
 **Behavior:** Parses the file, evaluates selectors to build the seed set, expands by `--expand` hops using BFS, computes the induced subgraph, and writes the result to stdout as a valid `.omts` file. The output header is copied from the input with an updated `snapshot_date`. The `reporting_entity` is retained only if the referenced node is present in the output subgraph. Reports extraction statistics (seed count, expanded count, output node/edge count) to stderr in verbose mode.
 
@@ -333,6 +359,7 @@ At least one selector flag is required. If none are provided, clap produces a us
 omtsf extract-subchain supply-chain.omts --node-type organization --jurisdiction DE > german-orgs.omts
 omtsf extract-subchain supply-chain.omts --identifier lei --expand 2 > lei-neighborhood.omts
 omtsf extract-subchain graph.omts --label tier=1 --expand 0 > tier1-only.omts
+omtsf extract-subchain --to cbor --compress graph.omts --name "Acme" > acme.omts.zst
 cat graph.omts | omtsf extract-subchain - --name "Acme" > acme-subchain.omts
 ```
 
@@ -396,32 +423,81 @@ Before reading any file (or stdin), the CLI checks the size against `--max-file-
 - **Disk files:** `std::fs::metadata` provides the file length before reading. Reject immediately if it exceeds the limit.
 - **Stdin:** Read into a buffer with a capped allocation. Use `Read::take(max_file_size + 1)` to bound the read. If exactly `max_file_size + 1` bytes are consumed, the input exceeds the limit; abort with an error. This avoids allocating an unbounded buffer from untrusted input.
 
-The limit applies per file. For multi-file commands like `merge`, each file is checked independently.
+The limit applies per file. For multi-file commands like `merge`, each file is checked independently. The size check applies to the on-disk (possibly compressed) size, not the decompressed size. For zstd-compressed files read from disk, the metadata size is the compressed size. An additional decompressed-size limit equal to `4 * max_file_size` guards against decompression bombs.
 
-### 4.4 Encoding
+### 4.4 Encoding Detection and Handling
 
-All `.omts` files are UTF-8 JSON. The CLI validates UTF-8 encoding when converting from bytes to string (`std::str::from_utf8`). Invalid UTF-8 produces exit code 2 with a message identifying the byte offset of the first invalid sequence.
+The CLI implements the SPEC-007 Section 2 encoding detection procedure on every input file. After reading the raw bytes into memory:
 
-### 4.5 Read Pipeline
+1. **Check for zstd.** If the first 4 bytes are `0x28 0xB5 0x2F 0xFD`, decompress the entire buffer using zstd, then re-detect encoding on the decompressed payload.
+2. **Check for CBOR.** If the first 3 bytes are `0xD9 0xD9 0xF7` (self-describing tag 55799), parse as CBOR.
+3. **Check for JSON.** Skip leading whitespace bytes (0x09, 0x0A, 0x0D, 0x20). If the first non-whitespace byte is `{` (0x7B), parse as JSON.
+4. **Reject.** If none of the above match, emit an encoding detection error and exit with code 2.
+
+```rust
+enum DetectedEncoding {
+    Json,
+    Cbor,
+}
+
+struct DecodedInput {
+    encoding: DetectedEncoding,
+    was_compressed: bool,
+    data: Vec<u8>,
+}
+
+fn detect_and_decode(raw: &[u8], max_decompressed: u64) -> Result<DecodedInput, CliError> {
+    // 1. Check zstd magic bytes
+    if raw.len() >= 4 && raw[..4] == [0x28, 0xB5, 0x2F, 0xFD] {
+        let decompressed = zstd_decompress_bounded(raw, max_decompressed)?;
+        let mut inner = detect_encoding(&decompressed)?;
+        inner.was_compressed = true;
+        return Ok(inner);
+    }
+    detect_encoding(raw)
+}
+```
+
+After detection, the byte buffer is passed to the appropriate parser in `omtsf-core`:
+- JSON: validate UTF-8 via `std::str::from_utf8`, then pass `&str` to `serde_json::from_str`.
+- CBOR: pass `&[u8]` directly to the CBOR deserializer (`ciborium::from_reader` or equivalent).
+
+Both paths produce the same `OmtsFile` data structure. From this point forward, all operations are encoding-agnostic.
+
+### 4.5 Output Encoding
+
+Commands that produce `.omts` files (`merge`, `redact`, `convert`, `subgraph`, `extract-subchain`, `init`) support `--to <encoding>` and `--compress` flags:
+
+- `--to json` (default): Serialize as JSON. `--pretty` (default) emits 2-space indented output; `--compact` emits minified output.
+- `--to cbor`: Serialize as CBOR with the self-describing tag 55799 prepended per SPEC-007 Section 4.1.
+- `--compress`: Apply zstd compression after serialization. Compatible with both `--to json` and `--to cbor`.
+
+When `--to` is not specified, the default is `json`. The input encoding does not influence the output encoding; transcoding between formats is always explicit.
+
+### 4.6 Read Pipeline
 
 The complete read pipeline for a single file argument:
 
 1. Resolve `PathOrStdin` to a byte source.
 2. Check file size (metadata for disk, `Read::take` for stdin).
 3. Read bytes into `Vec<u8>`.
-4. Validate UTF-8 via `std::str::from_utf8`.
-5. Pass `&str` to `omtsf-core` for deserialization.
+4. Detect encoding and decompress if needed (Section 4.4).
+5. Parse into `OmtsFile` using the detected encoding.
 
-Any failure at steps 2-4 produces exit code 2 and a diagnostic to stderr.
+Any failure at steps 2-5 produces exit code 2 and a diagnostic to stderr.
 
-### 4.6 I/O Error Handling
+### 4.7 I/O Error Handling
 
 | Condition | Behavior |
 |-----------|----------|
 | File not found | stderr message with path, exit 2 |
 | Permission denied | stderr message with path, exit 2 |
 | File exceeds size limit | stderr message with limit and actual size, exit 2 |
-| Invalid UTF-8 | stderr message with byte offset, exit 2 |
+| Decompressed size exceeds limit | stderr message noting possible decompression bomb, exit 2 |
+| Invalid UTF-8 (JSON files) | stderr message with byte offset, exit 2 |
+| Encoding detection failure | stderr message describing the first bytes encountered, exit 2 |
+| CBOR parse error | stderr message with byte offset, exit 2 |
+| JSON parse error | stderr message with line/column, exit 2 |
 | Stdout write failure (broken pipe) | Silently exit 0 (standard Unix behavior for piped output) |
 | Stdin read error | stderr message, exit 2 |
 
@@ -429,6 +505,10 @@ Broken pipe handling: the CLI installs a handler for `SIGPIPE` (or equivalent) s
 
 ```rust
 fn reset_sigpipe() {
+    // SAFETY: setting SIGPIPE to SIG_DFL is the standard Unix convention
+    // for CLI tools that pipe output. This is a single libc call with no
+    // memory safety implications.
+    #[cfg(unix)]
     unsafe {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
@@ -450,11 +530,11 @@ fn reset_sigpipe() {
 
 Colors: `[E]` red, `[W]` yellow, `[I]` cyan. Disabled when `--no-color` is set, `NO_COLOR` env var is present, or stderr is not a TTY.
 
-**Data (stdout):** Command-specific. `inspect` uses aligned columns. `reach` and `path` use plain text, one entry per line. `diff` uses `+`/`-`/`~` prefixed lines. Commands that emit `.omts` files (`merge`, `redact`, `convert`, `subgraph`, `init`) write JSON directly regardless of `--format`.
+**Data (stdout):** Command-specific. `inspect` uses aligned columns. `reach` and `path` use plain text, one entry per line. `diff` uses `+`/`-`/`~` prefixed lines. Commands that emit `.omts` files (`merge`, `redact`, `convert`, `subgraph`, `extract-subchain`, `init`) write serialized data directly regardless of `--format`.
 
 **Quiet mode (`--quiet`):** Suppresses all stderr output except parse errors and I/O errors. Data output to stdout is unaffected. Useful in scripts that only check exit codes.
 
-**Verbose mode (`--verbose`):** Adds timing information (`parsed in 42ms, validated in 18ms`), rule execution counts, file metadata (size, node count, edge count), and traversal statistics to stderr.
+**Verbose mode (`--verbose`):** Adds timing information (`parsed in 42ms, validated in 18ms`), rule execution counts, file metadata (size, node count, edge count, detected encoding), and traversal statistics to stderr.
 
 ### 5.2 JSON Mode (`--format json`)
 
@@ -463,7 +543,7 @@ Colors: `[E]` red, `[W]` yellow, `[I]` cyan. Disabled when `--no-color` is set, 
 {"rule_id":"L1-GDM-03","severity":"error","location":{"type":"edge","id":"e-042","field":"target"},"message":"target \"node-999\" not found"}
 ```
 
-**Data:** Single JSON document to stdout. For commands that produce `.omts` files (`merge`, `redact`, `convert`, `subgraph`, `init`), the output is the JSON file itself regardless of `--format`. For `inspect`, `reach`, `path`, and `diff`, the output is a structured JSON object specific to the command.
+**Data:** Single JSON document to stdout. For commands that produce `.omts` files (`merge`, `redact`, `convert`, `subgraph`, `extract-subchain`, `init`), the output is the serialized file itself (JSON or CBOR depending on `--to`) regardless of `--format`. For `inspect`, `reach`, `path`, and `diff`, the output is a structured JSON object specific to the command.
 
 ### 5.3 Summary Counts
 
@@ -491,7 +571,7 @@ The CLI never emits ANSI codes to stdout. Color is used exclusively for stderr d
 |------|---------|---------|
 | 0 | Success. No errors, or diff found no differences. | All commands |
 | 1 | Logical failure: validation errors (L1), merge conflicts, no path found, node ID not found, diff found differences, redaction scope error, no selector matches. | `validate`, `merge`, `redact`, `reach`, `path`, `subgraph`, `query`, `extract-subchain`, `diff` |
-| 2 | Input failure: file not found, permission denied, size limit exceeded, invalid UTF-8, JSON parse error, missing required fields. | All commands |
+| 2 | Input failure: file not found, permission denied, size limit exceeded, invalid UTF-8, encoding detection error, JSON/CBOR parse error, missing required fields, decompression failure. | All commands |
 
 ### Detailed Exit Code Mapping
 
@@ -512,9 +592,13 @@ The CLI never emits ANSI codes to stdout. Color is used exclusively for stderr d
 | File not found | 2 | All |
 | Permission denied | 2 | All |
 | File exceeds size limit | 2 | All |
-| Invalid UTF-8 encoding | 2 | All |
+| Decompressed size exceeds limit | 2 | All |
+| Invalid UTF-8 encoding (JSON) | 2 | All |
+| Encoding detection failure | 2 | All |
 | JSON parse error | 2 | All |
-| Missing required JSON fields | 2 | All |
+| CBOR parse error | 2 | All |
+| zstd decompression error | 2 | All |
+| Missing required JSON/CBOR fields | 2 | All |
 
 Design rationale: two non-zero codes distinguish "the tool worked correctly but the input has problems" (1) from "the tool could not process the input at all" (2). This is consistent with `grep` (0 = match, 1 = no match, 2 = error) and `diff` (0 = same, 1 = different, 2 = error). Scripts can branch on `$?` without parsing stderr.
 
@@ -539,6 +623,10 @@ enum Command {
         files: Vec<PathOrStdin>,
         #[arg(long, default_value = "union", value_enum)]
         strategy: MergeStrategy,
+        #[arg(long, default_value = "json", value_enum)]
+        to: Encoding,
+        #[arg(long)]
+        compress: bool,
     },
     /// Redact a file for a target disclosure scope.
     Redact {
@@ -546,6 +634,10 @@ enum Command {
         file: PathOrStdin,
         #[arg(long, value_enum)]
         scope: DisclosureScope,
+        #[arg(long, default_value = "json", value_enum)]
+        to: Encoding,
+        #[arg(long)]
+        compress: bool,
     },
     /// Print summary statistics.
     Inspect {
@@ -560,15 +652,27 @@ enum Command {
         b: PathOrStdin,
         #[arg(long)]
         ids_only: bool,
+        #[arg(long)]
+        summary_only: bool,
+        #[arg(long, num_args = 1..)]
+        node_type: Vec<String>,
+        #[arg(long, num_args = 1..)]
+        edge_type: Vec<String>,
+        #[arg(long, num_args = 1..)]
+        ignore_field: Vec<String>,
     },
-    /// Re-serialize a file.
+    /// Transcode a file between JSON and CBOR, or normalize formatting.
     Convert {
         #[arg(value_name = "FILE")]
         file: PathOrStdin,
+        #[arg(long, default_value = "json", value_enum)]
+        to: Encoding,
         #[arg(long, default_value = "true")]
         pretty: bool,
         #[arg(long, conflicts_with = "pretty")]
         compact: bool,
+        #[arg(long)]
+        compress: bool,
     },
     /// List reachable nodes from a source.
     Reach {
@@ -602,6 +706,10 @@ enum Command {
         node_ids: Vec<String>,
         #[arg(long, default_value = "0")]
         expand: u32,
+        #[arg(long, default_value = "json", value_enum)]
+        to: Encoding,
+        #[arg(long)]
+        compress: bool,
     },
     /// Display nodes and edges matching property-based selectors.
     Query {
@@ -640,11 +748,19 @@ enum Command {
         name: Vec<String>,
         #[arg(long, default_value = "1")]
         expand: u32,
+        #[arg(long, default_value = "json", value_enum)]
+        to: Encoding,
+        #[arg(long)]
+        compress: bool,
     },
     /// Scaffold a new .omts file.
     Init {
         #[arg(long)]
         example: bool,
+        #[arg(long, default_value = "json", value_enum)]
+        to: Encoding,
+        #[arg(long)]
+        compress: bool,
     },
 }
 
@@ -667,6 +783,12 @@ enum Direction {
     Incoming,
     Both,
 }
+
+#[derive(Clone, Copy, ValueEnum)]
+enum Encoding {
+    Json,
+    Cbor,
+}
 ```
 
 ### Argument Validation Beyond clap
@@ -677,6 +799,8 @@ clap handles type parsing, range checks, and `conflicts_with` constraints. The f
 2. **Dual stdin in diff.** For `diff`, check that `a` and `b` are not both `Stdin`.
 3. **File existence.** For `PathOrStdin::Path` variants, check that the file exists before attempting to read. This produces a clearer error message than the OS-level I/O error.
 4. **Merge minimum files.** clap's `num_args = 2..` enforces the minimum of 2 files for `merge`.
+5. **Pretty/compact mutual exclusion.** `--compact` conflicts with `--pretty`. When `--to cbor` is specified, both `--pretty` and `--compact` are silently ignored (CBOR has no formatting options).
+6. **Selector requirement.** For `query` and `extract-subchain`, verify that at least one selector flag is provided. If all selector vecs are empty, emit a usage error.
 
 ---
 
@@ -720,8 +844,12 @@ The `run` function returns `Result<i32, CliError>` where the `i32` is the intend
 |---------|--------|-----------|
 | `Io(std::io::Error)` | File read/write failure | 2 |
 | `FileTooLarge { path, limit, actual }` | Size check failure | 2 |
-| `InvalidUtf8 { path, offset }` | UTF-8 validation failure | 2 |
-| `Parse(serde_json::Error)` | JSON deserialization failure | 2 |
+| `DecompressedTooLarge { path, limit }` | Decompression bomb guard | 2 |
+| `InvalidUtf8 { path, offset }` | UTF-8 validation failure (JSON) | 2 |
+| `EncodingDetection { path, first_bytes: [u8; 4] }` | Unrecognized file format | 2 |
+| `ParseJson(serde_json::Error)` | JSON deserialization failure | 2 |
+| `ParseCbor(ciborium::de::Error)` | CBOR deserialization failure | 2 |
+| `Decompress(std::io::Error)` | zstd decompression failure | 2 |
 | `MultipleStdin` | Two `-` arguments | 2 |
 
 Commands that produce exit code 1 return `Ok(1)` from the `run` function, not `Err(...)`. This is deliberate: exit code 1 means the tool operated correctly and the result is a logical finding (validation failure, differences detected, node not found), not an operational error.

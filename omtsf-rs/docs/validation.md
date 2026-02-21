@@ -1,7 +1,7 @@
 # omtsf-core Technical Specification: Validation Engine
 
 **Status:** Draft
-**Date:** 2026-02-20
+**Date:** 2026-02-21
 
 ---
 
@@ -32,45 +32,47 @@ pub enum Severity {
 }
 ```
 
-`RuleId` is an enum with one variant per spec-defined rule. Every diagnostic carries a machine-readable identifier that maps directly to the spec (e.g., `L1-GDM-03`, `L2-EID-05`). The enum has a `code(&self) -> &'static str` method returning the hyphenated string form for serialized output.
+`Diagnostic` implements `Display` in the format `[E] L1-GDM-03 edge "edge-042": target "node-999" does not reference an existing node`, where the prefix letter corresponds to the severity (`E`/`W`/`I`).
+
+`RuleId` is an enum with one variant per spec-defined rule. Every diagnostic carries a machine-readable identifier that maps directly to the spec (e.g., `L1-GDM-03`, `L2-EID-05`). The enum has a `code(&self) -> &str` method returning the hyphenated string form for serialized output.
 
 ```rust
 #[non_exhaustive]
 pub enum RuleId {
     // SPEC-001 L1
-    L1_GDM_01, L1_GDM_02, L1_GDM_03, L1_GDM_04, L1_GDM_05, L1_GDM_06,
+    L1Gdm01, L1Gdm02, L1Gdm03, L1Gdm04, L1Gdm05, L1Gdm06,
     // SPEC-002 L1
-    L1_EID_01, L1_EID_02, L1_EID_03, L1_EID_04, L1_EID_05,
-    L1_EID_06, L1_EID_07, L1_EID_08, L1_EID_09, L1_EID_10, L1_EID_11,
+    L1Eid01, L1Eid02, L1Eid03, L1Eid04, L1Eid05,
+    L1Eid06, L1Eid07, L1Eid08, L1Eid09, L1Eid10, L1Eid11,
     // SPEC-004 L1
-    L1_SDI_01, L1_SDI_02,
+    L1Sdi01, L1Sdi02,
     // SPEC-001 L2
-    L2_GDM_01, L2_GDM_02, L2_GDM_03, L2_GDM_04,
+    L2Gdm01, L2Gdm02, L2Gdm03, L2Gdm04,
     // SPEC-002 L2
-    L2_EID_01, L2_EID_02, L2_EID_03, L2_EID_04,
-    L2_EID_05, L2_EID_06, L2_EID_07, L2_EID_08,
+    L2Eid01, L2Eid02, L2Eid03, L2Eid04,
+    L2Eid05, L2Eid06, L2Eid07, L2Eid08,
     // L3 (SPEC-002, SPEC-003)
-    L3_EID_01, L3_EID_02, L3_EID_03, L3_EID_04, L3_EID_05,
-    L3_MRG_01, L3_MRG_02,
-    // Internal errors and extension rules
-    Internal,
+    L3Eid01, L3Eid02, L3Eid03, L3Eid04, L3Eid05,
+    L3Mrg01, L3Mrg02,
+    // Special variants
     Extension(String),
+    Internal,
 }
 
 impl RuleId {
     pub fn code(&self) -> &str {
         match self {
-            Self::L1_GDM_01 => "L1-GDM-01",
-            Self::L1_GDM_02 => "L1-GDM-02",
+            Self::L1Gdm01 => "L1-GDM-01",
+            Self::L1Gdm02 => "L1-GDM-02",
             // ... exhaustive match for all variants
-            Self::Internal => "INTERNAL",
             Self::Extension(s) => s.as_str(),
+            Self::Internal => "internal",
         }
     }
 }
 ```
 
-The enum is `#[non_exhaustive]` so that adding new spec-defined rules in future versions does not break downstream callers who match on it.
+The enum is `#[non_exhaustive]` so that adding new spec-defined rules in future versions does not break downstream callers who match on it. The `RuleId` also implements `Display`, delegating to `code()`.
 
 ### 2.1 Location Tracking
 
@@ -84,7 +86,17 @@ pub enum Location {
 }
 ```
 
-`node_id` and `edge_id` are the graph-local `id` values from the file, not internal indices. The optional `field` narrows to a specific property (e.g., `"source"` on an edge for a dangling reference). `Identifier` locations include the array index so the user can locate the exact entry.
+`node_id` and `edge_id` are the graph-local `id` values from the file, not internal indices. The optional `field` narrows to a specific property (e.g., `"source"` on an edge for a dangling reference). `Identifier` locations include the zero-based array index so the user can locate the exact entry.
+
+`Location` implements `Display` with the following formats:
+- `Header` -> `header.reporting_entity`
+- `Node` without field -> `node "org-acme"`
+- `Node` with field -> `node "org-acme" field "type"`
+- `Edge` without field -> `edge "e-42"`
+- `Edge` with field -> `edge "e-42" field "source"`
+- `Identifier` without field -> `node "org-acme" identifiers[2]`
+- `Identifier` with field -> `node "org-acme" identifiers[0].scheme`
+- `Global` -> `(global)`
 
 ### 2.2 Collected Results
 
@@ -95,15 +107,17 @@ pub struct ValidationResult {
 
 impl ValidationResult {
     pub fn has_errors(&self) -> bool;
+    pub fn is_conformant(&self) -> bool;  // !has_errors()
     pub fn errors(&self) -> impl Iterator<Item = &Diagnostic>;
     pub fn warnings(&self) -> impl Iterator<Item = &Diagnostic>;
     pub fn infos(&self) -> impl Iterator<Item = &Diagnostic>;
-    /// True if and only if zero diagnostics have `Severity::Error`.
-    pub fn is_conformant(&self) -> bool;
+    pub fn by_rule(&self, rule: &RuleId) -> impl Iterator<Item = &Diagnostic>;
+    pub fn len(&self) -> usize;
+    pub fn is_empty(&self) -> bool;
 }
 ```
 
-The engine always collects all diagnostics -- it never fails fast. A file with 50 L1 violations returns all 50.
+The engine always collects all diagnostics -- it never fails fast. A file with 50 L1 violations returns all 50. A file is conformant even if it carries warnings or info findings; only `Severity::Error` makes it non-conformant.
 
 ---
 
@@ -117,14 +131,31 @@ Each validation rule implements a common trait:
 pub trait ValidationRule {
     fn id(&self) -> RuleId;
     fn level(&self) -> Level;
-    fn severity(&self) -> Severity;
-    fn check(&self, ctx: &ValidationContext, diags: &mut Vec<Diagnostic>);
+    fn severity(&self) -> Severity { self.level().severity() }
+    fn check(
+        &self,
+        file: &OmtsFile,
+        diags: &mut Vec<Diagnostic>,
+        external_data: Option<&dyn ExternalDataSource>,
+    );
 }
 
 pub enum Level { L1, L2, L3 }
+
+impl Level {
+    pub fn severity(self) -> Severity {
+        match self {
+            Self::L1 => Severity::Error,
+            Self::L2 => Severity::Warning,
+            Self::L3 => Severity::Info,
+        }
+    }
+}
 ```
 
-Rules push zero or more diagnostics into the `diags` vector. A rule that finds nothing wrong pushes nothing. The `ctx: &ValidationContext` parameter bundles the parsed graph together with pre-computed lookup indices (Section 3.4). Rules never touch raw JSON.
+Rules push zero or more diagnostics into the `diags` vector. A rule that finds nothing wrong pushes nothing. The `file: &OmtsFile` parameter provides the parsed graph directly. The `external_data` parameter carries an optional reference to an `ExternalDataSource` implementation -- L1 and L2 rules ignore this entirely, L3 rules query it when `Some` and skip silently when `None`.
+
+The trait is object-safe; the registry stores rules as `Vec<Box<dyn ValidationRule>>`.
 
 ### 3.2 Registry and Dispatch
 
@@ -141,31 +172,30 @@ pub struct ValidationConfig {
     pub run_l1: bool,  // always true in a conformant validator
     pub run_l2: bool,  // default: true
     pub run_l3: bool,  // default: false (requires external data)
-    pub external_data: Option<Box<dyn ExternalDataSource>>,
 }
 ```
 
-Dispatch is a linear walk over the registry. Each rule's `check` method is called once with the full context. Rules are stateless and independent -- ordering within a level does not matter. There is no dependency graph between rules, no priority system, no early-exit. If profiling later shows hot spots, individual rules can be optimized internally without changing the dispatch model.
+The default configuration runs L1 and L2. L3 is off by default because it requires an external data source. The registry sizes by level: 19 L1 rules (6 GDM + 11 EID + 2 SDI), 6 L2 rules (4 GDM + 2 EID), 2 L3 rules (1 EID + 1 MRG) currently registered.
+
+The top-level dispatch function:
+
+```rust
+pub fn validate(
+    file: &OmtsFile,
+    config: &ValidationConfig,
+    external_data: Option<&dyn ExternalDataSource>,
+) -> ValidationResult;
+```
+
+Dispatch is a linear walk over the registry. Each rule's `check` method is called once with the full `OmtsFile` reference. Rules are stateless and independent -- ordering within a level does not matter. There is no dependency graph between rules, no priority system, no early-exit. If profiling later shows hot spots, individual rules can be optimized internally without changing the dispatch model.
 
 ### 3.3 Extensibility
 
 Extension rules can be added by implementing `ValidationRule` and appending to the registry. The trait is public. Extension rules use `RuleId::Extension(String)` to carry their own identifiers. Extension rules MUST NOT use the `L1-*`, `L2-*`, or `L3-*` prefixes -- those are reserved for spec-defined rules.
 
-### 3.4 Validation Context
+### 3.4 Per-Rule Lookup Structures
 
-Multiple rules need the same lookup structures. A `ValidationContext` is computed once before dispatch begins:
-
-```rust
-pub struct ValidationContext<'a> {
-    pub file: &'a OmtsFile,
-    pub node_by_id: HashMap<&'a str, &'a Node>,
-    pub edge_by_id: HashMap<&'a str, &'a Edge>,
-    pub node_ids: HashSet<&'a str>,
-    pub edge_ids: HashSet<&'a str>,
-}
-```
-
-The context is constructed from the parsed `OmtsFile` and passed by shared reference to every rule. It is immutable for the duration of the validation pass.
+Rules that need index structures (e.g., a node-id-to-node map for reference resolution, a set of node ids for uniqueness checks) build them internally. For example, L1-GDM-01 builds a `HashSet<&str>` over node ids; L1-GDM-03 builds a `HashSet<&str>` of node ids for source/target reference validation; L1-GDM-05 and L1-GDM-06 build a `HashMap<&str, &Node>` for type lookups. Each rule constructs only the structures it needs, keeping the dispatch model simple and avoiding up-front computation of structures that some rule subsets never use.
 
 ---
 
@@ -175,41 +205,47 @@ The context is constructed from the parsed `OmtsFile` and passed by shared refer
 
 L1 rules enforce the MUST constraints from SPEC-001, SPEC-002, and SPEC-004. A file that violates any L1 rule is non-conformant. The complete L1 rule set:
 
-**Graph Data Model (SPEC-001 Section 9.1):**
+**Graph Data Model (SPEC-001 Section 9.1, 9.5):**
 
-| Rule | Check |
-|------|-------|
-| L1-GDM-01 | Every node has a non-empty `id`, unique within the file |
-| L1-GDM-02 | Every edge has a non-empty `id`, unique within the file |
-| L1-GDM-03 | Every edge `source` and `target` references an existing node `id` |
-| L1-GDM-04 | Edge `type` is a recognized core type, `same_as`, or reverse-domain extension |
-| L1-GDM-05 | `reporting_entity` if present references an existing organization node `id` |
-| L1-GDM-06 | Edge source/target node types match the permitted types table (SPEC-001 Section 9.5). Extension edge types are exempt. |
+| Rule | Check | Source Module |
+|------|-------|---------------|
+| L1-GDM-01 | Every node has a non-empty `id`, unique within the file | `rules_l1_gdm::GdmRule01` |
+| L1-GDM-02 | Every edge has a non-empty `id`, unique within the file | `rules_l1_gdm::GdmRule02` |
+| L1-GDM-03 | Every edge `source` and `target` references an existing node `id` | `rules_l1_gdm::GdmRule03` |
+| L1-GDM-04 | Edge `type` is a recognized core type, `same_as`, or reverse-domain extension | `rules_l1_gdm::GdmRule04` |
+| L1-GDM-05 | `reporting_entity` if present references an existing organization node `id` | `rules_l1_gdm::GdmRule05` |
+| L1-GDM-06 | Edge source/target node types match the permitted types table (SPEC-001 Section 9.5). Extension edge types and `boundary_ref` nodes at endpoints are exempt. | `rules_l1_gdm::GdmRule06` |
 
 **Entity Identification (SPEC-002 Section 6.1):**
 
-| Rule | Check |
-|------|-------|
-| L1-EID-01 | Every identifier has a non-empty `scheme` |
-| L1-EID-02 | Every identifier has a non-empty `value` |
-| L1-EID-03 | `authority` is present and non-empty when scheme is `nat-reg`, `vat`, or `internal` |
-| L1-EID-04 | `scheme` is a core scheme or reverse-domain extension |
-| L1-EID-05 | LEI matches `^[A-Z0-9]{18}[0-9]{2}$` and passes MOD 97-10 check digit |
-| L1-EID-06 | DUNS matches `^[0-9]{9}$` |
-| L1-EID-07 | GLN matches `^[0-9]{13}$` and passes GS1 mod-10 check digit |
-| L1-EID-08 | `valid_from` and `valid_to` if present are valid ISO 8601 dates (`YYYY-MM-DD`) |
-| L1-EID-09 | `valid_from` <= `valid_to` when both present |
-| L1-EID-10 | `sensitivity` if present is `public`, `restricted`, or `confidential` |
-| L1-EID-11 | No duplicate `{scheme, value, authority}` tuple on the same node |
+| Rule | Check | Source Module |
+|------|-------|---------------|
+| L1-EID-01 | Every identifier has a non-empty `scheme` | `rules_l1_eid::L1Eid01` |
+| L1-EID-02 | Every identifier has a non-empty `value` | `rules_l1_eid::L1Eid02` |
+| L1-EID-03 | `authority` is present and non-empty when scheme is `nat-reg`, `vat`, or `internal` | `rules_l1_eid::L1Eid03` |
+| L1-EID-04 | `scheme` is a core scheme or reverse-domain extension | `rules_l1_eid::L1Eid04` |
+| L1-EID-05 | LEI matches `^[A-Z0-9]{18}[0-9]{2}$` and passes MOD 97-10 check digit | `rules_l1_eid::L1Eid05` |
+| L1-EID-06 | DUNS matches `^[0-9]{9}$` | `rules_l1_eid::L1Eid06` |
+| L1-EID-07 | GLN matches `^[0-9]{13}$` and passes GS1 mod-10 check digit | `rules_l1_eid::L1Eid07` |
+| L1-EID-08 | `valid_from` and `valid_to` if present are valid ISO 8601 dates (`YYYY-MM-DD`) | `rules_l1_eid::L1Eid08` |
+| L1-EID-09 | `valid_from` <= `valid_to` when both present | `rules_l1_eid::L1Eid09` |
+| L1-EID-10 | `sensitivity` if present is `public`, `restricted`, or `confidential` | `rules_l1_eid::L1Eid10` |
+| L1-EID-11 | No duplicate `{scheme, value, authority}` tuple on the same node | `rules_l1_eid::L1Eid11` |
 
 **Selective Disclosure (SPEC-004 Section 6.1):**
 
-| Rule | Check |
-|------|-------|
-| L1-SDI-01 | `boundary_ref` nodes have exactly one identifier with scheme `opaque` |
-| L1-SDI-02 | If `disclosure_scope` is declared, sensitivity constraints are satisfied: `public` scope forbids `restricted` and `confidential` identifiers and `person` nodes; `partner` scope forbids `confidential` identifiers |
+| Rule | Check | Source Module |
+|------|-------|---------------|
+| L1-SDI-01 | `boundary_ref` nodes have exactly one identifier with scheme `opaque` | `rules_l1_sdi::L1Sdi01` |
+| L1-SDI-02 | If `disclosure_scope` is declared, sensitivity constraints are satisfied: `public` scope forbids `restricted` and `confidential` identifiers and `person` nodes; `partner` scope forbids `confidential` identifiers | `rules_l1_sdi::L1Sdi02` |
 
-**Implementation note:** L1-GDM-01 and L1-GDM-02 build the `node_by_id` and `edge_by_id` maps in the `ValidationContext`. Duplicate ids emit a diagnostic; the first occurrence wins. L1-GDM-03 and L1-GDM-05 use these maps for reference resolution. L1-GDM-06 looks up source/target node types against the permitted-types table (SPEC-001 Section 9.5). Extension edge types (matching `^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$`) skip this check.
+**Implementation notes:**
+
+- L1-GDM-01 and L1-GDM-02 iterate their respective arrays once, tracking seen ids in a `HashSet`. Duplicate ids emit a diagnostic per occurrence beyond the first. The non-empty constraint on ids is enforced by the `NodeId`/`EdgeId` newtypes at deserialization time.
+- L1-GDM-03 builds a `HashSet<&str>` of node ids, then checks each edge's `source` and `target` independently. Each dangling reference produces a separate diagnostic with `field` set to `"source"` or `"target"`.
+- L1-GDM-04 dispatches on `EdgeTypeTag::Known` vs `EdgeTypeTag::Extension`. Extension strings containing a dot are accepted per SPEC-001 Section 8.2. Unrecognized strings without a dot are rejected.
+- L1-GDM-05 resolves `reporting_entity` against a `HashMap<&str, &Node>`. A missing node and a node of wrong type each produce distinct messages.
+- L1-GDM-06 encodes the permitted source/target types table from SPEC-001 Section 9.5 as a function returning `Option<(&[NodeType], &[NodeType])>`. Extension edge types skip the check entirely. Dangling references are not double-reported (L1-GDM-03 handles those). Extension node types at endpoints are not constrained. `boundary_ref` nodes are exempt from type-compatibility checks because they may appear at any edge endpoint after redaction (SPEC-004).
 
 ### 4.2 L2 -- Semantic Completeness (Warnings)
 
@@ -239,6 +275,12 @@ L2 rules enforce SHOULD constraints. They flag likely modeling errors or missing
 
 L2 rules are included in the registry when `config.run_l2` is true (the default).
 
+**Implementation notes:**
+
+- L2-GDM-01 uses a helper that collects all facility node IDs connected to an organization via `operates`, `operational_control`, or `tolls` edges, plus the `operator` property. It iterates edges once, then checks all facility nodes against the connected set. The edge match is exhaustive over all `EdgeType` variants.
+- L2-GDM-04 short-circuits immediately when `reporting_entity` is present.
+- L2-EID-04 embeds a static sorted array of all 249 ISO 3166-1 alpha-2 country codes and uses binary search for O(log n) lookup. This avoids an external dependency while staying WASM-compatible.
+
 ### 4.3 L3 -- Enrichment (Info)
 
 L3 rules cross-reference external data sources and are off by default. The engine does not perform HTTP calls -- L3 rules receive external data through an injected trait:
@@ -248,9 +290,21 @@ pub trait ExternalDataSource {
     fn lei_status(&self, lei: &str) -> Option<LeiRecord>;
     fn nat_reg_lookup(&self, authority: &str, value: &str) -> Option<NatRegRecord>;
 }
+
+pub struct LeiRecord {
+    pub lei: String,
+    pub registration_status: String,
+    pub is_active: bool,
+}
+
+pub struct NatRegRecord {
+    pub authority: String,
+    pub value: String,
+    pub is_active: bool,
+}
 ```
 
-The CLI wires in a concrete implementation; WASM consumers provide their own adapter.
+The CLI wires in a concrete implementation; WASM consumers provide their own adapter. L3 rules receive `Option<&dyn ExternalDataSource>`. When the option is `None`, each rule skips its checks entirely without emitting any diagnostics. When the data source returns `None` for a specific lookup, that individual check is skipped silently.
 
 L3 rules:
 
@@ -264,13 +318,17 @@ L3 rules:
 | L3-MRG-01 | Sum of `ownership.percentage` edges into any org node does not exceed 100 |
 | L3-MRG-02 | `legal_parentage` edges form a forest (no cycles) -- detected via topological sort |
 
-L3-MRG-02 extracts the subgraph of `legal_parentage` edges and runs a topological sort. A cycle produces an Info diagnostic listing the node ids in the cycle.
+**Implementation notes:**
+
+- L3-EID-01 iterates all nodes with `lei` scheme identifiers and queries `lei_status()` for each. Inactive LEIs (where `is_active` is false) produce an Info diagnostic including the registration status string from the data source.
+- L3-MRG-01 collects all organization node IDs into a `HashSet`, then for each organization node sums the `percentage` values from all inbound ownership edges whose source is also an organization. Sums exceeding 100.0 produce one Info diagnostic per target node.
+- L3-MRG-02 extracts the subgraph of `legal_parentage` edges and runs a topological sort. A cycle produces an Info diagnostic listing the node ids in the cycle.
 
 ---
 
 ## 5. Check Digit Implementations
 
-These are pure functions in a `check_digits` module within `omtsf-core`. They operate on `&str` and return `bool`. They do not allocate.
+These are pure functions in the `check_digits` module within `omtsf-core`. They operate on `&str` and return `bool`. They are zero-allocation: they work directly on the byte slice of the input without any heap allocation.
 
 ### 5.1 MOD 97-10 (ISO 7064) for LEI
 
@@ -278,21 +336,42 @@ These are pure functions in a `check_digits` module within `omtsf-core`. They op
 
 **Algorithm:**
 
-1. Convert each character to its numeric value: digits 0-9 stay as-is, letters A=10, B=11, ..., Z=35.
-2. Concatenate all numeric values into a single large integer representation. Because the result can exceed 128 bits, compute the modulus incrementally: maintain a running `u64` remainder. For each character, append its one-or-two digit numeric value by multiplying the accumulator by 10 (for values 0-9) or 100 (for values 10-35) and adding, then taking mod 97.
+1. Convert each character to its numeric value: digits `0`-`9` stay as-is, letters `A`=10, `B`=11, ..., `Z`=35.
+2. Concatenate all numeric values into a single large integer representation. Because the result can exceed 128 bits, compute the modulus incrementally: maintain a running `u64` remainder. For each character, multiply the accumulator by the appropriate base (10 for digits 0-9, which produce one-digit expansions; 100 for letters A-Z, which produce two-digit expansions 10-35), add the numeric value, then take mod 97.
 3. The final remainder must equal 1.
 
-**Output:** `bool`. True if the check digit is valid.
+```rust
+pub fn mod97_10(lei: &str) -> bool {
+    let mut remainder: u64 = 0;
+    for byte in lei.as_bytes() {
+        match byte {
+            b'0'..=b'9' => {
+                let digit = u64::from(byte - b'0');
+                remainder = (remainder * 10 + digit) % 97;
+            }
+            b'A'..=b'Z' => {
+                let value = u64::from(byte - b'A') + 10;
+                remainder = (remainder * 100 + value) % 97;
+            }
+            _ => {}
+        }
+    }
+    remainder == 1
+}
+```
 
-**Error cases:** Assumes the regex pre-check has passed. L1-EID-05 calls the regex check first and only proceeds to MOD 97-10 on match.
+Characters outside `[A-Z0-9]` are silently ignored; the regex pre-check in L1-EID-05 ensures the LEI contains only valid characters before this function is called.
 
-**Test vectors (from SPEC-002 Section 5.1):**
+**Test vectors:**
 
-| LEI | Expected |
-|-----|----------|
-| `5493006MHB84DD0ZWV18` | valid |
-| `5493006MHB84DD0ZWV19` | invalid (wrong check digit) |
-| `549300TRUWO2CD2G5692` | valid (GLEIF's own LEI) |
+| LEI | Expected | Notes |
+|-----|----------|-------|
+| `5493006MHB84DD0ZWV18` | valid | Known-valid LEI (BIS) |
+| `5493006MHB84DD0ZWV19` | invalid | Wrong check digit (changed 8 to 9) |
+| `549300TRUWO2CD2G5692` | valid | GLEIF's own LEI |
+| `7LTWFZYICNSX8D621K86` | valid | Deutsche Bank AG |
+| `HWUPKR0MPOU8FGXBT394` | valid | Apple Inc. |
+| `00000000000000000000` | invalid | All zeros (remainder 0, not 1) |
 
 ### 5.2 GS1 Mod-10 for GLN
 
@@ -300,23 +379,42 @@ These are pure functions in a `check_digits` module within `omtsf-core`. They op
 
 **Algorithm:**
 
-1. Number positions 1 through 13 from left to right.
-2. Apply alternating weights starting from the rightmost position (position 13): position 13 weight 1, position 12 weight 3, position 11 weight 1, position 10 weight 3, and so on alternating.
+1. Number positions 1 through 13 from left to right. The check digit is at position 13.
+2. Apply alternating weights starting from position 1. Position `i` (1-indexed) has weight 1 if `i` is odd, weight 3 if `i` is even. Equivalently: index `i` (0-indexed) into positions 1-12 has weight 1 if even-indexed, 3 if odd-indexed.
 3. Sum the weighted products of positions 1 through 12 (all except the check digit at position 13).
 4. Check digit = `(10 - (sum mod 10)) mod 10`.
 5. Compare computed check digit against the actual digit at position 13.
 
-**Output:** `bool`. True if the check digit matches.
+```rust
+pub fn gs1_mod10(gln: &str) -> bool {
+    let bytes = gln.as_bytes();
+    if bytes.len() != 13 {
+        return false;
+    }
+    let mut sum: u32 = 0;
+    for (i, byte) in bytes[..12].iter().enumerate() {
+        let digit = u32::from(byte - b'0');
+        let weight: u32 = if i % 2 == 1 { 3 } else { 1 };
+        sum += digit * weight;
+    }
+    let expected_check = (10 - (sum % 10)) % 10;
+    let actual_check = u32::from(bytes[12] - b'0');
+    expected_check == actual_check
+}
+```
 
-**Implementation note:** The function operates on ASCII bytes directly (`b'0'..=b'9'`), converting to digit values via byte subtraction (`byte - b'0'`). No integer parsing is needed.
+The function operates on ASCII bytes directly, converting to digit values via byte subtraction (`byte - b'0'`). No integer parsing is needed.
 
-**Test vectors (from SPEC-001 Section 10):**
+**Test vectors:**
 
-| GLN | Expected |
-|-----|----------|
-| `5060012340001` | valid |
-| `5060012340002` | invalid (wrong check digit) |
-| `0000000000000` | valid (edge case: all zeros) |
+| GLN | Expected | Notes |
+|-----|----------|-------|
+| `0614141000418` | valid | Standard GS1 example |
+| `5901234123457` | valid | Commonly cited GS1 test vector |
+| `4000000000006` | valid | Minimal non-zero prefix |
+| `0614141000419` | invalid | Wrong check digit |
+| `061414100041` | invalid | Too short (12 digits) |
+| `06141410004180` | invalid | Too long (14 digits) |
 
 ---
 
@@ -326,7 +424,7 @@ Three categories of errors exist. They are distinct types and must not be confla
 
 ### 6.1 Parse Errors
 
-Produced by `serde_json` deserialization: malformed JSON, missing required fields, wrong types. Parse errors prevent validation from running. They are reported as a `ParseError` wrapping `serde_json::Error` with byte offset or line/column.
+Produced by `serde_json` deserialization: malformed JSON, missing required fields, wrong types. Parse errors prevent validation from running. They are reported as a `ParseError` with a human-readable message string including location information (byte offset or line/column) where available.
 
 Parse errors are not `Diagnostic` values. They are a separate variant in the top-level result type:
 
@@ -337,12 +435,11 @@ pub enum ValidateOutput {
 }
 
 pub struct ParseError {
-    pub source: serde_json::Error,
-    pub context: Option<String>,
+    pub message: String,
 }
 ```
 
-The `context` field carries additional information when available (e.g., which field was being deserialized).
+`ParseError` implements `Display` (prefixed with `"parse error: "`) and `std::error::Error`.
 
 ### 6.2 Validation Errors
 
@@ -358,7 +455,7 @@ Bugs in the validator itself -- index out of bounds, unexpected `None`, logic er
 
 Per SPEC-001 Section 11.3, the validator MUST NOT reject files based on unknown fields, extension edge types, or unrecognized `data_quality` values. Serde deserialization uses `#[serde(flatten)]` with `serde_json::Map<String, Value>` catch-all fields on every struct to capture extensions. `#[serde(deny_unknown_fields)]` is never used anywhere in the type hierarchy.
 
-Extension edge types (matching the reverse-domain pattern) bypass L1-GDM-04 and L1-GDM-06. Extension identifier schemes bypass format validation in L1-EID-04 through L1-EID-07. Unknown `data_quality.confidence` values are silently preserved.
+Extension edge types (matching the reverse-domain pattern, i.e., containing at least one dot) bypass L1-GDM-04 and L1-GDM-06. Extension identifier schemes bypass format validation in L1-EID-04 through L1-EID-07. Unknown `data_quality.confidence` values are silently preserved.
 
 ---
 
@@ -388,3 +485,18 @@ A `--format json` flag emits each diagnostic as a JSON object (one per line, NDJ
 ```
 
 The `--level` flag controls which levels to run: `--level l1` runs only L1, `--level l1,l2` runs L1 and L2 (the default), `--level l1,l2,l3` runs all three. L1 is always included; specifying `--level l2` implies L1.
+
+---
+
+## 8. Source Layout
+
+| File | Contents |
+|------|----------|
+| `validation/mod.rs` | `Diagnostic`, `Severity`, `RuleId`, `Location`, `ValidationResult`, `ParseError`, `ValidateOutput`, `Level`, `ValidationRule` trait, `ValidationConfig`, `build_registry`, `validate` |
+| `validation/rules_l1_gdm.rs` | `GdmRule01` through `GdmRule06`, permitted-types table, helper functions |
+| `validation/rules_l1_sdi.rs` | `L1Sdi01`, `L1Sdi02` |
+| `validation/rules_l2.rs` | `L2Gdm01` through `L2Gdm04`, `L2Eid01`, `L2Eid04`, ISO 3166-1 alpha-2 table |
+| `validation/rules_l3.rs` | `L3Eid01`, `L3Mrg01` |
+| `validation/external.rs` | `ExternalDataSource` trait, `LeiRecord`, `NatRegRecord` |
+| `rules_l1_eid.rs` | `L1Eid01` through `L1Eid11` (at crate root, not inside `validation/`) |
+| `check_digits.rs` | `mod97_10`, `gs1_mod10` |
