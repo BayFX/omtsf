@@ -2,6 +2,7 @@
 
 pub mod boundary_hash;
 pub mod canonical;
+pub mod cbor;
 pub mod check_digits;
 #[cfg(feature = "compression")]
 pub mod compression;
@@ -25,6 +26,7 @@ pub mod validation;
 
 pub use boundary_hash::{BoundaryHashError, boundary_ref_value, decode_salt, generate_file_salt};
 pub use canonical::{CanonicalId, build_identifier_index};
+pub use cbor::{CborError, decode_cbor, encode_cbor};
 #[cfg(feature = "compression")]
 pub use compression::{CompressionError, compress_zstd, decompress_zstd};
 pub use diff::{
