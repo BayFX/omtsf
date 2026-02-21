@@ -105,6 +105,12 @@ pub enum Command {
         /// Merge strategy: union (default) or intersect.
         #[arg(long, default_value = "union")]
         strategy: MergeStrategy,
+        /// Target output encoding: json (default) or cbor.
+        #[arg(long, default_value = "json", value_enum)]
+        to: TargetEncoding,
+        /// Compress output with zstd after serialization.
+        #[arg(long)]
+        compress: bool,
     },
 
     /// Redact a file for a target disclosure scope.
@@ -115,6 +121,12 @@ pub enum Command {
         /// Target disclosure scope (required).
         #[arg(long)]
         scope: DisclosureScope,
+        /// Target output encoding: json (default) or cbor.
+        #[arg(long, default_value = "json", value_enum)]
+        to: TargetEncoding,
+        /// Compress output with zstd after serialization.
+        #[arg(long)]
+        compress: bool,
     },
 
     /// Print summary statistics for a graph.

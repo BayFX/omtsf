@@ -354,3 +354,164 @@ fn redact_stdin_exits_0() {
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+/// `--to cbor` outputs bytes starting with the CBOR self-describing tag 55799.
+#[test]
+fn redact_to_cbor_starts_with_cbor_tag() {
+    let out = Command::new(omtsf_bin())
+        .args([
+            "redact",
+            "--scope",
+            "public",
+            "--to",
+            "cbor",
+            fixture("redact-internal.omts").to_str().expect("path"),
+        ])
+        .output()
+        .expect("run omtsf redact --to cbor");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "expected exit 0; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        out.stdout.starts_with(&[0xD9, 0xD9, 0xF7]),
+        "CBOR output must begin with self-describing tag 55799"
+    );
+}
+
+/// `--to cbor` redacted output passes L1 validation and has no person nodes.
+#[test]
+fn redact_to_cbor_passes_validate_and_removes_person_nodes() {
+    let redact_out = Command::new(omtsf_bin())
+        .args([
+            "redact",
+            "--scope",
+            "public",
+            "--to",
+            "cbor",
+            fixture("redact-internal.omts").to_str().expect("path"),
+        ])
+        .output()
+        .expect("run omtsf redact --to cbor");
+    assert_eq!(
+        redact_out.status.code(),
+        Some(0),
+        "redact must succeed first"
+    );
+
+    let mut tmp = tempfile::NamedTempFile::new().expect("temp file");
+    tmp.write_all(&redact_out.stdout)
+        .expect("write redacted CBOR output");
+
+    let validate_out = Command::new(omtsf_bin())
+        .args([
+            "validate",
+            "--level",
+            "1",
+            tmp.path().to_str().expect("path"),
+        ])
+        .output()
+        .expect("run omtsf validate on redacted CBOR output");
+    assert_eq!(
+        validate_out.status.code(),
+        Some(0),
+        "redacted CBOR output must pass L1 validation; stderr: {}",
+        String::from_utf8_lossy(&validate_out.stderr)
+    );
+
+    // Convert CBOR back to JSON and check no person nodes remain.
+    let convert_out = Command::new(omtsf_bin())
+        .args([
+            "convert",
+            "--to",
+            "json",
+            tmp.path().to_str().expect("path"),
+        ])
+        .output()
+        .expect("run omtsf convert cbor to json");
+    let stdout = String::from_utf8_lossy(&convert_out.stdout);
+    let value: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("valid JSON after CBOR round-trip");
+    let nodes = value["nodes"].as_array().expect("nodes array");
+    for node in nodes {
+        let node_type = node["type"].as_str().unwrap_or("");
+        assert_ne!(
+            node_type, "person",
+            "CBOR public-scope output must not contain person nodes; found: {node:?}"
+        );
+    }
+}
+
+/// `--compress` produces output starting with the zstd magic bytes.
+#[test]
+fn redact_compress_starts_with_zstd_magic() {
+    let out = Command::new(omtsf_bin())
+        .args([
+            "redact",
+            "--scope",
+            "public",
+            "--compress",
+            fixture("redact-internal.omts").to_str().expect("path"),
+        ])
+        .output()
+        .expect("run omtsf redact --compress");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "expected exit 0; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        out.stdout.starts_with(&[0x28, 0xB5, 0x2F, 0xFD]),
+        "compressed output must begin with zstd magic bytes"
+    );
+}
+
+/// `--to cbor --compress` produces zstd-compressed CBOR that passes validate.
+#[test]
+fn redact_cbor_compress_passes_validate() {
+    let redact_out = Command::new(omtsf_bin())
+        .args([
+            "redact",
+            "--scope",
+            "public",
+            "--to",
+            "cbor",
+            "--compress",
+            fixture("redact-internal.omts").to_str().expect("path"),
+        ])
+        .output()
+        .expect("run omtsf redact --to cbor --compress");
+    assert_eq!(
+        redact_out.status.code(),
+        Some(0),
+        "expected exit 0; stderr: {}",
+        String::from_utf8_lossy(&redact_out.stderr)
+    );
+    assert!(
+        redact_out.stdout.starts_with(&[0x28, 0xB5, 0x2F, 0xFD]),
+        "compressed CBOR must start with zstd magic"
+    );
+
+    let mut tmp = tempfile::NamedTempFile::new().expect("temp file");
+    tmp.write_all(&redact_out.stdout)
+        .expect("write redacted output");
+
+    let validate_out = Command::new(omtsf_bin())
+        .args([
+            "validate",
+            "--level",
+            "1",
+            tmp.path().to_str().expect("path"),
+        ])
+        .output()
+        .expect("run omtsf validate on redacted cbor+zstd output");
+    assert_eq!(
+        validate_out.status.code(),
+        Some(0),
+        "redacted cbor+zstd output must pass L1 validation; stderr: {}",
+        String::from_utf8_lossy(&validate_out.stderr)
+    );
+}
