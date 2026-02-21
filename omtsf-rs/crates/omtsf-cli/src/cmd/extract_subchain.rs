@@ -22,20 +22,20 @@ use crate::error::CliError;
 
 /// Runs the `extract-subchain` command.
 ///
-/// Parses `content` as an OMTSF file, builds a `SelectorSet` from the
-/// supplied flag vectors, then calls [`selector_subgraph`] to produce the
-/// induced subgraph after `expand` BFS hops.
+/// Builds a `SelectorSet` from the supplied flag vectors, then calls
+/// [`selector_subgraph`] on the pre-parsed `file` to produce the induced
+/// subgraph after `expand` BFS hops.
 ///
 /// The resulting `.omts` file is written as pretty-printed JSON to stdout.
 ///
 /// # Errors
 ///
-/// - [`CliError`] exit code 2 if `content` cannot be parsed or the graph
-///   cannot be built, or if no selector flags were provided.
+/// - [`CliError`] exit code 2 if the graph cannot be built or no selector
+///   flags were provided.
 /// - [`CliError`] exit code 1 if no nodes or edges match the selectors.
 #[allow(clippy::too_many_arguments)]
 pub fn run(
-    content: &str,
+    file: &OmtsFile,
     node_types: &[String],
     edge_types: &[String],
     labels: &[String],
@@ -44,11 +44,7 @@ pub fn run(
     names: &[String],
     expand: u32,
 ) -> Result<(), CliError> {
-    let file: OmtsFile = serde_json::from_str(content).map_err(|e| CliError::ParseFailed {
-        detail: format!("line {}, column {}: {e}", e.line(), e.column()),
-    })?;
-
-    let graph = build_graph(&file).map_err(|e| CliError::GraphBuildError {
+    let graph = build_graph(file).map_err(|e| CliError::GraphBuildError {
         detail: e.to_string(),
     })?;
 
@@ -62,7 +58,7 @@ pub fn run(
     )?;
 
     let subgraph_file =
-        selector_subgraph(&graph, &file, &selector_set, expand as usize).map_err(|e| match e {
+        selector_subgraph(&graph, file, &selector_set, expand as usize).map_err(|e| match e {
             QueryError::EmptyResult => CliError::NoResults {
                 detail: "no nodes or edges matched the given selectors".to_owned(),
             },
@@ -107,11 +103,16 @@ mod tests {
         v.iter().map(std::string::ToString::to_string).collect()
     }
 
+    fn parse(s: &str) -> OmtsFile {
+        serde_json::from_str(s).expect("valid OMTS JSON")
+    }
+
     /// Selecting organizations with expand=0 produces a valid .omts file.
     #[test]
     fn test_extract_subchain_org_expand_0() {
+        let file = parse(SAMPLE_FILE);
         let result = run(
-            SAMPLE_FILE,
+            &file,
             &strs(&["organization"]),
             &empty(),
             &empty(),
@@ -126,8 +127,9 @@ mod tests {
     /// Selecting facilities with expand=1 includes adjacent org nodes.
     #[test]
     fn test_extract_subchain_facility_expand_1() {
+        let file = parse(SAMPLE_FILE);
         let result = run(
-            SAMPLE_FILE,
+            &file,
             &strs(&["facility"]),
             &empty(),
             &empty(),
@@ -142,8 +144,9 @@ mod tests {
     /// Selecting by edge type succeeds when matching edges exist.
     #[test]
     fn test_extract_subchain_edge_type_supplies() {
+        let file = parse(SAMPLE_FILE);
         let result = run(
-            SAMPLE_FILE,
+            &file,
             &empty(),
             &strs(&["supplies"]),
             &empty(),
@@ -161,9 +164,10 @@ mod tests {
     /// Selecting a type with no matches returns `NoResults` (exit code 1).
     #[test]
     fn test_extract_subchain_no_match_returns_exit_1() {
+        let file = parse(SAMPLE_FILE);
         let result = run(
-            SAMPLE_FILE,
-            &strs(&["good"]), // no Good nodes in the fixture
+            &file,
+            &strs(&["good"]),
             &empty(),
             &empty(),
             &empty(),
@@ -178,8 +182,9 @@ mod tests {
     /// No selector flags returns `InvalidArgument` (exit code 2).
     #[test]
     fn test_extract_subchain_no_selectors_returns_exit_2() {
+        let file = parse(SAMPLE_FILE);
         let result = run(
-            SAMPLE_FILE,
+            &file,
             &empty(),
             &empty(),
             &empty(),
@@ -189,23 +194,6 @@ mod tests {
             1,
         );
         let err = result.expect_err("no selectors → error");
-        assert_eq!(err.exit_code(), 2);
-    }
-
-    /// Invalid JSON returns `ParseFailed` (exit code 2).
-    #[test]
-    fn test_extract_subchain_invalid_json_returns_exit_2() {
-        let result = run(
-            "not valid json",
-            &strs(&["organization"]),
-            &empty(),
-            &empty(),
-            &empty(),
-            &empty(),
-            &empty(),
-            1,
-        );
-        let err = result.expect_err("bad JSON → ParseFailed");
         assert_eq!(err.exit_code(), 2);
     }
 

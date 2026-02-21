@@ -22,30 +22,24 @@ use crate::error::CliError;
 
 /// Runs the `reach` command.
 ///
-/// Parses `content` as an OMTSF file, builds the graph, finds all nodes
-/// reachable from `node_id`, and writes them to stdout in the requested
-/// format.
+/// Builds the graph from the pre-parsed `file`, finds all nodes reachable from
+/// `node_id`, and writes them to stdout in the requested format.
 ///
 /// `depth` is an optional maximum traversal depth (in hops).  When `None`,
 /// the traversal is unbounded (limited only by graph size).
 ///
 /// # Errors
 ///
-/// - [`CliError`] exit code 2 if the content cannot be parsed or the graph
-///   cannot be built.
+/// - [`CliError`] exit code 2 if the graph cannot be built.
 /// - [`CliError`] exit code 1 if `node_id` is not found in the graph.
 pub fn run(
-    content: &str,
+    file: &OmtsFile,
     node_id: &str,
     depth: Option<u32>,
     direction: &Direction,
     format: &OutputFormat,
 ) -> Result<(), CliError> {
-    let file: OmtsFile = serde_json::from_str(content).map_err(|e| CliError::ParseFailed {
-        detail: format!("line {}, column {}: {e}", e.line(), e.column()),
-    })?;
-
-    let graph = build_graph(&file).map_err(|e| CliError::GraphBuildError {
+    let graph = build_graph(file).map_err(|e| CliError::GraphBuildError {
         detail: e.to_string(),
     })?;
 

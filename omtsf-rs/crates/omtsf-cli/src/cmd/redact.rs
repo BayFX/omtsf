@@ -20,21 +20,15 @@ use crate::error::CliError;
 
 /// Runs the `redact` command.
 ///
-/// Parses `content` as an OMTSF file, checks that the target scope is at
-/// least as restrictive as the file's existing `disclosure_scope`, then
-/// applies the redaction engine. The redacted file is written to stdout;
-/// statistics go to stderr.
+/// Checks that the target scope is at least as restrictive as the pre-parsed
+/// `file`'s existing `disclosure_scope`, then applies the redaction engine.
+/// The redacted file is written to stdout; statistics go to stderr.
 ///
 /// # Errors
 ///
-/// - [`CliError::ParseFailed`] — content is not a valid OMTSF file.
 /// - [`CliError::RedactionError`] — target scope is less restrictive than
 ///   the existing scope, or the engine produces an invalid output.
-pub fn run(content: &str, scope: &CliScope) -> Result<(), CliError> {
-    let file: OmtsFile = serde_json::from_str(content).map_err(|e| CliError::ParseFailed {
-        detail: format!("line {}, column {}: {e}", e.line(), e.column()),
-    })?;
-
+pub fn run(file: &OmtsFile, scope: &CliScope) -> Result<(), CliError> {
     let target_core = cli_scope_to_core(scope);
     if let Some(existing) = &file.disclosure_scope {
         if scope_is_less_restrictive(&target_core, existing) {
@@ -56,7 +50,7 @@ pub fn run(content: &str, scope: &CliScope) -> Result<(), CliError> {
 
     let retain_ids = HashSet::new();
     let redacted =
-        redact(&file, target_core, &retain_ids).map_err(|e| CliError::RedactionError {
+        redact(file, target_core, &retain_ids).map_err(|e| CliError::RedactionError {
             detail: e.to_string(),
         })?;
 
@@ -159,7 +153,9 @@ mod tests {
         "edges": []
     }"#;
 
-    const NOT_JSON: &str = "this is not json";
+    fn parse(s: &str) -> OmtsFile {
+        serde_json::from_str(s).expect("valid OMTS JSON")
+    }
 
     #[test]
     fn scope_level_ordering() {
@@ -230,26 +226,11 @@ mod tests {
         assert_eq!(cli_scope_to_core(&CliScope::Internal), CoreScope::Internal);
     }
 
-    #[test]
-    fn run_invalid_json_returns_parse_failed() {
-        let result = run(NOT_JSON, &CliScope::Public);
-        match result {
-            Err(CliError::ParseFailed { .. }) => {}
-            other => panic!("expected ParseFailed, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn run_parse_failure_exit_code_is_2() {
-        let result = run(NOT_JSON, &CliScope::Public);
-        let err = result.expect_err("should fail");
-        assert_eq!(err.exit_code(), 2);
-    }
-
     /// Redacting a `public` file to `partner` scope (less restrictive) → error.
     #[test]
     fn run_less_restrictive_scope_returns_error() {
-        let result = run(ALREADY_PUBLIC, &CliScope::Partner);
+        let file = parse(ALREADY_PUBLIC);
+        let result = run(&file, &CliScope::Partner);
         match result {
             Err(CliError::RedactionError { .. }) => {}
             other => panic!("expected RedactionError, got {other:?}"),
@@ -258,7 +239,8 @@ mod tests {
 
     #[test]
     fn run_less_restrictive_scope_exit_code_is_1() {
-        let result = run(ALREADY_PUBLIC, &CliScope::Partner);
+        let file = parse(ALREADY_PUBLIC);
+        let result = run(&file, &CliScope::Partner);
         let err = result.expect_err("should fail");
         assert_eq!(err.exit_code(), 1);
     }
@@ -266,7 +248,8 @@ mod tests {
     /// Redacting a `partner` file to `internal` scope (less restrictive) → error.
     #[test]
     fn run_partner_to_internal_returns_error() {
-        let result = run(ALREADY_PARTNER, &CliScope::Internal);
+        let file = parse(ALREADY_PARTNER);
+        let result = run(&file, &CliScope::Internal);
         match result {
             Err(CliError::RedactionError { .. }) => {}
             other => panic!("expected RedactionError, got {other:?}"),
@@ -276,28 +259,32 @@ mod tests {
     /// Same scope is allowed (idempotent re-redaction).
     #[test]
     fn run_same_scope_is_ok() {
-        let result = run(ALREADY_PUBLIC, &CliScope::Public);
+        let file = parse(ALREADY_PUBLIC);
+        let result = run(&file, &CliScope::Public);
         assert!(result.is_ok(), "same scope should succeed: {result:?}");
     }
 
     /// Redacting a minimal file to public scope succeeds.
     #[test]
     fn run_minimal_to_public_succeeds() {
-        let result = run(MINIMAL, &CliScope::Public);
+        let file = parse(MINIMAL);
+        let result = run(&file, &CliScope::Public);
         assert!(result.is_ok(), "expected Ok for minimal file: {result:?}");
     }
 
     /// Redacting a minimal file to partner scope succeeds.
     #[test]
     fn run_minimal_to_partner_succeeds() {
-        let result = run(MINIMAL, &CliScope::Partner);
+        let file = parse(MINIMAL);
+        let result = run(&file, &CliScope::Partner);
         assert!(result.is_ok(), "expected Ok for minimal file: {result:?}");
     }
 
     /// Redacting a minimal file to internal scope succeeds (no-op path).
     #[test]
     fn run_minimal_to_internal_succeeds() {
-        let result = run(MINIMAL, &CliScope::Internal);
+        let file = parse(MINIMAL);
+        let result = run(&file, &CliScope::Internal);
         assert!(result.is_ok(), "expected Ok for minimal file: {result:?}");
     }
 
@@ -315,7 +302,8 @@ mod tests {
             ],
             "edges": []
         }"#;
-        let result = run(content, &CliScope::Public);
+        let file = parse(content);
+        let result = run(&file, &CliScope::Public);
         assert!(result.is_ok(), "expected Ok: {result:?}");
     }
 
