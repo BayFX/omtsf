@@ -259,9 +259,10 @@ pub const DEFAULT_MAX_DEPTH: usize = 20;
 
 /// Returns all simple paths from `from` to `to` up to `max_depth` hops.
 ///
-/// Uses iterative-deepening DFS (IDDFS). A "simple path" visits each node at
-/// most once. The depth limit bounds the search to prevent combinatorial
-/// explosion on dense subgraphs.
+/// Uses recursive backtracking DFS with a single shared path vector and
+/// on-path set, avoiding per-neighbour cloning. A "simple path" visits each
+/// node at most once. The depth limit bounds the search to prevent
+/// combinatorial explosion on dense subgraphs.
 ///
 /// The default depth limit is [`DEFAULT_MAX_DEPTH`] (20 hops).
 ///
@@ -300,29 +301,30 @@ pub fn all_paths(
         return Ok(results);
     }
 
-    let mut seen_paths: HashSet<Vec<NodeIndex>> = HashSet::new();
-
-    for depth_limit in 1..=max_depth {
-        dfs_paths(
-            graph,
-            from_idx,
-            to_idx,
-            depth_limit,
-            direction,
-            edge_filter,
-            &mut seen_paths,
-        );
-    }
-
-    results.extend(seen_paths);
+    dfs_paths(
+        graph,
+        from_idx,
+        to_idx,
+        max_depth,
+        direction,
+        edge_filter,
+        &mut results,
+    );
 
     Ok(results)
 }
 
-/// Runs a depth-limited DFS from `current` to `target`, collecting all simple
-/// paths of exactly up to `depth_limit` hops into `results`.
-///
-/// `on_path` tracks nodes on the current DFS path to enforce simplicity.
+/// Immutable traversal context shared across all recursive DFS frames.
+struct DfsCtx<'a> {
+    graph: &'a OmtsGraph,
+    target: NodeIndex,
+    depth_limit: usize,
+    direction: Direction,
+    edge_filter: Option<&'a HashSet<EdgeTypeTag>>,
+}
+
+/// Initialises shared state and launches the backtracking DFS from `from` to
+/// `target` with a depth ceiling of `depth_limit`.
 fn dfs_paths(
     graph: &OmtsGraph,
     from: NodeIndex,
@@ -330,52 +332,53 @@ fn dfs_paths(
     depth_limit: usize,
     direction: Direction,
     edge_filter: Option<&HashSet<EdgeTypeTag>>,
-    results: &mut HashSet<Vec<NodeIndex>>,
+    results: &mut Vec<Vec<NodeIndex>>,
 ) {
-    struct Frame {
-        node: NodeIndex,
-        depth_used: usize,
-        path: Vec<NodeIndex>,
-        on_path: HashSet<NodeIndex>,
+    let ctx = DfsCtx {
+        graph,
+        target,
+        depth_limit,
+        direction,
+        edge_filter,
+    };
+    let mut path: Vec<NodeIndex> = vec![from];
+    let mut on_path: Vec<bool> = vec![false; graph.graph().node_count()];
+    on_path[from.index()] = true;
+
+    dfs_recurse(&ctx, from, 0, &mut path, &mut on_path, results);
+}
+
+/// Recursive backtracking DFS step.
+///
+/// `path` and `on_path` are shared across all recursive calls and restored
+/// via push/pop so no allocations occur per neighbour. A result clone is made
+/// only when a complete path to `target` is found.
+fn dfs_recurse(
+    ctx: &DfsCtx<'_>,
+    current: NodeIndex,
+    depth: usize,
+    path: &mut Vec<NodeIndex>,
+    on_path: &mut Vec<bool>,
+    results: &mut Vec<Vec<NodeIndex>>,
+) {
+    if current == ctx.target && depth > 0 {
+        results.push(path.clone());
+        return;
     }
 
-    let mut stack: Vec<Frame> = Vec::new();
+    if depth >= ctx.depth_limit {
+        return;
+    }
 
-    let mut initial_on_path = HashSet::new();
-    initial_on_path.insert(from);
+    for neighbour in neighbours(ctx.graph, current, ctx.direction, ctx.edge_filter) {
+        if !on_path[neighbour.index()] {
+            path.push(neighbour);
+            on_path[neighbour.index()] = true;
 
-    stack.push(Frame {
-        node: from,
-        depth_used: 0,
-        path: vec![from],
-        on_path: initial_on_path,
-    });
+            dfs_recurse(ctx, neighbour, depth + 1, path, on_path, results);
 
-    while let Some(frame) = stack.pop() {
-        if frame.node == target && frame.depth_used > 0 {
-            results.insert(frame.path.clone());
-            continue;
-        }
-
-        if frame.depth_used >= depth_limit {
-            continue;
-        }
-
-        for neighbour in neighbours(graph, frame.node, direction, edge_filter) {
-            if !frame.on_path.contains(&neighbour) {
-                let mut new_path = frame.path.clone();
-                new_path.push(neighbour);
-
-                let mut new_on_path = frame.on_path.clone();
-                new_on_path.insert(neighbour);
-
-                stack.push(Frame {
-                    node: neighbour,
-                    depth_used: frame.depth_used + 1,
-                    path: new_path,
-                    on_path: new_on_path,
-                });
-            }
+            path.pop();
+            on_path[neighbour.index()] = false;
         }
     }
 }
