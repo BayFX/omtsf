@@ -227,12 +227,11 @@ pub fn build_graph(file: &OmtsFile) -> Result<OmtsGraph, GraphBuildError> {
     let mut edges_by_type: HashMap<EdgeTypeTag, Vec<EdgeIndex>> = HashMap::new();
 
     for (data_index, node) in file.nodes.iter().enumerate() {
-        let local_id = node.id.to_string();
-
-        if id_to_index.contains_key(&local_id) {
-            return Err(GraphBuildError::DuplicateNodeId(local_id));
+        if id_to_index.contains_key(&*node.id) {
+            return Err(GraphBuildError::DuplicateNodeId(node.id.to_string()));
         }
 
+        let local_id = node.id.to_string();
         let weight = NodeWeight {
             local_id: local_id.clone(),
             node_type: node.node_type.clone(),
@@ -248,26 +247,22 @@ pub fn build_graph(file: &OmtsFile) -> Result<OmtsGraph, GraphBuildError> {
     }
 
     for (data_index, edge) in file.edges.iter().enumerate() {
-        let edge_id = edge.id.to_string();
-        let source_id = edge.source.to_string();
-        let target_id = edge.target.to_string();
-
-        let source_idx = id_to_index.get(&source_id).copied().ok_or_else(|| {
+        let source_idx = id_to_index.get(&*edge.source).copied().ok_or_else(|| {
             GraphBuildError::DanglingEdgeRef {
-                edge_id: edge_id.clone(),
-                missing_node_id: source_id,
+                edge_id: edge.id.to_string(),
+                missing_node_id: edge.source.to_string(),
             }
         })?;
 
-        let target_idx = id_to_index.get(&target_id).copied().ok_or_else(|| {
+        let target_idx = id_to_index.get(&*edge.target).copied().ok_or_else(|| {
             GraphBuildError::DanglingEdgeRef {
-                edge_id: edge_id.clone(),
-                missing_node_id: target_id,
+                edge_id: edge.id.to_string(),
+                missing_node_id: edge.target.to_string(),
             }
         })?;
 
         let weight = EdgeWeight {
-            local_id: edge_id,
+            local_id: edge.id.to_string(),
             edge_type: edge.edge_type.clone(),
             data_index,
         };
