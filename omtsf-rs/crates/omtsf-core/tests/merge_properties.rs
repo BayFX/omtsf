@@ -61,37 +61,7 @@ fn make_node(local_id: usize, identifiers: Vec<Identifier>) -> Node {
         } else {
             Some(identifiers)
         },
-        data_quality: None,
-        labels: None,
-        name: None,
-        jurisdiction: None,
-        status: None,
-        governance_structure: None,
-        operator: None,
-        address: None,
-        geo: None,
-        commodity_code: None,
-        unit: None,
-        role: None,
-        attestation_type: None,
-        standard: None,
-        issuer: None,
-        valid_from: None,
-        valid_to: None,
-        outcome: None,
-        attestation_status: None,
-        reference: None,
-        risk_severity: None,
-        risk_likelihood: None,
-        lot_id: None,
-        quantity: None,
-        production_date: None,
-        origin_country: None,
-        direct_emissions_co2e: None,
-        indirect_emissions_co2e: None,
-        emission_factor_source: None,
-        installation_id: None,
-        extra: BTreeMap::new(),
+        ..Node::default()
     }
 }
 

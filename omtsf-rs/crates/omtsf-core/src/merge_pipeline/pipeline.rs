@@ -307,7 +307,6 @@ pub fn merge_with_config(
             } else {
                 Some(merged_ids)
             },
-            data_quality: None,
             labels: if merged_labels.is_empty() {
                 None
             } else {
@@ -316,32 +315,8 @@ pub fn merge_with_config(
             name: merged_name,
             jurisdiction: merged_jurisdiction,
             status: merged_status,
-            governance_structure: None,
-            operator: None,
-            address: None,
-            geo: None,
-            commodity_code: None,
-            unit: None,
-            role: None,
-            attestation_type: None,
-            standard: None,
-            issuer: None,
-            valid_from: None,
-            valid_to: None,
-            outcome: None,
-            attestation_status: None,
-            reference: None,
-            risk_severity: None,
-            risk_likelihood: None,
-            lot_id: None,
-            quantity: None,
-            production_date: None,
-            origin_country: None,
-            direct_emissions_co2e: None,
-            indirect_emissions_co2e: None,
-            emission_factor_source: None,
-            installation_id: None,
             extra,
+            ..Node::default()
         };
 
         let rep_node = &all_nodes[member_ordinals[0]];

@@ -389,6 +389,17 @@ impl<'de> Deserialize<'de> for NodeId {
     }
 }
 
+impl Default for NodeId {
+    /// Returns a sentinel `NodeId` wrapping the string `"default"`.
+    ///
+    /// Intended only for use with struct update syntax (`..Default::default()`)
+    /// in tests and [`Default`] impls of structs that embed a `NodeId`. The
+    /// sentinel value is not valid for use in production graph data.
+    fn default() -> Self {
+        Self(String::from("default"))
+    }
+}
+
 /// Alias for [`NodeId`] used when an identifier refers to an edge.
 ///
 /// Semantically distinct in documentation; the same validation rules apply.

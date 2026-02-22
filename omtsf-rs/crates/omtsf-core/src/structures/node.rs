@@ -172,6 +172,65 @@ pub struct Node {
     pub extra: DynMap,
 }
 
+impl Default for Node {
+    /// Returns a sentinel `Node` with all optional fields absent.
+    ///
+    /// - `id` is the sentinel `"default"` [`NodeId`].
+    /// - `node_type` is `organization`.
+    /// - Every other field is `None` or empty.
+    ///
+    /// Intended for use with struct update syntax in tests:
+    ///
+    /// ```rust
+    /// # use omtsf_core::structures::Node;
+    /// # use omtsf_core::newtypes::NodeId;
+    /// # use omtsf_core::enums::{NodeType, NodeTypeTag};
+    /// let n = Node {
+    ///     id: NodeId::try_from("org-1").unwrap(),
+    ///     node_type: NodeTypeTag::Known(NodeType::Facility),
+    ///     ..Default::default()
+    /// };
+    /// ```
+    fn default() -> Self {
+        Self {
+            id: NodeId::default(),
+            node_type: NodeTypeTag::default(),
+            identifiers: None,
+            data_quality: None,
+            labels: None,
+            name: None,
+            jurisdiction: None,
+            status: None,
+            governance_structure: None,
+            operator: None,
+            address: None,
+            geo: None,
+            commodity_code: None,
+            unit: None,
+            role: None,
+            attestation_type: None,
+            standard: None,
+            issuer: None,
+            valid_from: None,
+            valid_to: None,
+            outcome: None,
+            attestation_status: None,
+            reference: None,
+            risk_severity: None,
+            risk_likelihood: None,
+            lot_id: None,
+            quantity: None,
+            production_date: None,
+            origin_country: None,
+            direct_emissions_co2e: None,
+            indirect_emissions_co2e: None,
+            emission_factor_source: None,
+            installation_id: None,
+            extra: DynMap::default(),
+        }
+    }
+}
+
 impl Node {
     /// Parses the raw `geo` field into a typed [`Geo`] value.
     ///

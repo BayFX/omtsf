@@ -69,6 +69,16 @@ impl NodeTypeTag {
     }
 }
 
+impl Default for NodeTypeTag {
+    /// Returns `NodeTypeTag::Known(NodeType::Organization)` as the sentinel default.
+    ///
+    /// Used by [`Node::default`] so that struct update syntax works in tests
+    /// without specifying a `node_type`.
+    fn default() -> Self {
+        Self::Known(NodeType::Organization)
+    }
+}
+
 impl AsRef<str> for NodeTypeTag {
     fn as_ref(&self) -> &str {
         self.as_str()
