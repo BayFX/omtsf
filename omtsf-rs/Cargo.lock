@@ -559,11 +559,13 @@ dependencies = [
 name = "omtsf-bench"
 version = "0.1.0"
 dependencies = [
+ "ciborium",
  "criterion",
  "omtsf-core",
  "petgraph",
  "proptest",
  "rand 0.8.5",
+ "serde",
  "serde_json",
 ]
 
