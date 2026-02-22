@@ -26,7 +26,7 @@ fn omts_fixture(name: &str) -> PathBuf {
 /// Path to an Excel fixture file.
 fn excel_fixture(name: &str) -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("../../../tests/fixtures/excel");
+    path.push("../../../templates/excel");
     path.push(name);
     path
 }
