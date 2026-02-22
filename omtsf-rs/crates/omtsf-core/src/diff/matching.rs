@@ -6,7 +6,7 @@ use crate::newtypes::NodeId;
 use crate::structures::{Edge, Node};
 use crate::union_find::UnionFind;
 
-use super::helpers::tag_to_string;
+use super::helpers::{edge_type_str, node_type_str};
 use super::types::{DiffFilter, NodeMatchResult};
 
 /// Performs node matching for a diff.
@@ -22,7 +22,7 @@ pub(super) fn match_nodes(
     let node_type_allowed = |node: &Node| -> bool {
         match filter.and_then(|f| f.node_types.as_ref()) {
             None => true,
-            Some(allowed) => allowed.contains(&tag_to_string(&node.node_type)),
+            Some(allowed) => allowed.contains(node_type_str(&node.node_type)),
         }
     };
 
@@ -212,7 +212,7 @@ pub(super) fn match_edges(
     let edge_type_allowed = |edge: &Edge| -> bool {
         match filter.and_then(|f| f.edge_types.as_ref()) {
             None => true,
-            Some(allowed) => allowed.contains(&tag_to_string(&edge.edge_type)),
+            Some(allowed) => allowed.contains(edge_type_str(&edge.edge_type)),
         }
     };
 
@@ -225,10 +225,10 @@ pub(super) fn match_edges(
             Some(allowed) => {
                 let id_str: &str = node_id;
                 if let Some(node) = node_map_a.get(id_str) {
-                    return allowed.contains(&tag_to_string(&node.node_type));
+                    return allowed.contains(node_type_str(&node.node_type));
                 }
                 if let Some(node) = node_map_b.get(id_str) {
-                    return allowed.contains(&tag_to_string(&node.node_type));
+                    return allowed.contains(node_type_str(&node.node_type));
                 }
                 false
             }
@@ -265,7 +265,7 @@ pub(super) fn match_edges(
         let Some(tgt_rep) = resolve_rep(&edge.target) else {
             continue;
         };
-        let key = (src_rep, tgt_rep, tag_to_string(&edge.edge_type));
+        let key = (src_rep, tgt_rep, edge_type_str(&edge.edge_type).to_owned());
         a_buckets.entry(key).or_default().push(ai);
     }
 
@@ -283,7 +283,11 @@ pub(super) fn match_edges(
             unmatched_b_edges.push(bi);
             continue;
         };
-        let key_b = (src_rep_b, tgt_rep_b, tag_to_string(&edge_b.edge_type));
+        let key_b = (
+            src_rep_b,
+            tgt_rep_b,
+            edge_type_str(&edge_b.edge_type).to_owned(),
+        );
 
         let Some(bucket) = a_buckets.get_mut(&key_b) else {
             unmatched_b_edges.push(bi);
