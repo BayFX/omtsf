@@ -21,6 +21,7 @@ regex = "1"
 zstd = { version = "0.13", optional = true }
 
 [dev-dependencies]
+jsonschema = "0.28"
 proptest = "1"
 sha2 = "0.10"
 
