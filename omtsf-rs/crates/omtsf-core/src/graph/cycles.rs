@@ -196,85 +196,14 @@ fn filtered_successors(
 mod tests {
     #![allow(clippy::expect_used)]
 
-    use std::collections::{BTreeMap, HashSet};
+    use std::collections::HashSet;
 
     use petgraph::stable_graph::NodeIndex;
 
     use super::*;
-    use crate::enums::{EdgeType, EdgeTypeTag, NodeType, NodeTypeTag};
-    use crate::file::OmtsFile;
+    use crate::enums::{EdgeType, EdgeTypeTag};
     use crate::graph::build_graph;
-    use crate::newtypes::{CalendarDate, EdgeId, FileSalt, NodeId, SemVer};
-    use crate::structures::{Edge, EdgeProperties, Node};
-
-    const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
-
-    fn semver(s: &str) -> SemVer {
-        SemVer::try_from(s).expect("valid SemVer")
-    }
-
-    fn date(s: &str) -> CalendarDate {
-        CalendarDate::try_from(s).expect("valid CalendarDate")
-    }
-
-    fn file_salt(s: &str) -> FileSalt {
-        FileSalt::try_from(s).expect("valid FileSalt")
-    }
-
-    fn node_id(s: &str) -> NodeId {
-        NodeId::try_from(s).expect("valid NodeId")
-    }
-
-    fn edge_id(s: &str) -> EdgeId {
-        NodeId::try_from(s).expect("valid EdgeId")
-    }
-
-    fn minimal_file(nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
-        OmtsFile {
-            omtsf_version: semver("1.0.0"),
-            snapshot_date: date("2026-02-19"),
-            file_salt: file_salt(SALT),
-            disclosure_scope: None,
-            previous_snapshot_ref: None,
-            snapshot_sequence: None,
-            reporting_entity: None,
-            nodes,
-            edges,
-            extra: BTreeMap::new(),
-        }
-    }
-
-    fn org_node(id: &str) -> Node {
-        Node {
-            id: node_id(id),
-            node_type: NodeTypeTag::Known(NodeType::Organization),
-            ..Default::default()
-        }
-    }
-
-    fn legal_parentage_edge(id: &str, source: &str, target: &str) -> Edge {
-        Edge {
-            id: edge_id(id),
-            edge_type: EdgeTypeTag::Known(EdgeType::LegalParentage),
-            source: node_id(source),
-            target: node_id(target),
-            identifiers: None,
-            properties: EdgeProperties::default(),
-            extra: BTreeMap::new(),
-        }
-    }
-
-    fn supplies_edge(id: &str, source: &str, target: &str) -> Edge {
-        Edge {
-            id: edge_id(id),
-            edge_type: EdgeTypeTag::Known(EdgeType::Supplies),
-            source: node_id(source),
-            target: node_id(target),
-            identifiers: None,
-            properties: EdgeProperties::default(),
-            extra: BTreeMap::new(),
-        }
-    }
+    use crate::test_helpers::{legal_parentage_edge, minimal_file, org_node, supplies_edge};
 
     /// Build a filter set for a single known edge type.
     fn filter(edge_type: EdgeType) -> HashSet<EdgeTypeTag> {

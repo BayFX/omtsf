@@ -86,6 +86,9 @@ pub fn version() -> &'static str {
 }
 
 #[cfg(test)]
+pub(crate) mod test_helpers;
+
+#[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
 

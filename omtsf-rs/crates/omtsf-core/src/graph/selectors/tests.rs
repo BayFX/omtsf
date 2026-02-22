@@ -2,18 +2,10 @@
 
 use super::*;
 use crate::enums::{EdgeType, NodeType};
-use crate::newtypes::{EdgeId, NodeId};
-use crate::structures::{Edge, EdgeProperties, Node};
+use crate::structures::Node;
+use crate::test_helpers::{facility_node, node_id, org_node, ownership_edge, supplies_edge};
 use crate::types::{Identifier, Label};
 use std::collections::BTreeMap;
-
-fn node_id(s: &str) -> NodeId {
-    NodeId::try_from(s).expect("valid NodeId")
-}
-
-fn edge_id(s: &str) -> EdgeId {
-    NodeId::try_from(s).expect("valid EdgeId")
-}
 
 fn country_code(s: &str) -> CountryCode {
     CountryCode::try_from(s).expect("valid CountryCode")
@@ -23,39 +15,7 @@ fn bare_node(id: &str, node_type: NodeTypeTag) -> Node {
     Node {
         id: node_id(id),
         node_type,
-        ..Default::default()
-    }
-}
-
-fn org_node(id: &str) -> Node {
-    bare_node(id, NodeTypeTag::Known(NodeType::Organization))
-}
-
-fn facility_node(id: &str) -> Node {
-    bare_node(id, NodeTypeTag::Known(NodeType::Facility))
-}
-
-fn supplies_edge(id: &str, source: &str, target: &str) -> Edge {
-    Edge {
-        id: edge_id(id),
-        edge_type: EdgeTypeTag::Known(EdgeType::Supplies),
-        source: node_id(source),
-        target: node_id(target),
-        identifiers: None,
-        properties: EdgeProperties::default(),
-        extra: BTreeMap::new(),
-    }
-}
-
-fn ownership_edge(id: &str, source: &str, target: &str) -> Edge {
-    Edge {
-        id: edge_id(id),
-        edge_type: EdgeTypeTag::Known(EdgeType::Ownership),
-        source: node_id(source),
-        target: node_id(target),
-        identifiers: None,
-        properties: EdgeProperties::default(),
-        extra: BTreeMap::new(),
+        ..crate::test_helpers::org_node(id)
     }
 }
 

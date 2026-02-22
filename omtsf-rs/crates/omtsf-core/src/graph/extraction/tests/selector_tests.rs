@@ -6,11 +6,12 @@ use crate::file::OmtsFile;
 use crate::graph::build_graph;
 use crate::graph::selectors::{Selector, SelectorSet};
 use crate::newtypes::CountryCode;
-use crate::structures::Node;
+
 use crate::types::{Identifier, Label};
 use std::collections::BTreeMap;
 
-use super::{file_salt, minimal_file, node_id, org_node, ownership_edge, semver, supplies_edge};
+use super::{file_salt, minimal_file, org_node, ownership_edge, semver, supplies_edge};
+use crate::test_helpers::facility_node;
 
 const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
@@ -37,14 +38,6 @@ fn identifier(scheme: &str, value: &str) -> Identifier {
         verification_status: None,
         verification_date: None,
         extra: BTreeMap::new(),
-    }
-}
-
-fn facility_node(id: &str) -> Node {
-    Node {
-        id: node_id(id),
-        node_type: NodeTypeTag::Known(NodeType::Facility),
-        ..Default::default()
     }
 }
 

@@ -1,37 +1,13 @@
 #![allow(clippy::expect_used)]
 
 use super::*;
-use crate::enums::{EdgeType, EdgeTypeTag, NodeType, NodeTypeTag};
+use crate::enums::{EdgeType, NodeType};
 use crate::file::OmtsFile;
-use crate::newtypes::{CalendarDate, EdgeId, FileSalt, NodeId, SemVer};
-use crate::structures::{Edge, EdgeProperties, Node};
+use crate::newtypes::{CalendarDate, NodeId};
+use crate::structures::{Edge, Node};
+use crate::test_helpers::{minimal_file as make_file, typed_edge as edge, typed_node as node};
 use crate::types::{DataQuality, Identifier};
 use std::collections::BTreeMap;
-
-const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
-
-fn make_file(nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
-    OmtsFile {
-        omtsf_version: SemVer::try_from("1.0.0").expect("valid"),
-        snapshot_date: CalendarDate::try_from("2026-02-19").expect("valid"),
-        file_salt: FileSalt::try_from(SALT).expect("valid"),
-        disclosure_scope: None,
-        previous_snapshot_ref: None,
-        snapshot_sequence: None,
-        reporting_entity: None,
-        nodes,
-        edges,
-        extra: BTreeMap::new(),
-    }
-}
-
-fn node(id: &str, node_type: NodeType) -> Node {
-    Node {
-        id: NodeId::try_from(id).expect("valid id"),
-        node_type: NodeTypeTag::Known(node_type),
-        ..Node::default()
-    }
-}
 
 fn node_with_operator(id: &str, operator_id: &str) -> Node {
     let mut n = node(id, NodeType::Facility);
@@ -54,18 +30,6 @@ fn node_with_data_quality(id: &str, node_type: NodeType) -> Node {
         extra: BTreeMap::new(),
     });
     n
-}
-
-fn edge(id: &str, edge_type: EdgeType, source: &str, target: &str) -> Edge {
-    Edge {
-        id: EdgeId::try_from(id).expect("valid id"),
-        edge_type: EdgeTypeTag::Known(edge_type),
-        source: NodeId::try_from(source).expect("valid source"),
-        target: NodeId::try_from(target).expect("valid target"),
-        identifiers: None,
-        properties: EdgeProperties::default(),
-        extra: BTreeMap::new(),
-    }
 }
 
 fn edge_with_valid_from(id: &str, edge_type: EdgeType, source: &str, target: &str) -> Edge {

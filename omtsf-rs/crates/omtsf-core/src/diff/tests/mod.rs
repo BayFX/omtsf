@@ -5,35 +5,17 @@
 mod edge_tests;
 mod node_tests;
 
-use crate::enums::{EdgeType, EdgeTypeTag, NodeType, NodeTypeTag};
 use crate::file::OmtsFile;
-use crate::newtypes::{CalendarDate, EdgeId, FileSalt, NodeId, SemVer};
-use crate::structures::{Edge, EdgeProperties, Node};
+use crate::structures::{Edge, Node};
 use crate::types::Identifier;
 use std::collections::BTreeMap;
 
+pub(crate) use crate::test_helpers::{
+    date, file_salt, node_id, ownership_edge, semver, supplies_edge,
+};
+
 pub(crate) const SALT_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 pub(crate) const SALT_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-
-pub(crate) fn semver(s: &str) -> SemVer {
-    SemVer::try_from(s).expect("semver")
-}
-
-pub(crate) fn date(s: &str) -> CalendarDate {
-    CalendarDate::try_from(s).expect("date")
-}
-
-pub(crate) fn node_id(s: &str) -> NodeId {
-    NodeId::try_from(s).expect("node id")
-}
-
-pub(crate) fn edge_id(s: &str) -> EdgeId {
-    EdgeId::try_from(s).expect("edge id")
-}
-
-pub(crate) fn file_salt(s: &str) -> FileSalt {
-    FileSalt::try_from(s).expect("salt")
-}
 
 pub(crate) fn make_file(nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
     OmtsFile {
@@ -59,10 +41,8 @@ pub(crate) fn make_file_b(nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
 
 pub(crate) fn org_node(id: &str) -> Node {
     Node {
-        id: node_id(id),
-        node_type: NodeTypeTag::Known(NodeType::Organization),
         name: Some(id.to_owned()),
-        ..Default::default()
+        ..crate::test_helpers::org_node(id)
     }
 }
 
@@ -97,30 +77,6 @@ pub(crate) fn with_duns(mut node: Node, duns: &str) -> Node {
     let ids = node.identifiers.get_or_insert_with(Vec::new);
     ids.push(id);
     node
-}
-
-pub(crate) fn supplies_edge(id: &str, src: &str, tgt: &str) -> Edge {
-    Edge {
-        id: edge_id(id),
-        edge_type: EdgeTypeTag::Known(EdgeType::Supplies),
-        source: node_id(src),
-        target: node_id(tgt),
-        identifiers: None,
-        properties: EdgeProperties::default(),
-        extra: BTreeMap::new(),
-    }
-}
-
-pub(crate) fn ownership_edge(id: &str, src: &str, tgt: &str) -> Edge {
-    Edge {
-        id: edge_id(id),
-        edge_type: EdgeTypeTag::Known(EdgeType::Ownership),
-        source: node_id(src),
-        target: node_id(tgt),
-        identifiers: None,
-        properties: EdgeProperties::default(),
-        extra: BTreeMap::new(),
-    }
 }
 
 /// Helper: two matched org nodes with same LEI and same name → identical pair.

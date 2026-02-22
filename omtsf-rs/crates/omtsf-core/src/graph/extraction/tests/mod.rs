@@ -1,83 +1,19 @@
 #![allow(clippy::expect_used)]
 
+use std::collections::BTreeMap;
+
 use super::*;
-use crate::enums::{EdgeType, EdgeTypeTag, NodeType, NodeTypeTag};
 use crate::file::OmtsFile;
 use crate::graph::build_graph;
-use crate::newtypes::{CalendarDate, EdgeId, FileSalt, NodeId, SemVer};
-use crate::structures::{Edge, EdgeProperties, Node};
-use std::collections::BTreeMap;
+use crate::test_helpers::TEST_SALT;
 
 mod selector_tests;
 
-const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+pub(super) use crate::test_helpers::{
+    date, file_salt, minimal_file, node_id, org_node, ownership_edge, semver, supplies_edge,
+};
 
-pub(super) fn semver(s: &str) -> SemVer {
-    SemVer::try_from(s).expect("valid SemVer")
-}
-
-pub(super) fn date(s: &str) -> CalendarDate {
-    CalendarDate::try_from(s).expect("valid CalendarDate")
-}
-
-pub(super) fn file_salt(s: &str) -> FileSalt {
-    FileSalt::try_from(s).expect("valid FileSalt")
-}
-
-pub(super) fn node_id(s: &str) -> NodeId {
-    NodeId::try_from(s).expect("valid NodeId")
-}
-
-pub(super) fn edge_id(s: &str) -> EdgeId {
-    NodeId::try_from(s).expect("valid EdgeId")
-}
-
-pub(super) fn minimal_file(nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
-    OmtsFile {
-        omtsf_version: semver("1.0.0"),
-        snapshot_date: date("2026-02-19"),
-        file_salt: file_salt(SALT),
-        disclosure_scope: None,
-        previous_snapshot_ref: None,
-        snapshot_sequence: None,
-        reporting_entity: None,
-        nodes,
-        edges,
-        extra: BTreeMap::new(),
-    }
-}
-
-pub(super) fn org_node(id: &str) -> Node {
-    Node {
-        id: node_id(id),
-        node_type: NodeTypeTag::Known(NodeType::Organization),
-        ..Default::default()
-    }
-}
-
-pub(super) fn supplies_edge(id: &str, source: &str, target: &str) -> Edge {
-    Edge {
-        id: edge_id(id),
-        edge_type: EdgeTypeTag::Known(EdgeType::Supplies),
-        source: node_id(source),
-        target: node_id(target),
-        identifiers: None,
-        properties: EdgeProperties::default(),
-        extra: BTreeMap::new(),
-    }
-}
-
-pub(super) fn ownership_edge(id: &str, source: &str, target: &str) -> Edge {
-    Edge {
-        id: edge_id(id),
-        edge_type: EdgeTypeTag::Known(EdgeType::Ownership),
-        source: node_id(source),
-        target: node_id(target),
-        identifiers: None,
-        properties: EdgeProperties::default(),
-        extra: BTreeMap::new(),
-    }
-}
+const SALT: &str = TEST_SALT;
 
 /// Extract a known subset from a linear chain; verify nodes and edges.
 #[test]

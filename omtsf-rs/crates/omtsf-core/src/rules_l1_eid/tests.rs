@@ -4,39 +4,19 @@ use super::{
     L1Eid01, L1Eid02, L1Eid03, L1Eid04, L1Eid05, L1Eid06, L1Eid07, L1Eid08, L1Eid09, L1Eid10,
     L1Eid11, days_in_month, is_calendar_date_valid, is_leap_year,
 };
-use crate::enums::{NodeType, NodeTypeTag, Sensitivity};
+use crate::enums::Sensitivity;
 use crate::file::OmtsFile;
-use crate::newtypes::{CalendarDate, FileSalt, NodeId, SemVer};
-use crate::structures::Node;
+use crate::newtypes::CalendarDate;
+
+use crate::test_helpers::{minimal_file as make_empty_file, org_node};
 use crate::types::Identifier;
 use crate::validation::{
     Diagnostic, RuleId, ValidationConfig, ValidationRule, build_registry, validate,
 };
 use std::collections::BTreeMap;
 
-const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
-
 fn minimal_file() -> OmtsFile {
-    OmtsFile {
-        omtsf_version: SemVer::try_from("1.0.0").expect("semver"),
-        snapshot_date: CalendarDate::try_from("2026-02-19").expect("date"),
-        file_salt: FileSalt::try_from(SALT).expect("salt"),
-        disclosure_scope: None,
-        previous_snapshot_ref: None,
-        snapshot_sequence: None,
-        reporting_entity: None,
-        nodes: vec![],
-        edges: vec![],
-        extra: BTreeMap::new(),
-    }
-}
-
-fn org_node(id: &str) -> Node {
-    Node {
-        id: NodeId::try_from(id).expect("node id"),
-        node_type: NodeTypeTag::Known(NodeType::Organization),
-        ..Node::default()
-    }
+    make_empty_file(vec![], vec![])
 }
 
 fn basic_ident(scheme: &str, value: &str) -> Identifier {
