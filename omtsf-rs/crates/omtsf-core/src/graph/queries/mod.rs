@@ -78,50 +78,50 @@ fn edge_passes(edge_type: &EdgeTypeTag, filter: Option<&HashSet<EdgeTypeTag>>) -
     }
 }
 
-/// Collects the neighbour [`NodeIndex`] values reachable from `node` in one
-/// step, respecting `direction` and `edge_filter`.
+/// Fills `buf` with the neighbour [`NodeIndex`] values reachable from `node`
+/// in one step, respecting `direction` and `edge_filter`.
 ///
-/// Returns an iterator-style `Vec` rather than an iterator to avoid
-/// lifetime entanglement with the mutable BFS state that callers maintain.
-fn neighbours(
+/// The buffer is cleared before being populated, so callers can reuse a single
+/// allocation across many iterations rather than allocating a fresh `Vec` per
+/// call.
+fn neighbours_into(
     graph: &OmtsGraph,
     node: NodeIndex,
     direction: Direction,
     edge_filter: Option<&HashSet<EdgeTypeTag>>,
-) -> Vec<NodeIndex> {
+    buf: &mut Vec<NodeIndex>,
+) {
+    buf.clear();
     let g = graph.graph();
-    let mut result = Vec::new();
 
     match direction {
         Direction::Forward => {
             for edge_ref in g.edges(node) {
                 if edge_passes(&edge_ref.weight().edge_type, edge_filter) {
-                    result.push(edge_ref.target());
+                    buf.push(edge_ref.target());
                 }
             }
         }
         Direction::Backward => {
             for edge_ref in g.edges_directed(node, petgraph::Direction::Incoming) {
                 if edge_passes(&edge_ref.weight().edge_type, edge_filter) {
-                    result.push(edge_ref.source());
+                    buf.push(edge_ref.source());
                 }
             }
         }
         Direction::Both => {
             for edge_ref in g.edges(node) {
                 if edge_passes(&edge_ref.weight().edge_type, edge_filter) {
-                    result.push(edge_ref.target());
+                    buf.push(edge_ref.target());
                 }
             }
             for edge_ref in g.edges_directed(node, petgraph::Direction::Incoming) {
                 if edge_passes(&edge_ref.weight().edge_type, edge_filter) {
-                    result.push(edge_ref.source());
+                    buf.push(edge_ref.source());
                 }
             }
         }
     }
-
-    result
 }
 
 /// Returns the set of all nodes reachable from `start` via BFS.
@@ -150,12 +150,14 @@ pub fn reachable_from(
 
     let mut visited: HashSet<NodeIndex> = HashSet::new();
     let mut queue: VecDeque<NodeIndex> = VecDeque::new();
+    let mut nbuf: Vec<NodeIndex> = Vec::new();
 
     visited.insert(start_idx);
     queue.push_back(start_idx);
 
     while let Some(current) = queue.pop_front() {
-        for neighbour in neighbours(graph, current, direction, edge_filter) {
+        neighbours_into(graph, current, direction, edge_filter, &mut nbuf);
+        for &neighbour in &nbuf {
             if !visited.contains(&neighbour) {
                 visited.insert(neighbour);
                 queue.push_back(neighbour);
@@ -208,12 +210,14 @@ pub fn shortest_path(
     let mut visited: HashSet<NodeIndex> = HashSet::new();
     let mut predecessor: HashMap<NodeIndex, NodeIndex> = HashMap::new();
     let mut queue: VecDeque<NodeIndex> = VecDeque::new();
+    let mut nbuf: Vec<NodeIndex> = Vec::new();
 
     visited.insert(from_idx);
     queue.push_back(from_idx);
 
     'bfs: while let Some(current) = queue.pop_front() {
-        for neighbour in neighbours(graph, current, direction, edge_filter) {
+        neighbours_into(graph, current, direction, edge_filter, &mut nbuf);
+        for &neighbour in &nbuf {
             if !visited.contains(&neighbour) {
                 visited.insert(neighbour);
                 predecessor.insert(neighbour, current);
@@ -344,21 +348,24 @@ fn dfs_paths(
     let mut path: Vec<NodeIndex> = vec![from];
     let mut on_path: Vec<bool> = vec![false; graph.graph().node_count()];
     on_path[from.index()] = true;
+    let mut nbuf: Vec<NodeIndex> = Vec::new();
 
-    dfs_recurse(&ctx, from, 0, &mut path, &mut on_path, results);
+    dfs_recurse(&ctx, from, 0, &mut path, &mut on_path, &mut nbuf, results);
 }
 
 /// Recursive backtracking DFS step.
 ///
 /// `path` and `on_path` are shared across all recursive calls and restored
-/// via push/pop so no allocations occur per neighbour. A result clone is made
-/// only when a complete path to `target` is found.
+/// via push/pop so no allocations occur per neighbour. `nbuf` is a reusable
+/// scratch buffer for neighbour lists, eliminating per-call `Vec` allocations.
+/// A result clone is made only when a complete path to `target` is found.
 fn dfs_recurse(
     ctx: &DfsCtx<'_>,
     current: NodeIndex,
     depth: usize,
     path: &mut Vec<NodeIndex>,
     on_path: &mut Vec<bool>,
+    nbuf: &mut Vec<NodeIndex>,
     results: &mut Vec<Vec<NodeIndex>>,
 ) {
     if current == ctx.target && depth > 0 {
@@ -370,12 +377,17 @@ fn dfs_recurse(
         return;
     }
 
-    for neighbour in neighbours(ctx.graph, current, ctx.direction, ctx.edge_filter) {
+    neighbours_into(ctx.graph, current, ctx.direction, ctx.edge_filter, nbuf);
+
+    // Copy indices out so `nbuf` is free to be reused by the recursive call.
+    let neighbours: Vec<NodeIndex> = nbuf.clone();
+
+    for neighbour in neighbours {
         if !on_path[neighbour.index()] {
             path.push(neighbour);
             on_path[neighbour.index()] = true;
 
-            dfs_recurse(ctx, neighbour, depth + 1, path, on_path, results);
+            dfs_recurse(ctx, neighbour, depth + 1, path, on_path, nbuf, results);
 
             path.pop();
             on_path[neighbour.index()] = false;
