@@ -609,7 +609,7 @@
   - Test: stdin piping works for all commands that accept `-`
   - All tests pass in CI
 
-### T-045 -- Error message review and UX polish
+### T-045 -- Error message review and UX polish ✅
 
 - **Spec Reference:** cli-interface.md Sections 4.6, 5, 6
 - **Dependencies:** T-044
