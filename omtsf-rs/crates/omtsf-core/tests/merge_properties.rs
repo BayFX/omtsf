@@ -13,6 +13,7 @@ use omtsf_core::{
 };
 use proptest::prelude::*;
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 
 const SALT_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const SALT_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -46,7 +47,7 @@ fn make_identifier(scheme: &str, value: &str) -> Identifier {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -90,7 +91,7 @@ fn make_node(local_id: usize, identifiers: Vec<Identifier>) -> Node {
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -103,7 +104,7 @@ fn make_edge(edge_id: usize, src_idx: usize, tgt_idx: usize) -> Edge {
         target: nid(&format!("n-{tgt_idx}")),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -119,7 +120,7 @@ fn build_file(salt_str: &str, nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
         reporting_entity: None,
         nodes,
         edges,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

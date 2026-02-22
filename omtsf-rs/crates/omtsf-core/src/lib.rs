@@ -8,6 +8,7 @@ pub mod check_digits;
 pub mod compression;
 pub mod convert;
 pub mod diff;
+pub mod dynvalue;
 pub mod encoding;
 pub mod enums;
 pub mod file;
@@ -37,6 +38,7 @@ pub use diff::{
     IdentifierSetDiff, LabelSetDiff, NodeDiff, NodeRef, NodesDiff, PropertyChange, diff,
     diff_filtered,
 };
+pub use dynvalue::{DynMap, DynValue};
 pub use encoding::{Encoding, EncodingDetectionError, detect_encoding};
 pub use enums::{
     AttestationOutcome, AttestationStatus, AttestationType, Confidence, ConsolidationBasis,

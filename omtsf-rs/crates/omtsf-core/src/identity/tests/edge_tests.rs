@@ -1,6 +1,7 @@
 #![allow(clippy::expect_used)]
 
 use crate::identity::{build_edge_candidate_index, edge_composite_key};
+use std::collections::BTreeMap;
 
 pub(super) fn make_edge(
     id: &str,
@@ -17,7 +18,7 @@ pub(super) fn make_edge(
         target: NodeId::try_from(target).expect("valid NodeId"),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

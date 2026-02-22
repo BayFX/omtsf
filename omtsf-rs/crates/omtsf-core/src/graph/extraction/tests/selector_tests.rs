@@ -8,6 +8,7 @@ use crate::graph::selectors::{Selector, SelectorSet};
 use crate::newtypes::CountryCode;
 use crate::structures::Node;
 use crate::types::{Identifier, Label};
+use std::collections::BTreeMap;
 
 use super::{file_salt, minimal_file, node_id, org_node, ownership_edge, semver, supplies_edge};
 
@@ -21,7 +22,7 @@ fn label(key: &str, value: Option<&str>) -> Label {
     Label {
         key: key.to_owned(),
         value: value.map(str::to_owned),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -35,7 +36,7 @@ fn identifier(scheme: &str, value: &str) -> Identifier {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -74,7 +75,7 @@ fn facility_node(id: &str) -> Node {
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -511,7 +512,7 @@ fn test_selector_subgraph_preserves_header_fields() {
         reporting_entity: None,
         nodes,
         edges: vec![],
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
     let graph = build_graph(&file).expect("builds");
 

@@ -4,19 +4,15 @@
 //! - Encodes with self-describing tag 55799 (`0xD9 0xD9 0xF7`) prepended.
 //! - All map keys are CBOR text strings (major type 3).
 //! - Date fields are text strings in `YYYY-MM-DD` form, not CBOR date tags.
-//! - CBOR byte strings (major type 2) are rejected on decode.
 //!
-//! The implementation converts through [`serde_json::Value`] as an intermediate
-//! representation to avoid compatibility issues between ciborium's serde backend
-//! and the `#[serde(flatten)]` annotation on [`OmtsFile::extra`].
-
-use ciborium::value::Value as CborValue;
-use serde_json::{Map, Number as JsonNumber, Value as JsonValue};
+//! Because [`OmtsFile`] now uses [`crate::DynValue`] for its `extra` fields
+//! instead of `serde_json::Value`, the data model can be serialized directly
+//! with ciborium's serde backend without an intermediate JSON representation.
 
 use crate::OmtsFile;
 
-/// CBOR self-describing tag number (RFC 8949 Section 3.4.6).
-const SELF_DESCRIBING_TAG: u64 = 55799;
+/// Self-describing CBOR tag 55799 bytes (RFC 8949 Section 3.4.6).
+const SELF_DESCRIBING_TAG_BYTES: [u8; 3] = [0xD9, 0xD9, 0xF7];
 
 /// Error produced by CBOR encoding and decoding operations.
 #[derive(Debug)]
@@ -25,14 +21,6 @@ pub enum CborError {
     Encode(String),
     /// Decoding the CBOR bytes failed.
     Decode(String),
-    /// A CBOR map contains a key that is not a text string (SPEC-007 Section 4.1).
-    NonTextKey,
-    /// A CBOR value type has no JSON equivalent and cannot be carried in an
-    /// [`OmtsFile`] (e.g. a CBOR byte string; SPEC-007 Section 4.1).
-    UnsupportedValue(String),
-    /// The JSON value produced during decoding did not satisfy the [`OmtsFile`]
-    /// schema.
-    JsonConversion(serde_json::Error),
 }
 
 impl std::fmt::Display for CborError {
@@ -40,24 +28,11 @@ impl std::fmt::Display for CborError {
         match self {
             CborError::Encode(msg) => write!(f, "CBOR encode error: {msg}"),
             CborError::Decode(msg) => write!(f, "CBOR decode error: {msg}"),
-            CborError::NonTextKey => write!(f, "CBOR map key is not a text string"),
-            CborError::UnsupportedValue(desc) => write!(f, "unsupported CBOR value: {desc}"),
-            CborError::JsonConversion(e) => write!(f, "JSON conversion error: {e}"),
         }
     }
 }
 
-impl std::error::Error for CborError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            CborError::JsonConversion(e) => Some(e),
-            CborError::Encode(_)
-            | CborError::Decode(_)
-            | CborError::NonTextKey
-            | CborError::UnsupportedValue(_) => None,
-        }
-    }
-}
+impl std::error::Error for CborError {}
 
 /// Encodes an [`OmtsFile`] to CBOR bytes.
 ///
@@ -66,140 +41,22 @@ impl std::error::Error for CborError {
 /// All map keys are emitted as CBOR text strings; date fields are text strings
 /// in `YYYY-MM-DD` form per SPEC-007 Section 4.2.
 pub fn encode_cbor(file: &OmtsFile) -> Result<Vec<u8>, CborError> {
-    let json_value = serde_json::to_value(file).map_err(CborError::JsonConversion)?;
-    let cbor_value = json_to_cbor(json_value)?;
-    let tagged = CborValue::Tag(SELF_DESCRIBING_TAG, Box::new(cbor_value));
-    let mut buf = Vec::new();
-    ciborium::into_writer(&tagged, &mut buf).map_err(|e| CborError::Encode(e.to_string()))?;
+    let mut buf = Vec::from(SELF_DESCRIBING_TAG_BYTES);
+    ciborium::into_writer(file, &mut buf).map_err(|e| CborError::Encode(e.to_string()))?;
     Ok(buf)
 }
 
 /// Decodes CBOR bytes into an [`OmtsFile`].
 ///
 /// Accepts bytes with or without the self-describing tag 55799 per SPEC-007
-/// Section 4.1.  All map keys must be CBOR text strings; CBOR byte strings are
-/// rejected because they have no JSON equivalent (Section 4.1).
+/// Section 4.1.
 pub fn decode_cbor(bytes: &[u8]) -> Result<OmtsFile, CborError> {
-    let cbor_value: CborValue =
-        ciborium::from_reader(bytes).map_err(|e| CborError::Decode(e.to_string()))?;
-
-    // Strip the self-describing tag if the encoder added it.
-    let inner = if let CborValue::Tag(SELF_DESCRIBING_TAG, inner) = cbor_value {
-        *inner
+    let payload = if bytes.starts_with(&SELF_DESCRIBING_TAG_BYTES) {
+        &bytes[3..]
     } else {
-        cbor_value
+        bytes
     };
-
-    let json_value = cbor_to_json(inner)?;
-    serde_json::from_value(json_value).map_err(CborError::JsonConversion)
-}
-
-/// Converts a [`JsonValue`] to a [`CborValue`], mapping all JSON types per
-/// SPEC-007 Section 4.2.  Object keys become CBOR text strings.
-fn json_to_cbor(value: JsonValue) -> Result<CborValue, CborError> {
-    match value {
-        JsonValue::Null => Ok(CborValue::Null),
-        JsonValue::Bool(b) => Ok(CborValue::Bool(b)),
-        JsonValue::Number(n) => number_to_cbor(&n),
-        JsonValue::String(s) => Ok(CborValue::Text(s)),
-        JsonValue::Array(arr) => {
-            let items: Result<Vec<_>, _> = arr.into_iter().map(json_to_cbor).collect();
-            Ok(CborValue::Array(items?))
-        }
-        JsonValue::Object(map) => {
-            let pairs: Result<Vec<_>, _> = map
-                .into_iter()
-                .map(|(k, v)| json_to_cbor(v).map(|cv| (CborValue::Text(k), cv)))
-                .collect();
-            Ok(CborValue::Map(pairs?))
-        }
-    }
-}
-
-/// Converts a JSON number to a CBOR integer or float.
-///
-/// Integer-valued JSON numbers are preferred as CBOR integers to preserve
-/// round-trip fidelity.  Float-valued JSON numbers become CBOR floats.
-fn number_to_cbor(n: &JsonNumber) -> Result<CborValue, CborError> {
-    if let Some(i) = n.as_i64() {
-        Ok(CborValue::Integer(i.into()))
-    } else if let Some(u) = n.as_u64() {
-        Ok(CborValue::Integer(u.into()))
-    } else if let Some(f) = n.as_f64() {
-        Ok(CborValue::Float(f))
-    } else {
-        Err(CborError::UnsupportedValue(format!(
-            "JSON number {n} cannot be represented in CBOR"
-        )))
-    }
-}
-
-/// Converts a [`CborValue`] to a [`JsonValue`].
-///
-/// CBOR tags are unwrapped recursively (the self-describing tag 55799 and any
-/// others).  CBOR byte strings are rejected per SPEC-007 Section 4.1.
-fn cbor_to_json(value: CborValue) -> Result<JsonValue, CborError> {
-    match value {
-        CborValue::Null => Ok(JsonValue::Null),
-        CborValue::Bool(b) => Ok(JsonValue::Bool(b)),
-        CborValue::Integer(i) => integer_to_json(i),
-        CborValue::Float(f) => float_to_json(f),
-        CborValue::Text(s) => Ok(JsonValue::String(s)),
-        CborValue::Bytes(b) => Err(CborError::UnsupportedValue(format!(
-            "CBOR byte string of length {} has no JSON equivalent",
-            b.len()
-        ))),
-        CborValue::Array(arr) => {
-            let items: Result<Vec<_>, _> = arr.into_iter().map(cbor_to_json).collect();
-            Ok(JsonValue::Array(items?))
-        }
-        CborValue::Map(map) => map_to_json(map),
-        // Unwrap any CBOR tag and recurse; this handles the self-describing
-        // tag 55799 when it appears on nested values, and gracefully ignores
-        // other application-specific tags.
-        CborValue::Tag(_, inner) => cbor_to_json(*inner),
-        // ciborium::Value is #[non_exhaustive]; reject any future variants.
-        _ => Err(CborError::UnsupportedValue(
-            "unknown CBOR value type".to_owned(),
-        )),
-    }
-}
-
-/// Converts a CBOR integer to a JSON number, preferring `u64` for non-negative
-/// values and falling back to `i64` for negatives.
-fn integer_to_json(i: ciborium::value::Integer) -> Result<JsonValue, CborError> {
-    let n: i128 = i.into();
-    if let Ok(u) = u64::try_from(n) {
-        Ok(JsonValue::Number(u.into()))
-    } else if let Ok(signed) = i64::try_from(n) {
-        Ok(JsonValue::Number(signed.into()))
-    } else {
-        Err(CborError::UnsupportedValue(format!(
-            "CBOR integer {n} is out of i64/u64 range"
-        )))
-    }
-}
-
-/// Converts a CBOR float to a JSON number, rejecting non-finite values that
-/// JSON cannot represent.
-fn float_to_json(f: f64) -> Result<JsonValue, CborError> {
-    JsonNumber::from_f64(f)
-        .map(JsonValue::Number)
-        .ok_or_else(|| {
-            CborError::UnsupportedValue(format!("non-finite float {f} has no JSON representation"))
-        })
-}
-
-/// Converts a CBOR map to a JSON object, requiring all keys to be text strings.
-fn map_to_json(map: Vec<(CborValue, CborValue)>) -> Result<JsonValue, CborError> {
-    let mut obj = Map::new();
-    for (key, val) in map {
-        let CborValue::Text(key_str) = key else {
-            return Err(CborError::NonTextKey);
-        };
-        obj.insert(key_str, cbor_to_json(val)?);
-    }
-    Ok(JsonValue::Object(obj))
+    ciborium::from_reader(payload).map_err(|e| CborError::Decode(e.to_string()))
 }
 
 #[cfg(test)]
@@ -242,7 +99,6 @@ mod tests {
     fn decode_without_tag_accepted() {
         let file = minimal_file();
         let cbor = encode_cbor(&file).expect("encode");
-        // Strip the three self-describing tag bytes.
         let without_tag = &cbor[3..];
         let decoded = decode_cbor(without_tag).expect("decode without tag");
         assert_eq!(file, decoded);
@@ -251,6 +107,7 @@ mod tests {
     /// Unknown top-level fields are preserved through a CBOR round-trip.
     #[test]
     fn round_trip_unknown_fields_preserved() {
+        use crate::DynValue;
         let json = format!(
             r#"{{
                 "omtsf_version": "1.0.0",
@@ -279,25 +136,14 @@ mod tests {
             Some("hello")
         );
         assert_eq!(
-            decoded
-                .extra
-                .get("x_number")
-                .and_then(serde_json::Value::as_u64),
+            decoded.extra.get("x_number").and_then(DynValue::as_u64),
             Some(42)
         );
         assert_eq!(
-            decoded
-                .extra
-                .get("x_bool")
-                .and_then(serde_json::Value::as_bool),
+            decoded.extra.get("x_bool").and_then(DynValue::as_bool),
             Some(true)
         );
-        assert!(
-            decoded
-                .extra
-                .get("x_null")
-                .is_some_and(serde_json::Value::is_null)
-        );
+        assert!(decoded.extra.get("x_null").is_some_and(DynValue::is_null));
         assert_eq!(
             decoded
                 .extra
@@ -324,7 +170,6 @@ mod tests {
             "OmtsFile must be identical after CBOR round-trip"
         );
 
-        // Also verify via JSON value comparison to catch any subtle serde differences.
         let original_json = serde_json::to_value(&original).expect("re-encode original");
         let decoded_json = serde_json::to_value(&decoded).expect("re-encode decoded");
         assert_eq!(original_json, decoded_json);
@@ -377,22 +222,5 @@ mod tests {
     fn decode_invalid_bytes_returns_error() {
         let result = decode_cbor(&[0xFF, 0x00, 0x01]);
         assert!(result.is_err(), "invalid CBOR should return an error");
-    }
-
-    /// CBOR with a non-text map key is rejected.
-    #[test]
-    fn decode_non_text_key_returns_error() {
-        // Construct a CBOR map with an integer key: {1: "value"}
-        let cbor_map = CborValue::Map(vec![(
-            CborValue::Integer(1i64.into()),
-            CborValue::Text("value".to_owned()),
-        )]);
-        let mut buf = Vec::new();
-        ciborium::into_writer(&cbor_map, &mut buf).expect("encode");
-        let err = decode_cbor(&buf).expect_err("should fail on integer key");
-        assert!(
-            matches!(err, CborError::NonTextKey | CborError::JsonConversion(_)),
-            "unexpected error variant: {err}"
-        );
     }
 }

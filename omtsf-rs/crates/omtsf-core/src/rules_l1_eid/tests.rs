@@ -12,6 +12,7 @@ use crate::types::Identifier;
 use crate::validation::{
     Diagnostic, RuleId, ValidationConfig, ValidationRule, build_registry, validate,
 };
+use std::collections::BTreeMap;
 
 const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
@@ -26,7 +27,7 @@ fn minimal_file() -> OmtsFile {
         reporting_entity: None,
         nodes: vec![],
         edges: vec![],
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -65,7 +66,7 @@ fn org_node(id: &str) -> Node {
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -79,7 +80,7 @@ fn basic_ident(scheme: &str, value: &str) -> Identifier {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

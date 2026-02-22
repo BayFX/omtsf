@@ -67,8 +67,8 @@ pub(super) fn compare_data_quality(
                 if ignore.contains(&name) {
                     continue;
                 }
-                let av = aq.extra.get(*key).cloned();
-                let bv = bq.extra.get(*key).cloned();
+                let av = aq.extra.get(*key).cloned().map(serde_json::Value::from);
+                let bv = bq.extra.get(*key).cloned().map(serde_json::Value::from);
                 maybe_change(&name, av, bv, out);
             }
         }
@@ -132,8 +132,8 @@ pub(super) fn compare_node_properties(
     check!("status", to_value(&a.status), to_value(&b.status));
     check!(
         "governance_structure",
-        a.governance_structure.clone(),
-        b.governance_structure.clone()
+        a.governance_structure.clone().map(serde_json::Value::from),
+        b.governance_structure.clone().map(serde_json::Value::from)
     );
     check!(
         "operator",
@@ -153,7 +153,11 @@ pub(super) fn compare_node_properties(
             .as_deref()
             .map(|s| serde_json::Value::String(s.to_owned()))
     );
-    check!("geo", a.geo.clone(), b.geo.clone());
+    check!(
+        "geo",
+        a.geo.clone().map(serde_json::Value::from),
+        b.geo.clone().map(serde_json::Value::from)
+    );
     check!(
         "commodity_code",
         a.commodity_code
@@ -331,8 +335,8 @@ pub(super) fn compare_node_properties(
             if ignore.contains(*key) {
                 continue;
             }
-            let av = a.extra.get(*key).cloned();
-            let bv = b.extra.get(*key).cloned();
+            let av = a.extra.get(*key).cloned().map(serde_json::Value::from);
+            let bv = b.extra.get(*key).cloned().map(serde_json::Value::from);
             maybe_change(key, av, bv, &mut changes);
         }
     }
@@ -431,8 +435,8 @@ pub(super) fn compare_edge_props(
 
     check!(
         "control_type",
-        a.control_type.clone(),
-        b.control_type.clone()
+        a.control_type.clone().map(serde_json::Value::from),
+        b.control_type.clone().map(serde_json::Value::from)
     );
     check!(
         "consolidation_basis",
@@ -547,8 +551,8 @@ pub(super) fn compare_edge_props(
             if ignore.contains(*key) {
                 continue;
             }
-            let av = a.extra.get(*key).cloned();
-            let bv = b.extra.get(*key).cloned();
+            let av = a.extra.get(*key).cloned().map(serde_json::Value::from);
+            let bv = b.extra.get(*key).cloned().map(serde_json::Value::from);
             maybe_change(key, av, bv, &mut changes);
         }
     }
@@ -654,8 +658,8 @@ pub(super) fn compare_identifiers(a_ids: &[Identifier], b_ids: &[Identifier]) ->
             extra_keys.insert(k.as_str());
         }
         for key in &extra_keys {
-            let av = id_a.extra.get(*key).cloned();
-            let bv = id_b.extra.get(*key).cloned();
+            let av = id_a.extra.get(*key).cloned().map(serde_json::Value::from);
+            let bv = id_b.extra.get(*key).cloned().map(serde_json::Value::from);
             maybe_change(key, av, bv, &mut field_changes);
         }
 

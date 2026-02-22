@@ -2,6 +2,7 @@
 #![allow(clippy::panic)]
 
 use super::*;
+use std::collections::BTreeMap;
 
 #[test]
 fn severity_display() {
@@ -548,7 +549,7 @@ fn minimal_omts_file() -> crate::file::OmtsFile {
         reporting_entity: None,
         nodes: vec![],
         edges: vec![],
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

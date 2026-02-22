@@ -20,6 +20,7 @@
 /// `#[serde(deny_unknown_fields)]` here or on any child struct.
 use serde::{Deserialize, Serialize};
 
+use crate::dynvalue::DynMap;
 use crate::enums::DisclosureScope;
 use crate::newtypes::{CalendarDate, FileSalt, NodeId, SemVer};
 use crate::structures::{Edge, Node};
@@ -95,7 +96,7 @@ pub struct OmtsFile {
     /// This is the primary mechanism for forward compatibility with future
     /// spec versions (SPEC-001 Section 2.2 / data-model.md Section 8.2).
     #[serde(flatten)]
-    pub extra: serde_json::Map<String, serde_json::Value>,
+    pub extra: DynMap,
 }
 
 #[cfg(test)]
@@ -103,8 +104,10 @@ mod tests {
     #![allow(clippy::expect_used)]
 
     use serde_json::json;
+    use std::collections::BTreeMap;
 
     use super::*;
+    use crate::dynvalue::DynValue;
     use crate::enums::{EdgeType, EdgeTypeTag, NodeType, NodeTypeTag};
     use crate::newtypes::EdgeId;
     use crate::structures::EdgeProperties;
@@ -152,7 +155,7 @@ mod tests {
             reporting_entity: None,
             nodes: vec![],
             edges: vec![],
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -192,7 +195,7 @@ mod tests {
             indirect_emissions_co2e: None,
             emission_factor_source: None,
             installation_id: None,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -205,7 +208,7 @@ mod tests {
             target: node_id(target),
             identifiers: None,
             properties: EdgeProperties::default(),
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -282,7 +285,7 @@ mod tests {
             reporting_entity: Some(node_id("org-acme")),
             nodes: vec![org_node("org-acme", "Acme Corp")],
             edges: vec![],
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         };
         round_trip(&f);
     }
@@ -346,9 +349,7 @@ mod tests {
             Some("hello")
         );
         assert_eq!(
-            f.extra
-                .get("x_version_hint")
-                .and_then(serde_json::Value::as_u64),
+            f.extra.get("x_version_hint").and_then(DynValue::as_u64),
             Some(42)
         );
 
@@ -586,7 +587,7 @@ mod tests {
                 org_node("org-buyer", "Buyer Corp"),
             ],
             edges: vec![supplies_edge("e-1", "org-supplier", "org-buyer")],
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         };
         let rt = round_trip(&f);
         assert_eq!(rt.nodes.len(), 2);
@@ -701,8 +702,8 @@ mod tests {
             nodes: vec![org_node("org-1", "Test Corp")],
             edges: vec![],
             extra: {
-                let mut m = serde_json::Map::new();
-                m.insert("x_extra".to_owned(), json!("present"));
+                let mut m = BTreeMap::new();
+                m.insert("x_extra".to_owned(), DynValue::from(json!("present")));
                 m
             },
         };

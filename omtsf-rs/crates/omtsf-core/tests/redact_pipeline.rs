@@ -11,7 +11,7 @@
 //! - Replaced nodes produce exactly one `boundary_ref` stub (deduplication).
 #![allow(clippy::expect_used)]
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use omtsf_core::newtypes::{EdgeId, FileSalt, NodeId, SemVer};
 use omtsf_core::structures::{Edge, EdgeProperties, Node};
@@ -83,7 +83,7 @@ fn make_org_node(id: &str, identifiers: Vec<Identifier>) -> Node {
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -122,7 +122,7 @@ fn make_person_node(id: &str) -> Node {
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -134,7 +134,7 @@ fn make_edge(id: &str, edge_type: EdgeType, source: &str, target: &str) -> Edge 
         target: nid(target),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -152,7 +152,7 @@ fn make_edge_with_props(
         target: nid(target),
         identifiers: None,
         properties: props,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -166,7 +166,7 @@ fn lei_id(value: &str) -> Identifier {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -180,7 +180,7 @@ fn restricted_id(scheme: &str, value: &str) -> Identifier {
         sensitivity: Some(Sensitivity::Restricted),
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -194,7 +194,7 @@ fn confidential_id(scheme: &str, value: &str) -> Identifier {
         sensitivity: Some(Sensitivity::Confidential),
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -210,7 +210,7 @@ fn make_file(nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
         reporting_entity: None,
         nodes,
         edges,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

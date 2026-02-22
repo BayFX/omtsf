@@ -73,6 +73,7 @@ impl CanonicalId {
     /// # Example
     ///
     /// ```
+    /// use std::collections::BTreeMap;
     /// use omtsf_core::types::Identifier;
     /// use omtsf_core::canonical::CanonicalId;
     ///
@@ -85,7 +86,7 @@ impl CanonicalId {
     ///     sensitivity: None,
     ///     verification_status: None,
     ///     verification_date: None,
-    ///     extra: serde_json::Map::new(),
+    ///     extra: BTreeMap::new(),
     /// };
     /// let cid = CanonicalId::from_identifier(&id);
     /// assert_eq!(cid.as_str(), "lei:529900T8BM49AURSDO55");
@@ -181,6 +182,8 @@ pub fn build_identifier_index(nodes: &[Node]) -> HashMap<CanonicalId, Vec<usize>
 mod tests {
     #![allow(clippy::expect_used)]
 
+    use std::collections::BTreeMap;
+
     use super::*;
     use crate::enums::{NodeType, NodeTypeTag};
     use crate::newtypes::NodeId;
@@ -196,7 +199,7 @@ mod tests {
             sensitivity: None,
             verification_status: None,
             verification_date: None,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -235,7 +238,7 @@ mod tests {
             indirect_emissions_co2e: None,
             emission_factor_source: None,
             installation_id: None,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 

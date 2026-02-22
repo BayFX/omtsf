@@ -1,5 +1,6 @@
 #![allow(clippy::expect_used)]
 
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 
 use petgraph::stable_graph::NodeIndex;
@@ -44,7 +45,7 @@ fn minimal_file(nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
         reporting_entity: None,
         nodes,
         edges,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -83,7 +84,7 @@ fn org_node(id: &str) -> Node {
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -95,7 +96,7 @@ fn supplies_edge(id: &str, source: &str, target: &str) -> Edge {
         target: node_id(target),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -107,7 +108,7 @@ fn ownership_edge(id: &str, source: &str, target: &str) -> Edge {
         target: node_id(target),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

@@ -1,6 +1,8 @@
 #![allow(clippy::expect_used)]
 
+use crate::dynvalue::DynValue;
 use serde_json::json;
+use std::collections::BTreeMap;
 
 use crate::newtypes::CalendarDate;
 
@@ -16,7 +18,7 @@ pub(super) fn make_id(scheme: &str, value: &str) -> crate::types::Identifier {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -232,15 +234,18 @@ fn lei_without_entity_status_not_annulled() {
 #[test]
 fn lei_with_annulled_status_is_annulled() {
     let mut id = make_id("lei", "SOME_LEI");
-    id.extra
-        .insert("entity_status".to_owned(), json!("ANNULLED"));
+    id.extra.insert(
+        "entity_status".to_owned(),
+        DynValue::from(json!("ANNULLED")),
+    );
     assert!(is_lei_annulled(&id));
 }
 
 #[test]
 fn lei_with_active_status_not_annulled() {
     let mut id = make_id("lei", "SOME_LEI");
-    id.extra.insert("entity_status".to_owned(), json!("ACTIVE"));
+    id.extra
+        .insert("entity_status".to_owned(), DynValue::from(json!("ACTIVE")));
     assert!(!is_lei_annulled(&id));
 }
 
@@ -248,15 +253,19 @@ fn lei_with_active_status_not_annulled() {
 fn lei_with_lowercase_annulled_not_annulled() {
     // GLEIF uses uppercase; lowercase is not a match (case-sensitive).
     let mut id = make_id("lei", "SOME_LEI");
-    id.extra
-        .insert("entity_status".to_owned(), json!("annulled"));
+    id.extra.insert(
+        "entity_status".to_owned(),
+        DynValue::from(json!("annulled")),
+    );
     assert!(!is_lei_annulled(&id));
 }
 
 #[test]
 fn internal_scheme_is_not_annulled_check() {
     let mut id = make_id("internal", "LEI_VAL");
-    id.extra
-        .insert("entity_status".to_owned(), json!("ANNULLED"));
+    id.extra.insert(
+        "entity_status".to_owned(),
+        DynValue::from(json!("ANNULLED")),
+    );
     assert!(!is_lei_annulled(&id), "non-lei scheme must return false");
 }

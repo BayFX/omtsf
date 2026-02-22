@@ -1,6 +1,7 @@
 #![allow(clippy::expect_used)]
 #![allow(clippy::field_reassign_with_default)]
 
+use crate::dynvalue::DynValue;
 use serde_json::json;
 
 use crate::newtypes::CalendarDate;
@@ -73,9 +74,9 @@ fn ownership_both_none_matches() {
 fn operational_control_same_control_type_matches() {
     use crate::enums::{EdgeType, EdgeTypeTag};
     let mut a = crate::structures::EdgeProperties::default();
-    a.control_type = Some(json!("franchise"));
+    a.control_type = Some(DynValue::from(json!("franchise")));
     let mut b = crate::structures::EdgeProperties::default();
-    b.control_type = Some(json!("franchise"));
+    b.control_type = Some(DynValue::from(json!("franchise")));
     assert!(edge_identity_properties_match(
         &EdgeTypeTag::Known(EdgeType::OperationalControl),
         &a,
@@ -87,9 +88,9 @@ fn operational_control_same_control_type_matches() {
 fn operational_control_different_control_type_no_match() {
     use crate::enums::{EdgeType, EdgeTypeTag};
     let mut a = crate::structures::EdgeProperties::default();
-    a.control_type = Some(json!("franchise"));
+    a.control_type = Some(DynValue::from(json!("franchise")));
     let mut b = crate::structures::EdgeProperties::default();
-    b.control_type = Some(json!("management"));
+    b.control_type = Some(DynValue::from(json!("management")));
     assert!(!edge_identity_properties_match(
         &EdgeTypeTag::Known(EdgeType::OperationalControl),
         &a,
@@ -158,7 +159,7 @@ fn former_identity_different_event_type_no_match() {
 fn beneficial_ownership_same_control_and_pct_matches() {
     use crate::enums::{EdgeType, EdgeTypeTag};
     let mut a = crate::structures::EdgeProperties::default();
-    a.control_type = Some(json!("management"));
+    a.control_type = Some(DynValue::from(json!("management")));
     a.percentage = Some(25.0);
     let b = a.clone();
     assert!(edge_identity_properties_match(
@@ -172,10 +173,10 @@ fn beneficial_ownership_same_control_and_pct_matches() {
 fn beneficial_ownership_different_pct_no_match() {
     use crate::enums::{EdgeType, EdgeTypeTag};
     let mut a = crate::structures::EdgeProperties::default();
-    a.control_type = Some(json!("management"));
+    a.control_type = Some(DynValue::from(json!("management")));
     a.percentage = Some(25.0);
     let mut b = crate::structures::EdgeProperties::default();
-    b.control_type = Some(json!("management"));
+    b.control_type = Some(DynValue::from(json!("management")));
     b.percentage = Some(30.0);
     assert!(!edge_identity_properties_match(
         &EdgeTypeTag::Known(EdgeType::BeneficialOwnership),

@@ -196,7 +196,7 @@ fn filtered_successors(
 mod tests {
     #![allow(clippy::expect_used)]
 
-    use std::collections::HashSet;
+    use std::collections::{BTreeMap, HashSet};
 
     use petgraph::stable_graph::NodeIndex;
 
@@ -240,7 +240,7 @@ mod tests {
             reporting_entity: None,
             nodes,
             edges,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -279,7 +279,7 @@ mod tests {
             indirect_emissions_co2e: None,
             emission_factor_source: None,
             installation_id: None,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -291,7 +291,7 @@ mod tests {
             target: node_id(target),
             identifiers: None,
             properties: EdgeProperties::default(),
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -303,7 +303,7 @@ mod tests {
             target: node_id(target),
             identifiers: None,
             properties: EdgeProperties::default(),
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 

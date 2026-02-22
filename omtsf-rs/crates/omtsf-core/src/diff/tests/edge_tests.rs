@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 
 use crate::enums::{EdgeType, EdgeTypeTag};
@@ -135,7 +136,7 @@ fn diff_same_as_edges_not_matched() {
         target: node_id("org-a2"),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
     let same_as_b = Edge {
         id: EdgeId::try_from("same-b").expect("edge id"),
@@ -144,7 +145,7 @@ fn diff_same_as_edges_not_matched() {
         target: node_id("org-b2"),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
 
     let a = make_file(vec![node_a1, node_a2], vec![same_as_a]);

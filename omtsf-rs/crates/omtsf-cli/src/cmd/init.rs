@@ -12,6 +12,8 @@
 //!   Unix epoch; no external date library is required).
 //!
 //! Exit codes: 0 = always succeeds unless stdout write fails.
+use std::collections::BTreeMap;
+
 use omtsf_core::BoundaryHashError;
 use omtsf_core::enums::{EdgeType, EdgeTypeTag, NodeType, NodeTypeTag};
 use omtsf_core::file::OmtsFile;
@@ -78,7 +80,7 @@ fn build_minimal_file(
         reporting_entity: None,
         nodes: vec![],
         edges: vec![],
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     })
 }
 
@@ -131,7 +133,7 @@ fn build_example_file(
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
 
     let fac_node = Node {
@@ -168,7 +170,7 @@ fn build_example_file(
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
 
     let good_node = Node {
@@ -205,7 +207,7 @@ fn build_example_file(
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
 
     let operates_edge = Edge {
@@ -215,7 +217,7 @@ fn build_example_file(
         target: fac_id.clone(),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
 
     let produces_edge = Edge {
@@ -225,7 +227,7 @@ fn build_example_file(
         target: good_id,
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
 
     Ok(OmtsFile {
@@ -238,7 +240,7 @@ fn build_example_file(
         reporting_entity: None,
         nodes: vec![org_node, fac_node, good_node],
         edges: vec![operates_edge, produces_edge],
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     })
 }
 

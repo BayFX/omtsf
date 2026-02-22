@@ -7,6 +7,7 @@ use crate::newtypes::{CalendarDate, FileSalt, NodeId, SemVer};
 use crate::structures::Node;
 use crate::types::Identifier;
 use crate::validation::{Diagnostic, ValidationRule};
+use std::collections::BTreeMap;
 
 const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
@@ -21,7 +22,7 @@ fn make_file(nodes: Vec<Node>, disclosure_scope: Option<DisclosureScope>) -> Omt
         reporting_entity: None,
         nodes,
         edges: vec![],
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -60,7 +61,7 @@ fn node_no_identifiers(id: &str, node_type: NodeType) -> Node {
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -81,7 +82,7 @@ fn opaque_identifier(value: &str) -> Identifier {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -95,7 +96,7 @@ fn identifier_with_scheme(scheme: &str, sensitivity: Option<Sensitivity>) -> Ide
         sensitivity,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::boundary_hash::generate_file_salt;
 use crate::canonical::CanonicalId;
+use crate::dynvalue::DynValue;
 use crate::enums::{EdgeType, EdgeTypeTag};
 use crate::file::OmtsFile;
 use crate::identity::{edges_match, identifiers_match, is_lei_annulled};
@@ -293,9 +294,9 @@ pub fn merge_with_config(
         }
         conflict_count += node_conflicts.len();
 
-        let mut extra = serde_json::Map::new();
+        let mut extra = BTreeMap::new();
         if let Some(conflicts_val) = build_conflicts_value(node_conflicts) {
-            extra.insert("_conflicts".to_owned(), conflicts_val);
+            extra.insert("_conflicts".to_owned(), DynValue::from(conflicts_val));
         }
 
         let mut merged_node = Node {
@@ -628,7 +629,7 @@ pub fn merge_with_config(
             quantity: rep_props.quantity,
             unit: rep_props.unit.clone(),
             scope: rep_props.scope.clone(),
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         };
 
         let edge_conflicts: Vec<Conflict> = Vec::new();
@@ -636,7 +637,7 @@ pub fn merge_with_config(
         if let Some(conflicts_val) = build_conflicts_value(edge_conflicts) {
             merged_props
                 .extra
-                .insert("_conflicts".to_owned(), conflicts_val);
+                .insert("_conflicts".to_owned(), DynValue::from(conflicts_val));
         }
 
         let new_edge_id_str = format!("e-{edge_new_id_counter}");
@@ -656,7 +657,7 @@ pub fn merge_with_config(
                 Some(merged_ids)
             },
             properties: merged_props,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         });
     }
 
@@ -699,9 +700,9 @@ pub fn merge_with_config(
         conflict_count,
     };
 
-    let mut file_extra = serde_json::Map::new();
+    let mut file_extra = BTreeMap::new();
     if let Ok(meta_val) = serde_json::to_value(&metadata) {
-        file_extra.insert("merge_metadata".to_owned(), meta_val);
+        file_extra.insert("merge_metadata".to_owned(), DynValue::from(meta_val));
     }
 
     let merged_file = OmtsFile {

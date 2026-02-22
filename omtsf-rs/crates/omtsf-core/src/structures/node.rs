@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::dynvalue::{DynMap, DynValue};
 use crate::enums::{
     AttestationOutcome, AttestationStatus, AttestationType, EmissionFactorSource, NodeTypeTag,
     OrganizationStatus, RiskLikelihood, RiskSeverity,
@@ -53,11 +54,11 @@ pub struct Node {
 
     /// Governance or ownership structure of the organisation.
     ///
-    /// Stored as a raw JSON value because `GovernanceStructure` is not yet
+    /// Stored as a raw dynamic value because `GovernanceStructure` is not yet
     /// defined in a completed task. Once that type is implemented, this field
     /// can be narrowed.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub governance_structure: Option<serde_json::Value>,
+    pub governance_structure: Option<DynValue>,
 
     /// [`NodeId`] of the organisation that operates this facility.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -67,11 +68,11 @@ pub struct Node {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub address: Option<String>,
 
-    /// Geographic location as a raw JSON value (`{lat, lon}` or `GeoJSON`).
+    /// Geographic location as a raw dynamic value (`{lat, lon}` or `GeoJSON`).
     ///
     /// Use [`Node::geo_parsed`] to convert this into a typed [`Geo`].
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub geo: Option<serde_json::Value>,
+    pub geo: Option<DynValue>,
 
     /// Commodity or product classification code (e.g. HS code, CN code).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -168,7 +169,7 @@ pub struct Node {
 
     /// Unknown fields preserved for round-trip fidelity (SPEC-001 Section 2.2).
     #[serde(flatten)]
-    pub extra: serde_json::Map<String, serde_json::Value>,
+    pub extra: DynMap,
 }
 
 impl Node {

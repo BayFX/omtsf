@@ -5,6 +5,7 @@ use crate::enums::{EdgeType, NodeType};
 use crate::newtypes::{EdgeId, NodeId};
 use crate::structures::{Edge, EdgeProperties, Node};
 use crate::types::{Identifier, Label};
+use std::collections::BTreeMap;
 
 fn node_id(s: &str) -> NodeId {
     NodeId::try_from(s).expect("valid NodeId")
@@ -53,7 +54,7 @@ fn bare_node(id: &str, node_type: NodeTypeTag) -> Node {
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -73,7 +74,7 @@ fn supplies_edge(id: &str, source: &str, target: &str) -> Edge {
         target: node_id(target),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -85,7 +86,7 @@ fn ownership_edge(id: &str, source: &str, target: &str) -> Edge {
         target: node_id(target),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -93,7 +94,7 @@ fn label(key: &str, value: Option<&str>) -> Label {
     Label {
         key: key.to_owned(),
         value: value.map(str::to_owned),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -107,7 +108,7 @@ fn identifier(scheme: &str, value: &str) -> Identifier {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

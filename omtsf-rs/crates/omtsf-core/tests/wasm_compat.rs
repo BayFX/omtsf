@@ -24,6 +24,8 @@
 //! All I/O belongs in `omtsf-cli`.
 #![allow(clippy::expect_used)]
 
+use std::collections::BTreeMap;
+
 use omtsf_core::{
     CalendarDate, DisclosureScope, EdgeType, EdgeTypeTag, FileSalt, NodeType, NodeTypeTag,
     OmtsFile, SemVer,
@@ -87,7 +89,7 @@ fn org_node(id: &str) -> Node {
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -99,7 +101,7 @@ fn supplies_edge(id: &str, source: &str, target: &str) -> Edge {
         target: node_id(target),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -114,7 +116,7 @@ fn make_file(nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
         reporting_entity: None,
         nodes,
         edges,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -200,7 +202,7 @@ fn wasm_compat_sha2_no_io() {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
     let canonical_id = omtsf_core::CanonicalId::from_identifier(&id);
 

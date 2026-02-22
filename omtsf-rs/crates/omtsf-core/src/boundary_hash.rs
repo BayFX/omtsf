@@ -153,6 +153,8 @@ pub fn generate_file_salt() -> Result<FileSalt, BoundaryHashError> {
 mod tests {
     #![allow(clippy::expect_used)]
 
+    use std::collections::BTreeMap;
+
     use super::*;
     use crate::canonical::CanonicalId;
     use crate::types::Identifier;
@@ -176,7 +178,7 @@ mod tests {
             sensitivity: None,
             verification_status: None,
             verification_date: None,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         };
         CanonicalId::from_identifier(&id)
     }

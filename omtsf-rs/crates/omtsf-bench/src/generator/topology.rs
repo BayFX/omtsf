@@ -2,6 +2,7 @@
 //! mesh overlay, and optional cycle injection.
 
 use std::cmp::min;
+use std::collections::BTreeMap;
 
 use omtsf_core::enums::DisclosureScope;
 use omtsf_core::file::OmtsFile;
@@ -170,7 +171,7 @@ pub fn build_supply_chain(config: &GeneratorConfig, rng: &mut StdRng) -> OmtsFil
         reporting_entity: None,
         nodes: all_nodes,
         edges: all_edges,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

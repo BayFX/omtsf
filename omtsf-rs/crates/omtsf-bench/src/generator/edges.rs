@@ -1,5 +1,7 @@
 //! Edge builders for all OMTSF edge types.
 
+use std::collections::BTreeMap;
+
 use omtsf_core::enums::{EdgeType, EdgeTypeTag, ServiceType};
 use omtsf_core::newtypes::{EdgeId, NodeId};
 use omtsf_core::structures::{Edge, EdgeProperties};
@@ -39,7 +41,7 @@ pub fn build_supplies(
         target: target.clone(),
         identifiers: None,
         properties: props,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -52,7 +54,7 @@ pub fn build_operates(index: usize, source: &NodeId, target: &NodeId) -> Edge {
         target: target.clone(),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -77,7 +79,7 @@ pub fn build_ownership(
         target: target.clone(),
         identifiers: None,
         properties: props,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -102,7 +104,7 @@ pub fn build_beneficial_ownership(
         target: target.clone(),
         identifiers: None,
         properties: props,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -115,7 +117,7 @@ pub fn build_legal_parentage(index: usize, source: &NodeId, target: &NodeId) -> 
         target: target.clone(),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -128,7 +130,7 @@ pub fn build_produces(index: usize, source: &NodeId, target: &NodeId) -> Edge {
         target: target.clone(),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -152,7 +154,7 @@ pub fn build_attested_by(
         target: target.clone(),
         identifiers: None,
         properties: props,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -177,7 +179,7 @@ pub fn build_composed_of(
         target: target.clone(),
         identifiers: None,
         properties: props,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -203,7 +205,7 @@ pub fn build_sells_to(
         target: target.clone(),
         identifiers: None,
         properties: props,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -228,7 +230,7 @@ pub fn build_subcontracts(
         target: target.clone(),
         identifiers: None,
         properties: props,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -257,7 +259,7 @@ pub fn build_distributes(
         target: target.clone(),
         identifiers: None,
         properties: props,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -281,7 +283,7 @@ pub fn build_brokers(
         target: target.clone(),
         identifiers: None,
         properties: props,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -294,7 +296,7 @@ pub fn build_former_identity(index: usize, source: &NodeId, target: &NodeId) -> 
         target: target.clone(),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

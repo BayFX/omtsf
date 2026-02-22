@@ -3,6 +3,8 @@
 //! Produces LEI (MOD 97-10), DUNS (9 digits), GLN (GS1 Mod-10),
 //! nat-reg, vat, internal, and opaque identifiers.
 
+use std::collections::BTreeMap;
+
 use omtsf_core::types::Identifier;
 use rand::Rng;
 use rand::rngs::StdRng;
@@ -34,7 +36,7 @@ pub fn gen_lei(rng: &mut StdRng) -> Identifier {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -69,7 +71,7 @@ pub fn gen_duns(rng: &mut StdRng) -> Identifier {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -99,7 +101,7 @@ pub fn gen_gln(rng: &mut StdRng) -> Identifier {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -129,7 +131,7 @@ pub fn gen_nat_reg(rng: &mut StdRng) -> Identifier {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -154,7 +156,7 @@ pub fn gen_vat(rng: &mut StdRng) -> Identifier {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -169,7 +171,7 @@ pub fn gen_internal(counter: usize) -> Identifier {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -192,7 +194,7 @@ pub fn gen_opaque(rng: &mut StdRng) -> Identifier {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

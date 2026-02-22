@@ -6,6 +6,7 @@ use crate::file::OmtsFile;
 use crate::graph::build_graph;
 use crate::newtypes::{CalendarDate, EdgeId, FileSalt, NodeId, SemVer};
 use crate::structures::{Edge, EdgeProperties, Node};
+use std::collections::BTreeMap;
 
 mod selector_tests;
 
@@ -42,7 +43,7 @@ pub(super) fn minimal_file(nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
         reporting_entity: None,
         nodes,
         edges,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -81,7 +82,7 @@ pub(super) fn org_node(id: &str) -> Node {
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -93,7 +94,7 @@ pub(super) fn supplies_edge(id: &str, source: &str, target: &str) -> Edge {
         target: node_id(target),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -105,7 +106,7 @@ pub(super) fn ownership_edge(id: &str, source: &str, target: &str) -> Edge {
         target: node_id(target),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -217,7 +218,7 @@ fn test_induced_subgraph_preserves_header_fields() {
         reporting_entity: None,
         nodes,
         edges,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
     let graph = build_graph(&file).expect("builds");
     let sub = induced_subgraph(&graph, &file, &["a", "b"]).expect("should succeed");
@@ -474,7 +475,7 @@ fn test_ego_graph_preserves_header_fields() {
         reporting_entity: None,
         nodes,
         edges,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
     let graph = build_graph(&file).expect("builds");
     let ego = ego_graph(&graph, &file, "a", 1, Direction::Forward).expect("should succeed");

@@ -291,6 +291,8 @@ pub fn build_graph(file: &OmtsFile) -> Result<OmtsGraph, GraphBuildError> {
 mod tests {
     #![allow(clippy::expect_used)]
 
+    use std::collections::BTreeMap;
+
     use super::*;
     use crate::enums::{EdgeType, EdgeTypeTag, NodeType, NodeTypeTag};
     use crate::file::OmtsFile;
@@ -330,7 +332,7 @@ mod tests {
             reporting_entity: None,
             nodes,
             edges,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -369,7 +371,7 @@ mod tests {
             indirect_emissions_co2e: None,
             emission_factor_source: None,
             installation_id: None,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -408,7 +410,7 @@ mod tests {
             indirect_emissions_co2e: None,
             emission_factor_source: None,
             installation_id: None,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -420,7 +422,7 @@ mod tests {
             target: node_id(target),
             identifiers: None,
             properties: EdgeProperties::default(),
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -432,7 +434,7 @@ mod tests {
             target: node_id(target),
             identifiers: None,
             properties: EdgeProperties::default(),
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 

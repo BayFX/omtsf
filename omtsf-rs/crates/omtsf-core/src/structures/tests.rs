@@ -1,7 +1,9 @@
 #![allow(clippy::expect_used)]
 
+use crate::dynvalue::DynValue;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::BTreeMap;
 
 use super::*;
 use crate::enums::{
@@ -78,7 +80,7 @@ fn node_minimal_round_trip() {
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
     let rt = round_trip(&node);
     assert_eq!(rt.id, node_id("org-1"));
@@ -165,9 +167,7 @@ fn node_unknown_fields_preserved() {
         Some("hello")
     );
     assert_eq!(
-        node.extra
-            .get("x_version")
-            .and_then(serde_json::Value::as_u64),
+        node.extra.get("x_version").and_then(DynValue::as_u64),
         Some(42)
     );
     let serialized = to_json(&node);
@@ -319,7 +319,7 @@ fn edge_minimal_round_trip() {
         target: node_id("org-2"),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
     let rt = round_trip(&edge);
     assert_eq!(rt.id, edge_id("e-1"));
@@ -572,6 +572,6 @@ fn edge_legal_parentage_round_trip() {
 fn edge_properties_control_type_raw_value() {
     let raw = r#"{"control_type":"franchise"}"#;
     let props: EdgeProperties = serde_json::from_str(raw).expect("deserialize");
-    assert_eq!(props.control_type, Some(json!("franchise")));
+    assert_eq!(props.control_type, Some(DynValue::from(json!("franchise"))));
     round_trip(&props);
 }

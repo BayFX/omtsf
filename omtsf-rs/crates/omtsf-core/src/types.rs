@@ -8,8 +8,8 @@
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
+use crate::dynvalue::{DynMap, DynValue};
 use crate::enums::{Confidence, Sensitivity, VerificationStatus};
 use crate::newtypes::CalendarDate;
 
@@ -42,9 +42,9 @@ impl std::error::Error for GeoParseError {}
 
 /// A parsed geographical value from a facility node's `geo` field.
 ///
-/// The raw `geo` field on [`crate::Node`] (when defined in T-005) is stored as
-/// `serde_json::Value` to avoid forcing a schema during deserialization.  Use
-/// [`parse_geo`] to convert that raw value into a typed `Geo`.
+/// The raw `geo` field on [`crate::Node`] is stored as [`DynValue`] to avoid
+/// forcing a schema during deserialization.  Use [`parse_geo`] to convert that
+/// raw value into a typed `Geo`.
 ///
 /// SPEC-001 Section 4.2 defines two accepted shapes:
 /// - A simple `{lat, lon}` point object.
@@ -59,42 +59,40 @@ pub enum Geo {
         lon: f64,
     },
     /// An arbitrary `GeoJSON` geometry value (RFC 7946).
-    GeoJson(Value),
+    GeoJson(DynValue),
 }
 
-/// Parses a raw `serde_json::Value` into a typed [`Geo`].
+/// Parses a raw [`DynValue`] into a typed [`Geo`].
 ///
 /// # Heuristic
 ///
-/// 1. If the value is a JSON object with both `lat` and `lon` keys that are
-///    JSON numbers, it is interpreted as a `Point`.
-/// 2. Otherwise, if the value is any JSON object, it is passed through as
+/// 1. If the value is an object with both `lat` and `lon` keys that are
+///    numeric, it is interpreted as a `Point`.
+/// 2. Otherwise, if the value is any object, it is passed through as
 ///    `GeoJson` (representing an arbitrary `GeoJSON` geometry).
-/// 3. If the value is not a JSON object, [`GeoParseError::NotAnObject`] is
+/// 3. If the value is not an object, [`GeoParseError::NotAnObject`] is
 ///    returned.
-///
-/// This function is intended to be called from `Node::geo_parsed()` (T-005).
 ///
 /// # Errors
 ///
 /// Returns [`GeoParseError`] if the value cannot be interpreted as any known
 /// geo shape.
-pub fn parse_geo(value: &Value) -> Result<Geo, GeoParseError> {
+pub fn parse_geo(value: &DynValue) -> Result<Geo, GeoParseError> {
     let Some(obj) = value.as_object() else {
         return Err(GeoParseError::NotAnObject);
     };
 
-    let has_lat = obj.contains_key("lat");
-    let has_lon = obj.contains_key("lon");
+    let has_lat = obj.get("lat").is_some();
+    let has_lon = obj.get("lon").is_some();
 
     if has_lat || has_lon {
         let lat = obj
             .get("lat")
-            .and_then(Value::as_f64)
+            .and_then(DynValue::as_f64)
             .ok_or(GeoParseError::MissingOrInvalidLat)?;
         let lon = obj
             .get("lon")
-            .and_then(Value::as_f64)
+            .and_then(DynValue::as_f64)
             .ok_or(GeoParseError::MissingOrInvalidLon)?;
         return Ok(Geo::Point { lat, lon });
     }
@@ -151,7 +149,7 @@ pub struct Identifier {
 
     /// Unknown fields preserved for round-trip fidelity (SPEC-001 Section 2.2).
     #[serde(flatten)]
-    pub extra: serde_json::Map<String, Value>,
+    pub extra: DynMap,
 }
 
 /// Data quality metadata attached to a node or edge.
@@ -175,7 +173,7 @@ pub struct DataQuality {
 
     /// Unknown fields preserved for round-trip fidelity.
     #[serde(flatten)]
-    pub extra: serde_json::Map<String, Value>,
+    pub extra: DynMap,
 }
 
 /// A key/value label attached to a node or edge for tagging and filtering.
@@ -194,7 +192,7 @@ pub struct Label {
 
     /// Unknown fields preserved for round-trip fidelity.
     #[serde(flatten)]
-    pub extra: serde_json::Map<String, Value>,
+    pub extra: DynMap,
 }
 
 #[cfg(test)]
@@ -202,8 +200,10 @@ mod tests {
     #![allow(clippy::expect_used)]
 
     use serde_json::json;
+    use std::collections::BTreeMap;
 
     use super::*;
+    use crate::dynvalue::DynValue;
 
     fn to_json<T: Serialize>(v: &T) -> String {
         serde_json::to_string(v).expect("serialize")
@@ -234,7 +234,7 @@ mod tests {
             sensitivity: None,
             verification_status: None,
             verification_date: None,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         };
         round_trip(&id);
     }
@@ -250,7 +250,7 @@ mod tests {
             sensitivity: None,
             verification_status: None,
             verification_date: None,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         };
         let json = to_json(&id);
         assert!(json.contains(r#""scheme":"duns""#));
@@ -268,7 +268,7 @@ mod tests {
             sensitivity: None,
             verification_status: None,
             verification_date: None,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         };
         let json = to_json(&id);
         assert!(!json.contains("authority"));
@@ -335,7 +335,7 @@ mod tests {
             confidence: None,
             source: None,
             last_verified: None,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         };
         round_trip(&dq);
     }
@@ -359,7 +359,7 @@ mod tests {
             confidence: None,
             source: None,
             last_verified: None,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         };
         let json = to_json(&dq);
         assert!(!json.contains("confidence"));
@@ -384,7 +384,7 @@ mod tests {
         let label = Label {
             key: "environment".to_owned(),
             value: None,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         };
         round_trip(&label);
     }
@@ -394,7 +394,7 @@ mod tests {
         let label = Label {
             key: "tier".to_owned(),
             value: Some("1".to_owned()),
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         };
         let json = to_json(&label);
         assert!(json.contains(r#""key":"tier""#));
@@ -407,7 +407,7 @@ mod tests {
         let label = Label {
             key: "flag".to_owned(),
             value: None,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         };
         let json = to_json(&label);
         assert!(!json.contains("value"));
@@ -427,7 +427,7 @@ mod tests {
 
     #[test]
     fn parse_geo_point_valid() {
-        let val = json!({"lat": 51.5074, "lon": -0.1278});
+        let val = DynValue::from(json!({"lat": 51.5074, "lon": -0.1278}));
         let geo = parse_geo(&val).expect("valid point");
         assert_eq!(
             geo,
@@ -440,14 +440,14 @@ mod tests {
 
     #[test]
     fn parse_geo_point_zero_zero() {
-        let val = json!({"lat": 0.0, "lon": 0.0});
+        let val = DynValue::from(json!({"lat": 0.0, "lon": 0.0}));
         let geo = parse_geo(&val).expect("origin point");
         assert_eq!(geo, Geo::Point { lat: 0.0, lon: 0.0 });
     }
 
     #[test]
     fn parse_geo_point_negative_coords() {
-        let val = json!({"lat": -33.8688, "lon": 151.2093});
+        let val = DynValue::from(json!({"lat": -33.8688, "lon": 151.2093}));
         let geo = parse_geo(&val).expect("Sydney");
         assert_eq!(
             geo,
@@ -460,64 +460,64 @@ mod tests {
 
     #[test]
     fn parse_geo_point_missing_lon() {
-        let val = json!({"lat": 51.5074});
+        let val = DynValue::from(json!({"lat": 51.5074}));
         let err = parse_geo(&val).expect_err("lon missing");
         assert_eq!(err, GeoParseError::MissingOrInvalidLon);
     }
 
     #[test]
     fn parse_geo_point_missing_lat() {
-        let val = json!({"lon": -0.1278});
+        let val = DynValue::from(json!({"lon": -0.1278}));
         let err = parse_geo(&val).expect_err("lat missing");
         assert_eq!(err, GeoParseError::MissingOrInvalidLat);
     }
 
     #[test]
     fn parse_geo_point_lat_not_number() {
-        let val = json!({"lat": "51.5074", "lon": -0.1278});
+        let val = DynValue::from(json!({"lat": "51.5074", "lon": -0.1278}));
         let err = parse_geo(&val).expect_err("lat is string");
         assert_eq!(err, GeoParseError::MissingOrInvalidLat);
     }
 
     #[test]
     fn parse_geo_point_lon_not_number() {
-        let val = json!({"lat": 51.5074, "lon": "west"});
+        let val = DynValue::from(json!({"lat": 51.5074, "lon": "west"}));
         let err = parse_geo(&val).expect_err("lon is string");
         assert_eq!(err, GeoParseError::MissingOrInvalidLon);
     }
 
     #[test]
     fn parse_geo_geojson_polygon() {
-        let val = json!({
+        let val = DynValue::from(json!({
             "type": "Polygon",
             "coordinates": [[[100.0, 0.0],[101.0, 0.0],[101.0, 1.0],[100.0, 1.0],[100.0, 0.0]]]
-        });
+        }));
         let geo = parse_geo(&val).expect("GeoJSON polygon");
         assert!(matches!(geo, Geo::GeoJson(_)));
     }
 
     #[test]
     fn parse_geo_geojson_point_geojson_format() {
-        let val = json!({"type": "Point", "coordinates": [125.6, 10.1]});
+        let val = DynValue::from(json!({"type": "Point", "coordinates": [125.6, 10.1]}));
         let geo = parse_geo(&val).expect("GeoJSON Point geometry");
         assert!(matches!(geo, Geo::GeoJson(_)));
     }
 
     #[test]
     fn parse_geo_not_object_null() {
-        let err = parse_geo(&Value::Null).expect_err("null");
+        let err = parse_geo(&DynValue::Null).expect_err("null");
         assert_eq!(err, GeoParseError::NotAnObject);
     }
 
     #[test]
     fn parse_geo_not_object_string() {
-        let err = parse_geo(&json!("not an object")).expect_err("string");
+        let err = parse_geo(&DynValue::from(json!("not an object"))).expect_err("string");
         assert_eq!(err, GeoParseError::NotAnObject);
     }
 
     #[test]
     fn parse_geo_not_object_array() {
-        let err = parse_geo(&json!([1.0, 2.0])).expect_err("array");
+        let err = parse_geo(&DynValue::from(json!([1.0, 2.0]))).expect_err("array");
         assert_eq!(err, GeoParseError::NotAnObject);
     }
 

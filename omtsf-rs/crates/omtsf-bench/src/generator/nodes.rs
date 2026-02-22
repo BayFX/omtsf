@@ -1,5 +1,7 @@
 //! Node builders for all 7 OMTSF node types.
 
+use std::collections::BTreeMap;
+
 use omtsf_core::enums::{
     AttestationOutcome, AttestationStatus, AttestationType, DisclosureScope, EmissionFactorSource,
     NodeType, NodeTypeTag, OrganizationStatus, RiskLikelihood, RiskSeverity,
@@ -108,7 +110,7 @@ pub fn gen_labels(
         labels.push(Label {
             key: "certified".to_owned(),
             value: None,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         });
     }
 
@@ -120,7 +122,7 @@ pub fn gen_labels(
             labels.push(Label {
                 key: "tier".to_owned(),
                 value: Some(v.to_owned()),
-                extra: serde_json::Map::new(),
+                extra: BTreeMap::new(),
             });
         }
 
@@ -137,7 +139,7 @@ pub fn gen_labels(
             labels.push(Label {
                 key: "sector".to_owned(),
                 value: Some(v.to_owned()),
-                extra: serde_json::Map::new(),
+                extra: BTreeMap::new(),
             });
         }
     }
@@ -149,7 +151,7 @@ pub fn gen_labels(
         labels.push(Label {
             key: "risk-level".to_owned(),
             value: Some(v.to_owned()),
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         });
     }
 
@@ -159,7 +161,7 @@ pub fn gen_labels(
             labels.push(Label {
                 key: "eu-regulated".to_owned(),
                 value: None,
-                extra: serde_json::Map::new(),
+                extra: BTreeMap::new(),
             });
         }
     }
@@ -232,7 +234,7 @@ fn blank_node(id: NodeId, node_type: NodeTypeTag) -> Node {
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

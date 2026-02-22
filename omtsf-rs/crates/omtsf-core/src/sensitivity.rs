@@ -164,8 +164,10 @@ mod tests {
     #![allow(clippy::expect_used)]
 
     use serde_json::json;
+    use std::collections::BTreeMap;
 
     use super::*;
+    use crate::dynvalue::DynValue;
     use crate::enums::{EdgeType, EdgeTypeTag, NodeType, NodeTypeTag};
     use crate::newtypes::{EdgeId, NodeId};
     use crate::structures::{Edge, EdgeProperties};
@@ -181,7 +183,7 @@ mod tests {
             sensitivity: explicit_sensitivity,
             verification_status: None,
             verification_date: None,
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 
@@ -193,10 +195,7 @@ mod tests {
         NodeTypeTag::Extension(s.to_owned())
     }
 
-    fn make_edge(
-        edge_type: EdgeType,
-        extra_properties: serde_json::Map<String, serde_json::Value>,
-    ) -> Edge {
+    fn make_edge(edge_type: EdgeType, extra_properties: BTreeMap<String, DynValue>) -> Edge {
         Edge {
             id: EdgeId::try_from("e-test").expect("valid EdgeId"),
             edge_type: EdgeTypeTag::Known(edge_type),
@@ -207,11 +206,11 @@ mod tests {
                 extra: extra_properties,
                 ..Default::default()
             },
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 
-    fn make_edge_extension(extra_properties: serde_json::Map<String, serde_json::Value>) -> Edge {
+    fn make_edge_extension(extra_properties: BTreeMap<String, DynValue>) -> Edge {
         Edge {
             id: EdgeId::try_from("e-test-ext").expect("valid EdgeId"),
             edge_type: EdgeTypeTag::Extension("com.example.custom".to_owned()),
@@ -222,26 +221,21 @@ mod tests {
                 extra: extra_properties,
                 ..Default::default()
             },
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 
-    fn no_extra() -> serde_json::Map<String, serde_json::Value> {
-        serde_json::Map::new()
+    fn no_extra() -> BTreeMap<String, DynValue> {
+        BTreeMap::new()
     }
 
-    fn property_sensitivity_extra(
-        overrides: &[(&str, &str)],
-    ) -> serde_json::Map<String, serde_json::Value> {
-        let mut obj = serde_json::Map::new();
+    fn property_sensitivity_extra(overrides: &[(&str, &str)]) -> BTreeMap<String, DynValue> {
+        let mut obj = BTreeMap::new();
         for (k, v) in overrides {
-            obj.insert(k.to_string(), json!(v));
+            obj.insert(k.to_string(), DynValue::from(json!(v)));
         }
-        let mut extra = serde_json::Map::new();
-        extra.insert(
-            "_property_sensitivity".to_owned(),
-            serde_json::Value::Object(obj),
-        );
+        let mut extra = BTreeMap::new();
+        extra.insert("_property_sensitivity".to_owned(), DynValue::Object(obj));
         extra
     }
 
@@ -552,13 +546,10 @@ mod tests {
     #[test]
     fn property_sensitivity_override_unrecognised_value_falls_through_to_default() {
         // Unrecognised sensitivity string falls through to the property default.
-        let mut obj = serde_json::Map::new();
-        obj.insert("volume".to_owned(), json!("ultra-secret"));
-        let mut extra = serde_json::Map::new();
-        extra.insert(
-            "_property_sensitivity".to_owned(),
-            serde_json::Value::Object(obj),
-        );
+        let mut obj = BTreeMap::new();
+        obj.insert("volume".to_owned(), DynValue::from(json!("ultra-secret")));
+        let mut extra = BTreeMap::new();
+        extra.insert("_property_sensitivity".to_owned(), DynValue::Object(obj));
         let edge = make_edge(EdgeType::Supplies, extra);
         // volume default is restricted.
         assert_eq!(
@@ -570,8 +561,11 @@ mod tests {
     #[test]
     fn property_sensitivity_override_map_not_an_object_falls_through() {
         // _property_sensitivity is present but not a JSON object.
-        let mut extra = serde_json::Map::new();
-        extra.insert("_property_sensitivity".to_owned(), json!("not-an-object"));
+        let mut extra = BTreeMap::new();
+        extra.insert(
+            "_property_sensitivity".to_owned(),
+            DynValue::from(json!("not-an-object")),
+        );
         let edge = make_edge(EdgeType::Supplies, extra);
         assert_eq!(
             effective_property_sensitivity(&edge, "volume"),
@@ -582,13 +576,10 @@ mod tests {
     #[test]
     fn property_sensitivity_override_value_not_a_string_falls_through() {
         // _property_sensitivity.volume is a number, not a string.
-        let mut obj = serde_json::Map::new();
-        obj.insert("volume".to_owned(), json!(1));
-        let mut extra = serde_json::Map::new();
-        extra.insert(
-            "_property_sensitivity".to_owned(),
-            serde_json::Value::Object(obj),
-        );
+        let mut obj = BTreeMap::new();
+        obj.insert("volume".to_owned(), DynValue::from(json!(1)));
+        let mut extra = BTreeMap::new();
+        extra.insert("_property_sensitivity".to_owned(), DynValue::Object(obj));
         let edge = make_edge(EdgeType::Supplies, extra);
         assert_eq!(
             effective_property_sensitivity(&edge, "volume"),

@@ -7,6 +7,7 @@ use crate::newtypes::{CalendarDate, FileSalt, NodeId, SemVer};
 use crate::structures::{Edge, EdgeProperties, Node};
 use crate::types::Identifier;
 use crate::validation::{ValidationConfig, validate};
+use std::collections::BTreeMap;
 
 const SALT_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const SALT_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -63,7 +64,7 @@ fn make_org_node(id: &str, name: Option<&str>, identifiers: Option<Vec<Identifie
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -77,7 +78,7 @@ fn make_identifier(scheme: &str, value: &str) -> Identifier {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -89,7 +90,7 @@ fn make_supplies_edge(id: &str, src: &str, tgt: &str) -> Edge {
         target: node_id(tgt),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -104,7 +105,7 @@ fn minimal_file(salt: &str, nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
         reporting_entity: None,
         nodes,
         edges,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

@@ -1,7 +1,9 @@
 #![allow(clippy::expect_used)]
 #![allow(clippy::panic)]
 
+use crate::dynvalue::DynValue;
 use serde_json::json;
+use std::collections::BTreeMap;
 
 use super::*;
 use crate::enums::{EdgeType, EdgeTypeTag};
@@ -19,7 +21,7 @@ fn make_identifier(scheme: &str, value: &str) -> Identifier {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -27,14 +29,16 @@ fn make_label(key: &str, value: Option<&str>) -> Label {
     Label {
         key: key.to_owned(),
         value: value.map(str::to_owned),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
 fn make_same_as_edge(id: &str, src: &str, tgt: &str, confidence: Option<&str>) -> Edge {
     let mut props = EdgeProperties::default();
     if let Some(c) = confidence {
-        props.extra.insert("confidence".to_owned(), json!(c));
+        props
+            .extra
+            .insert("confidence".to_owned(), DynValue::from(json!(c)));
     }
     Edge {
         id: NodeId::try_from(id).expect("valid edge id"),
@@ -43,7 +47,7 @@ fn make_same_as_edge(id: &str, src: &str, tgt: &str, confidence: Option<&str>) -
         target: NodeId::try_from(tgt).expect("valid node id"),
         identifiers: None,
         properties: props,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -55,7 +59,7 @@ fn make_supplies_edge(id: &str, src: &str, tgt: &str) -> Edge {
         target: NodeId::try_from(tgt).expect("valid node id"),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

@@ -10,6 +10,7 @@ use crate::file::OmtsFile;
 use crate::newtypes::{CalendarDate, EdgeId, FileSalt, NodeId, SemVer};
 use crate::structures::{Edge, EdgeProperties, Node};
 use crate::types::Identifier;
+use std::collections::BTreeMap;
 
 pub(crate) const SALT_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 pub(crate) const SALT_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -45,7 +46,7 @@ pub(crate) fn make_file(nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
         reporting_entity: None,
         nodes,
         edges,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -91,7 +92,7 @@ pub(crate) fn org_node(id: &str) -> Node {
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -105,7 +106,7 @@ pub(crate) fn with_lei(mut node: Node, lei: &str) -> Node {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
     node.identifiers = Some(vec![id]);
     node
@@ -121,7 +122,7 @@ pub(crate) fn with_duns(mut node: Node, duns: &str) -> Node {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
     let ids = node.identifiers.get_or_insert_with(Vec::new);
     ids.push(id);
@@ -136,7 +137,7 @@ pub(crate) fn supplies_edge(id: &str, src: &str, tgt: &str) -> Edge {
         target: node_id(tgt),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -148,7 +149,7 @@ pub(crate) fn ownership_edge(id: &str, src: &str, tgt: &str) -> Edge {
         target: node_id(tgt),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

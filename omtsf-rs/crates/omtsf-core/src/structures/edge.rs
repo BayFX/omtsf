@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::dynvalue::{DynMap, DynValue};
 use crate::enums::{ConsolidationBasis, EdgeTypeTag, EventType, ServiceType};
 use crate::newtypes::{CalendarDate, EdgeId, NodeId};
 use crate::types::{DataQuality, Identifier, Label};
@@ -50,10 +51,10 @@ pub struct EdgeProperties {
 
     /// Type of operational control arrangement.
     ///
-    /// Stored as a raw JSON value because extension strings are possible beyond
+    /// Stored as a raw dynamic value because extension strings are possible beyond
     /// the [`crate::ControlType`] enum variants.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub control_type: Option<serde_json::Value>,
+    pub control_type: Option<DynValue>,
 
     /// Accounting standard under which this parentage is consolidated.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -121,7 +122,7 @@ pub struct EdgeProperties {
 
     /// Unknown fields preserved for round-trip fidelity (SPEC-001 Section 2.2).
     #[serde(flatten)]
-    pub extra: serde_json::Map<String, serde_json::Value>,
+    pub extra: DynMap,
 }
 
 /// A directed relationship between two nodes in an OMTSF supply-chain graph.
@@ -159,5 +160,5 @@ pub struct Edge {
 
     /// Unknown fields preserved for round-trip fidelity (SPEC-001 Section 2.2).
     #[serde(flatten)]
-    pub extra: serde_json::Map<String, serde_json::Value>,
+    pub extra: DynMap,
 }

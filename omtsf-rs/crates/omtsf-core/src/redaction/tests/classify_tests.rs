@@ -1,11 +1,13 @@
 #![allow(clippy::expect_used)]
 
+use crate::dynvalue::DynValue;
 use crate::enums::{EdgeType, EdgeTypeTag, NodeType, NodeTypeTag, Sensitivity};
 use crate::newtypes::{EdgeId, NodeId};
 use crate::redaction::{NodeAction, classify_node};
 use crate::structures::{Edge, EdgeProperties};
 use crate::types::Identifier;
 use crate::{enums::DisclosureScope, structures::Node};
+use std::collections::BTreeMap;
 
 pub(super) fn org_node(id: &str) -> Node {
     make_node(id, NodeTypeTag::Known(NodeType::Organization), None)
@@ -58,7 +60,7 @@ pub(super) fn make_node(
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -72,7 +74,7 @@ pub(super) fn make_identifier(scheme: &str, sensitivity: Option<Sensitivity>) ->
         sensitivity,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -84,7 +86,7 @@ pub(super) fn make_edge(edge_type: EdgeType, source: &str, target: &str) -> Edge
         target: NodeId::try_from(target).expect("valid NodeId"),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -92,7 +94,7 @@ pub(super) fn make_edge_with_properties(
     edge_type: EdgeType,
     source: &str,
     target: &str,
-    extra_props: serde_json::Map<String, serde_json::Value>,
+    extra_props: BTreeMap<String, DynValue>,
 ) -> Edge {
     Edge {
         id: EdgeId::try_from("e-props").expect("valid EdgeId"),
@@ -104,7 +106,7 @@ pub(super) fn make_edge_with_properties(
             extra: extra_props,
             ..Default::default()
         },
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

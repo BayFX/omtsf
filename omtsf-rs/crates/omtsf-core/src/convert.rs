@@ -127,6 +127,7 @@ mod tests {
 
     use super::*;
     use crate::cbor::decode_cbor;
+    use crate::dynvalue::DynValue;
 
     const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
@@ -214,10 +215,7 @@ mod tests {
             "top-level string unknown field must survive conversion"
         );
         assert_eq!(
-            result
-                .extra
-                .get("x_top_number")
-                .and_then(serde_json::Value::as_u64),
+            result.extra.get("x_top_number").and_then(DynValue::as_u64),
             Some(99),
             "top-level number unknown field must survive conversion"
         );
@@ -225,7 +223,7 @@ mod tests {
             result
                 .extra
                 .get("x_top_null")
-                .is_some_and(serde_json::Value::is_null),
+                .is_some_and(DynValue::is_null),
             "top-level null unknown field must survive conversion"
         );
         assert_eq!(

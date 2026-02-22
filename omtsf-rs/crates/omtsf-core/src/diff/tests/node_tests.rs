@@ -1,3 +1,5 @@
+use crate::dynvalue::DynValue;
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 
 use crate::newtypes::{NodeId, SemVer};
@@ -141,7 +143,7 @@ fn diff_internal_identifiers_do_not_cause_match() {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }]);
     let mut node_b = org_node("org-b");
     node_b.identifiers = Some(vec![Identifier {
@@ -153,7 +155,7 @@ fn diff_internal_identifiers_do_not_cause_match() {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }]);
     let a = make_file(vec![node_a], vec![]);
     let b = make_file_b(vec![node_b], vec![]);
@@ -205,7 +207,7 @@ fn diff_is_empty_with_identical_files() {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }]);
     let result = diff(&a, &b);
     // Only matched (unchanged) nodes — is_empty checks additions/removals/modified only.
@@ -363,12 +365,12 @@ fn diff_date_normalisation_no_false_positive() {
     // which accepts raw JSON values).
     node_a.extra.insert(
         "x_test_date".to_owned(),
-        serde_json::Value::String("2026-2-9".to_owned()),
+        DynValue::String("2026-2-9".to_owned()),
     );
     let mut node_b_mut = node_b;
     node_b_mut.extra.insert(
         "x_test_date".to_owned(),
-        serde_json::Value::String("2026-02-09".to_owned()),
+        DynValue::String("2026-02-09".to_owned()),
     );
 
     let a = make_file(vec![node_a], vec![]);
@@ -407,7 +409,7 @@ fn diff_identifier_added() {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
     node_b.identifiers.get_or_insert_with(Vec::new).push(duns);
 
@@ -440,7 +442,7 @@ fn diff_identifier_removed() {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
     node_a.identifiers.get_or_insert_with(Vec::new).push(duns);
 
@@ -467,7 +469,7 @@ fn diff_label_added() {
     node_b.labels = Some(vec![Label {
         key: "tier".to_owned(),
         value: Some("1".to_owned()),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }]);
 
     let a = make_file(vec![node_a], vec![]);
@@ -489,7 +491,7 @@ fn diff_label_removed() {
     node_a.labels = Some(vec![Label {
         key: "risk-tier".to_owned(),
         value: Some("high".to_owned()),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }]);
 
     let a = make_file(vec![node_a], vec![]);
@@ -511,12 +513,12 @@ fn diff_label_value_change_is_remove_plus_add() {
     node_a.labels = Some(vec![Label {
         key: "risk-tier".to_owned(),
         value: Some("low".to_owned()),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }]);
     node_b.labels = Some(vec![Label {
         key: "risk-tier".to_owned(),
         value: Some("medium".to_owned()),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }]);
 
     let a = make_file(vec![node_a], vec![]);

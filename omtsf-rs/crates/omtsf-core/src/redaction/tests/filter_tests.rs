@@ -1,10 +1,12 @@
 #![allow(clippy::expect_used)]
 
 use super::super::sensitivity_allowed;
+use crate::dynvalue::DynValue;
 use crate::enums::{DisclosureScope, EdgeType, NodeType, NodeTypeTag, Sensitivity};
 use crate::redaction::{
     EdgeAction, NodeAction, classify_edge, filter_edge_properties, filter_identifiers,
 };
+use std::collections::BTreeMap;
 
 use super::classify_tests::{make_edge, make_edge_with_properties, make_identifier};
 
@@ -238,10 +240,10 @@ fn filter_edge_props_partner_retains_volume_unit() {
 fn filter_edge_props_partner_retains_property_sensitivity_map() {
     // _property_sensitivity is retained in partner scope.
     use serde_json::json;
-    let mut extra = serde_json::Map::new();
+    let mut extra = BTreeMap::new();
     extra.insert(
         "_property_sensitivity".to_owned(),
-        json!({"volume": "public"}),
+        DynValue::from(json!({"volume": "public"})),
     );
     let edge = make_edge_with_properties(EdgeType::Supplies, "src", "tgt", extra);
     let result = filter_edge_properties(&edge, &DisclosureScope::Partner);
@@ -292,10 +294,10 @@ fn filter_edge_props_public_retains_public_percentage_on_ownership() {
 fn filter_edge_props_public_removes_property_sensitivity_map() {
     // _property_sensitivity is removed entirely in public scope.
     use serde_json::json;
-    let mut extra = serde_json::Map::new();
+    let mut extra = BTreeMap::new();
     extra.insert(
         "_property_sensitivity".to_owned(),
-        json!({"volume": "public"}),
+        DynValue::from(json!({"volume": "public"})),
     );
     let edge = make_edge_with_properties(EdgeType::Supplies, "src", "tgt", extra);
     let result = filter_edge_properties(&edge, &DisclosureScope::Public);

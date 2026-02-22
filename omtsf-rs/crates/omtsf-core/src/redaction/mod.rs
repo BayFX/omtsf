@@ -13,7 +13,7 @@
 /// The lower-level functions (`classify_node`, `filter_identifiers`, etc.) are
 /// deliberately pure-functional: they take inputs and return outputs without
 /// side effects, making them easy to test in isolation.
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 
 use crate::boundary_hash::{BoundaryHashError, boundary_ref_value, decode_salt};
@@ -290,7 +290,7 @@ pub fn filter_edge_properties(edge: &Edge, target_scope: &DisclosureScope) -> Ed
         None
     };
 
-    let mut extra = serde_json::Map::new();
+    let mut extra = BTreeMap::new();
     for (key, value) in &props.extra {
         if key == "_property_sensitivity" {
             // Retained for `partner`, removed for `public` (Section 3.2).
@@ -604,7 +604,7 @@ fn build_boundary_ref_node(id: NodeId, opaque_value: String) -> Node {
         sensitivity: None,
         verification_status: None,
         verification_date: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     };
     Node {
         id,
@@ -640,7 +640,7 @@ fn build_boundary_ref_node(id: NodeId, opaque_value: String) -> Node {
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 

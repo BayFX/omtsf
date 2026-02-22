@@ -5,6 +5,7 @@ use crate::enums::{EdgeType, EdgeTypeTag, NodeType, NodeTypeTag};
 use crate::file::OmtsFile;
 use crate::newtypes::{CalendarDate, EdgeId, FileSalt, NodeId, SemVer};
 use crate::structures::{Edge, EdgeProperties, Node};
+use std::collections::BTreeMap;
 
 const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
@@ -19,7 +20,7 @@ fn make_file(nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
         reporting_entity: None,
         nodes,
         edges,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -58,7 +59,7 @@ fn node(id: &str, node_type: NodeType) -> Node {
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -97,7 +98,7 @@ fn extension_node(id: &str, type_str: &str) -> Node {
         indirect_emissions_co2e: None,
         emission_factor_source: None,
         installation_id: None,
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -109,7 +110,7 @@ fn edge(id: &str, edge_type: EdgeType, source: &str, target: &str) -> Edge {
         target: NodeId::try_from(target).expect("valid target"),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
@@ -121,7 +122,7 @@ fn extension_edge(id: &str, type_str: &str, source: &str, target: &str) -> Edge 
         target: NodeId::try_from(target).expect("valid target"),
         identifiers: None,
         properties: EdgeProperties::default(),
-        extra: serde_json::Map::new(),
+        extra: BTreeMap::new(),
     }
 }
 
