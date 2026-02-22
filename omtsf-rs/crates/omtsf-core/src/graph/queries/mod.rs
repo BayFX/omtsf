@@ -342,8 +342,8 @@ fn dfs_paths(
         edge_filter,
     };
     let mut path: Vec<NodeIndex> = vec![from];
-    let mut on_path: HashSet<NodeIndex> = HashSet::new();
-    on_path.insert(from);
+    let mut on_path: Vec<bool> = vec![false; graph.graph().node_count()];
+    on_path[from.index()] = true;
 
     dfs_recurse(&ctx, from, 0, &mut path, &mut on_path, results);
 }
@@ -358,7 +358,7 @@ fn dfs_recurse(
     current: NodeIndex,
     depth: usize,
     path: &mut Vec<NodeIndex>,
-    on_path: &mut HashSet<NodeIndex>,
+    on_path: &mut Vec<bool>,
     results: &mut Vec<Vec<NodeIndex>>,
 ) {
     if current == ctx.target && depth > 0 {
@@ -371,14 +371,14 @@ fn dfs_recurse(
     }
 
     for neighbour in neighbours(ctx.graph, current, ctx.direction, ctx.edge_filter) {
-        if !on_path.contains(&neighbour) {
+        if !on_path[neighbour.index()] {
             path.push(neighbour);
-            on_path.insert(neighbour);
+            on_path[neighbour.index()] = true;
 
             dfs_recurse(ctx, neighbour, depth + 1, path, on_path, results);
 
             path.pop();
-            on_path.remove(&neighbour);
+            on_path[neighbour.index()] = false;
         }
     }
 }
