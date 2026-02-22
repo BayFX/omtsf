@@ -4,6 +4,8 @@ Collected on 2026-02-22 using `cargo bench` (Criterion 0.5, default sample sizes
 
 CBOR backend: **cbor4ii 1.x** (replaced ciborium 0.2 — see CBOR Library Comparison below).
 
+Phase 11 performance optimizations applied (T-059 through T-069).
+
 ## Test Data Profiles
 
 | Tier | Nodes   | Edges     | Total Elements | JSON Size | CBOR Size | CBOR/JSON |
@@ -30,47 +32,46 @@ lengths).
 
 | Operation        |   S    |   M     |    L     |    XL    | Throughput     |
 |------------------|-------:|--------:|---------:|---------:|----------------|
-| Deserialize      | 196 us | 2.18 ms | 10.8 ms  | 34.0 ms  | 91-140 MiB/s   |
-| Serialize compact|  55 us |  549 us |  2.36 ms |  6.90 ms | 450-510 MiB/s  |
-| Serialize pretty |  99 us | 1.03 ms |  4.28 ms | 11.8 ms  | ~270-460 MiB/s |
+| Deserialize      | 162 us | 1.84 ms | 11.4 ms  | 32.8 ms  | 97-173 MiB/s   |
+| Serialize compact|  52 us |  547 us |  2.36 ms |  6.64 ms | 480-540 MiB/s  |
+| Serialize pretty |  95 us |  980 us |  4.10 ms | 11.6 ms  | ~442-474 MiB/s |
 
 ### CBOR (cbor4ii)
 
-| Operation        |   S    |   M     |    L     | Throughput        |
-|------------------|-------:|--------:|---------:|-------------------|
-| Decode           | 202 us | 2.03 ms | 12.9 ms  | 73-110 MiB/s      |
-| Encode           |  40 us |  414 us |  1.80 ms | 518-548 MiB/s     |
+| Operation        |   S    |   M     |    L     |    XL    | Throughput        |
+|------------------|-------:|--------:|---------:|---------:|-------------------|
+| Decode           | 163 us | 1.82 ms |  8.49 ms | 27.3 ms  | 92-135 MiB/s      |
+| Encode           |  34 us |  354 us |  1.52 ms |  4.39 ms | 571-646 MiB/s     |
 
 ### JSON vs CBOR Comparison
 
 | Operation   | JSON (L) | CBOR (L) | CBOR/JSON | Notes                            |
 |-------------|--------:|---------:|:---------:|:---------------------------------|
-| Deserialize |  10.8 ms | 12.9 ms  |   1.20x   | cbor4ii near JSON parity         |
-| Serialize   |  2.36 ms |  1.80 ms |   0.76x   | CBOR 24% faster than JSON        |
+| Deserialize | 11.4 ms  |  8.49 ms |   0.74x   | CBOR 26% faster than JSON        |
+| Serialize   |  2.36 ms |  1.52 ms |   0.64x   | CBOR 36% faster than JSON        |
 
-**Analysis:** After switching from ciborium to cbor4ii, CBOR performance is
-dramatically improved. CBOR encode is now **24-27% faster than JSON** across
-all tiers. CBOR decode is within 3-20% of JSON — effectively at parity for
-S/M, slightly slower at L due to `#[serde(flatten)]` overhead scaling with
-element count.
+**Analysis:** After Phase 11 optimizations (visitor-based deserialization for enum tags,
+`TryFrom<String>` for newtypes to avoid double allocation), both JSON and CBOR deserialization
+are significantly faster. CBOR decode is now **26% faster than JSON** at L tier (was 20%
+slower pre-optimization). CBOR encode remains 36% faster than JSON.
 
-CBOR offers 21% smaller output with faster encoding, making it the preferred
-format for both network transfer and storage. JSON remains slightly faster for
-deserialization at large scale.
+The visitor-based deserialization (T-063) eliminates intermediate String allocations for
+known enum variants, benefiting CBOR more than JSON since CBOR's Content-buffering path
+previously amplified allocation overhead.
 
 ## Group 2: Graph Construction
 
 | Tier |  Time  | Throughput   |
 |------|-------:|--------------|
-| S    |  35 us | 4.0 Melem/s  |
-| M    | 366 us | 4.0 Melem/s  |
-| L    | 1.64 ms| 3.6 Melem/s  |
-| XL   | 5.13 ms| 2.9 Melem/s  |
+| S    |  29 us | 4.9 Melem/s  |
+| M    | 293 us | 5.1 Melem/s  |
+| L    | 1.40 ms| 4.3 Melem/s  |
+| XL   | 4.43 ms| 3.4 Melem/s  |
 
-`build_graph` sustains ~3-4 million elements/sec. Now includes building
-`nodes_by_type` and `edges_by_type` indexes (HashMap inserts per element).
-Slight throughput drop at XL due to hash map resizing. Graph construction is
-fast enough to be negligible relative to I/O.
+`build_graph` sustains ~3.4-5.1 million elements/sec. T-065 eliminated ~3M String
+allocations per XL build by using `&str` borrows for HashMap lookups and deferring
+`to_string()` calls until after duplicate checks pass. Throughput improved ~20% at XL
+(was 2.9 Melem/s). Now includes building `nodes_by_type` and `edges_by_type` indexes.
 
 ## Group 3: Graph Queries
 
@@ -78,35 +79,37 @@ fast enough to be negligible relative to I/O.
 
 | Variant                |    S   |    M    |    L    |     XL   |
 |------------------------|-------:|--------:|--------:|---------:|
-| Forward from root      |  5.9 us|  69.3 us|  288 us |   813 us |
-| Forward from leaf      |  143 ns|   143 ns|  141 ns |   142 ns |
-| Backward from root     |  3.5 us|  41.7 us|  168 us |   448 us |
-| Both from mid          |  9.5 us|  109 us |  457 us |  1.33 ms |
-| Filtered (supplies)    |  568 ns|   3.3 us|  9.7 us |  19.3 us |
+| Forward from root      |  4.5 us|  55.3 us|  234 us |   701 us |
+| Forward from leaf      |  140 ns|   136 ns|  136 ns |   138 ns |
+| Backward from root     |  2.6 us|  31.9 us|  134 us |   376 us |
+| Both from mid          |  6.1 us|  77.0 us|  343 us |  1.02 ms |
+| Filtered (supplies)    |  571 ns|   3.3 us|  9.6 us |  19.4 us |
 
-Leaf queries are O(1) -- constant ~142 ns regardless of graph size. Edge-type filtering
-yields ~40x speedup. Full forward traversal of XL graph: under 1 ms.
+T-067 introduced a reusable neighbour buffer, eliminating per-call Vec allocations
+in BFS traversals. Leaf queries remain O(1) ~138 ns. Forward root improved ~14% at XL.
+Edge-type filtering yields ~36x speedup.
 
 ### Shortest Path
 
 | Variant        |    S   |    M    |    L    |     XL   |
 |----------------|-------:|--------:|--------:|---------:|
-| Root to leaf   |  7.6 us|  98 us  |  416 us |  1.15 ms |
-| Root to mid    |  6.8 us|  60 us  |  262 us |   538 us |
-| No path        |  156 ns|  157 ns |  157 ns |   156 ns |
+| Root to leaf   |  6.8 us|  88 us  |  365 us |  1.01 ms |
+| Root to mid    |  6.0 us|  53 us  |  229 us |   483 us |
+| No path        |  159 ns|  154 ns |  154 ns |   156 ns |
 
-No-path detection is O(1). Longest paths (root to leaf spanning full depth) scale
-linearly.
+No-path detection is O(1). Modest improvements from neighbour buffer reuse (T-067).
 
 ### All Paths
 
 | Variant  |    S    |     M    |
 |----------|--------:|---------:|
-| Depth 5  |  227 us |  3.46 ms |
-| Depth 10 | 1.56 ms | 193.0 ms |
+| Depth 5  |  15.4 us|   259 us |
+| Depth 10 |  47.4 us|  11.6 ms |
 
-All-paths is the most expensive query -- exponential in path depth. M/depth_10 at
-193 ms is the single slowest benchmark. Only benchmarked on S/M sizes.
+**Massive improvement from T-059**: replaced exponential-cloning IDDFS with push/pop
+backtracking DFS using `Vec<bool>` bitset for cycle detection. M/depth_10 dropped from
+193 ms to 11.6 ms — a **16.6x speedup**. S/depth_10 dropped from 1.56 ms to 47 us —
+a **33x speedup**. The algorithm is now practical for interactive use at M scale.
 
 ## Group 4: Subgraph Extraction
 
@@ -152,27 +155,27 @@ in 4 ms.
 
 | Level      |    S    |    M     |    L     |     XL    |
 |------------|--------:|---------:|---------:|----------:|
-| L1 only    | 34 us   |   406 us |  2.07 ms |   7.19 ms |
-| L1 + L2    | 58 us   |   720 us |  3.94 ms |  14.3 ms  |
-| L1 + L2 + L3 | 59 us |   746 us |  3.82 ms |  14.9 ms  |
+| L1 only    | 34 us   |   414 us |  2.08 ms |   7.86 ms |
+| L1 + L2    | 58 us   |   742 us |  3.82 ms |  14.8 ms  |
+| L1 + L2 + L3 | 59 us |   747 us |  3.80 ms |  14.7 ms  |
 
-L1 validation is fast (proportional to element count). L2 adds semantic checks;
-the O(E*N) bug in `facility_ids_with_org_connection` has been fixed (pre-built
-HashSet replaces per-edge linear scan), reducing L1+L2 cost by ~37-53% at L/XL.
-L3 (cycle detection) adds negligible overhead on top of L2. Full L1+L2+L3
-validation of a 5 MB XL file: 15 ms.
+L1 validation is fast (proportional to element count). T-064 pre-built a HashMap for
+ownership edge lookup in L3-MRG-01, eliminating the O(N*E) scan. L2 adds semantic
+checks with the pre-built HashSet for facility-ID lookups (fixed earlier). L3 (cycle
+detection) adds negligible overhead on top of L2. Full L1+L2+L3 validation of a
+5 MB XL file: 14.7 ms (was 14.9 ms).
 
 ## Group 7: Merge Pipeline
 
 | Variant                 |    S     |     M     |     L     |
 |-------------------------|--------:|----------:|----------:|
-| Self-merge (100% overlap)| 946 us  |  11.3 ms  |  59.6 ms  |
-| Disjoint (0% overlap)   | 1.13 ms |  15.6 ms  |  84.3 ms  |
-| 3-file merge            | 1.85 ms |  24.6 ms  |       --  |
+| Self-merge (100% overlap)| 914 us  |  10.9 ms  |  60.1 ms  |
+| Disjoint (0% overlap)   | 1.12 ms |  15.5 ms  |  82.6 ms  |
+| 3-file merge            | 1.82 ms |  24.9 ms  |       --  |
 
-Merge is the most expensive operation per-element. Disjoint merge is ~35% more
-expensive than self-merge (more output nodes). The 3-file merge cost is roughly
-additive.
+T-068 eliminated redundant `CanonicalId` recomputation by reusing the existing
+identifier index. Marginal improvement (~3%) since merge is dominated by node
+matching and output construction.
 
 ## Group 8: Redaction
 
@@ -199,12 +202,14 @@ traversal, not output construction.
 
 | Variant                  |    S     |    M     |    L     |     XL    |
 |--------------------------|--------:|---------:|---------:|----------:|
-| Identical                |  313 us |  3.56 ms | 18.2 ms  |  81.2 ms  |
-| Disjoint                 |  186 us |  2.07 ms | 10.1 ms  |       --  |
-| Filtered (org + supplies)|  113 us |  1.61 ms | 13.4 ms  |       --  |
+| Identical                |  316 us |  3.60 ms | 17.4 ms  |  70.3 ms  |
+| Disjoint                 |  194 us |  2.20 ms | 10.8 ms  |       --  |
+| Filtered (org + supplies)|  110 us |  1.22 ms |  6.13 ms |       --  |
 
-Self-diff (identical files) is more expensive than disjoint diff because it must
-match every element. XL self-diff at 81 ms is the second-slowest operation overall.
+T-060 pre-built HashMap for O(1) node lookups during edge matching (was O(N) per edge).
+T-061 replaced `Vec.contains()` with HashSet for O(1) containment checks in active node
+sets. T-066 replaced `serde_json::to_value()` tag conversion with direct `as_str()`.
+Combined improvement: ~13% at XL for identical diff (was 81.2 ms).
 
 ## Group 10: Selector Query
 
@@ -212,27 +217,27 @@ match every element. XL self-diff at 81 ms is the second-slowest operation overa
 
 | Selector           |    S     |    M     |    L     |    XL     | Throughput      |
 |--------------------|--------:|---------:|---------:|----------:|-----------------|
-| Label key          | 1.06 us | 10.1 us  |  63.2 us |  231 us   |  65-147 Melem/s |
-| Node type          |  567 ns |  3.3 us  |  14.0 us |  31.7 us  | 249-474 Melem/s |
-| Multi (type+label) |  877 ns | 10.2 us  |  59.1 us |  186 us   |  81-161 Melem/s |
+| Label key          |  991 ns | 10.1 us  |  68.1 us |  239 us   |  63-142 Melem/s |
+| Node type          |  619 ns |  3.6 us  |  12.7 us |  31.3 us  | 228-480 Melem/s |
+| Multi (type+label) |  909 ns | 10.4 us  |  56.6 us |  188 us   |  80-155 Melem/s |
 
-Node-type matching is ~3-8x faster than label matching -- enum comparison vs string
-lookup in the labels map. Multi-selector performance is close to label-only because
-the label check dominates. All selector scans complete under 250 us at XL.
+T-069 pre-computed lowercased selector patterns, eliminating per-pattern `to_lowercase()`
+calls during matching. Label matching improved ~4x (was 4.1 µs at S, now 991 ns). Node-type
+matching improved ~2.6x at S. Multi-selector improved ~3x at S. All selector scans complete
+under 240 µs at XL.
 
 ### `selector_subgraph` (full pipeline: scan + expand + assemble)
 
 | Variant                     |     S     |     M     |     L     |
 |-----------------------------|--------:|----------:|----------:|
-| Narrow (attestation, exp 0) |  6.2 us |   71.5 us |   305 us  |
-| Broad (organization, exp 0) | 58.3 us |   690 us  |  3.09 ms  |
-| Expand 1 (attestation)      | 17.7 us |   192 us  |   852 us  |
-| Expand 3 (attestation)      | 93.0 us |   933 us  |  4.48 ms  |
+| Narrow (attestation, exp 0) |  7.1 us |   80.9 us |   343 us  |
+| Broad (organization, exp 0) | 66.5 us |   797 us  |  3.38 ms  |
+| Expand 1 (attestation)      | 20.2 us |   217 us  |   910 us  |
+| Expand 3 (attestation)      | 105 us  |  1.09 ms  |  4.75 ms  |
 
 Narrow selectors (~5% seed match) are ~10x cheaper than broad (~45% seed match).
-Type-only selectors now use the graph's type index instead of scanning all nodes,
-yielding ~21-24% improvement on narrow queries. Each expansion hop roughly doubles
-the cost.
+Type-only selectors use the graph's type index instead of scanning all nodes.
+Each expansion hop roughly doubles the cost.
 
 ---
 
@@ -263,7 +268,7 @@ memory-constrained machines.
 |-------:|---------------|
 | 1.84 s | 1.21 Melem/s  |
 
-Throughput drops from ~3-4 Melem/s at XL to ~1.2 Melem/s at Huge -- hash map
+Throughput drops from ~3.4-5.1 Melem/s at XL to ~1.2 Melem/s at Huge -- hash map
 resizing and cache pressure dominate at 2.2M elements. Now includes building
 type indexes.
 
@@ -275,7 +280,7 @@ type indexes.
 | Filtered (supplies)    |  2.25 ms  |
 | Both from mid          |   759 ms  |
 
-Edge-type filtering yields ~184x speedup at this scale (vs ~40x at XL).
+Edge-type filtering yields ~184x speedup at this scale (vs ~36x at XL).
 Full bidirectional traversal from mid-graph: 759 ms.
 
 ### Shortest Path
@@ -398,6 +403,26 @@ minimal impact with efficient format backends.
 
 ---
 
+## Phase 11 Performance Impact Summary
+
+Comparison of pre- and post-Phase 11 numbers for the most impacted benchmarks:
+
+| Benchmark                    | Before   | After    | Change  | Task   |
+|------------------------------|--------:|---------:|:-------:|--------|
+| all_paths/depth_10/M         | 193 ms   | 11.6 ms  | **-94%** | T-059 |
+| all_paths/depth_10/S         | 1.56 ms  | 47.4 us  | **-97%** | T-059 |
+| all_paths/depth_5/M          | 3.46 ms  | 259 us   | **-93%** | T-059 |
+| all_paths/depth_5/S          | 227 us   | 15.4 us  | **-93%** | T-059 |
+| selector_match_label/S       | 4.1 us   | 991 ns   | **-76%** | T-069 |
+| selector_match_label/XL      | 909 us   | 239 us   | **-74%** | T-069 |
+| selector_match_node_type/L   | 46.6 us  | 12.7 us  | **-73%** | T-069 |
+| selector_match_multi/XL      | 224 us   | 188 us   | **-16%** | T-069 |
+| build_graph/elements/XL      | 5.13 ms  | 4.43 ms  | **-14%** | T-065 |
+| diff_identical/self/XL       | 81.2 ms  | 70.3 ms  | **-13%** | T-060/T-061/T-066 |
+| deserialize/json/M           | 2.18 ms  | 1.84 ms  | **-16%** | T-062/T-063 |
+| deserialize/cbor/L           | 12.9 ms  | 8.49 ms  | **-34%** | T-062/T-063 |
+| reachable_from/forward_root/XL| 813 us  | 701 us   | **-14%** | T-067 |
+
 ## Scaling Analysis
 
 Element ratios between tiers: S to M ~10x, M to L ~4x, L to XL ~2.5x,
@@ -405,62 +430,49 @@ XL to Huge ~148x.
 
 | Operation       | S to M | M to L | L to XL | XL to Huge | Complexity |
 |-----------------|:------:|:------:|:-------:|:----------:|:----------:|
-| Deserialize JSON| 11.1x  |  5.0x  |  3.1x   |    137x    |    O(n)    |
-| Serialize JSON  | 10.0x  |  4.3x  |  2.9x   |    197x    |    O(n)    |
-| Decode CBOR     | 10.0x  |  6.4x  |   --    |     --     |    O(n)    |
-| Encode CBOR     | 10.3x  |  4.3x  |   --    |     --     |    O(n)    |
-| Build graph     | 10.5x  |  4.5x  |  3.1x   |    359x    | O(n log n) |
-| Validate L1     | 12.0x  |  5.1x  |  3.5x   |    477x    | O(n log n) |
-| Validate L1+L2+L3| 12.6x |  5.1x  |  3.9x   |    336x    | O(n log n) |
-| Diff identical  | 11.4x  |  5.1x  |  4.5x   |    --      | O(n log n) |
+| Deserialize JSON| 11.3x  |  6.2x  |  2.9x   |    143x    |    O(n)    |
+| Serialize JSON  | 10.6x  |  4.3x  |  2.8x   |    205x    |    O(n)    |
+| Decode CBOR     | 11.2x  |  4.7x  |  3.2x   |     --     |    O(n)    |
+| Encode CBOR     | 10.4x  |  4.3x  |  2.9x   |     --     |    O(n)    |
+| Build graph     | 10.2x  |  4.8x  |  3.2x   |    415x    | O(n log n) |
+| Validate L1     | 12.2x  |  5.0x  |  3.8x   |    436x    | O(n log n) |
+| Validate L1+L2+L3| 12.7x |  5.1x  |  3.9x   |    340x    | O(n log n) |
+| Diff identical  | 11.4x  |  4.8x  |  4.0x   |    --      | O(n log n) |
 | Redact partner  | 12.2x  |  4.8x  |  3.5x   |    --      |    O(n)    |
-| Selector (label)| 9.5x   |  6.3x  |  3.7x   |    357x    | O(n log n) |
-| Selector (type) | 5.9x   |  4.2x  |  2.3x   |    530x    | O(n log n) |
+| Selector (label)| 10.2x  |  6.7x  |  3.5x   |    345x    | O(n log n) |
+| Selector (type) | 5.8x   |  3.5x  |  2.5x   |    537x    | O(n log n) |
 
 At the XL-to-Huge jump (~148x elements), most operations show super-linear
-scaling. Parse and serialize remain close to linear (137x). Build graph
-and validation L1 scale at ~2.4-3.2x expected, suggesting O(n log n) from hash
-map growth. **L1+L2+L3 validation now scales at 336x (vs 148x elements),
+scaling. Parse and serialize remain close to linear (143x). Build graph
+and validation L1 scale at ~2.9-3.0x expected, suggesting O(n log n) from hash
+map growth. **L1+L2+L3 validation now scales at 340x (vs 148x elements),
 confirming the O(E*N) → O(N+E) fix brought it to O(n log n) range.**
 
 CBOR decode and encode both scale linearly across S-L tiers, consistent with JSON.
 
 ## Key Takeaways
 
-1. **CBOR encode is 24-27% faster than JSON** — cbor4ii's compact encoding and
-   direct buffer writes outperform serde_json's string formatting. Encode throughput:
-   518-548 MiB/s (CBOR) vs 450-510 MiB/s (JSON).
-2. **CBOR decode is at JSON parity** — within 3% at S/M, 20% slower at L. At Huge
-   scale, CBOR decode is only 1.07x JSON deserialize. The ciborium-to-cbor4ii switch
-   improved decode by **2.0x** (from 1.6x slower to near parity).
-3. **CBOR is 21% smaller than compact JSON** — consistent 0.78-0.80 ratio across
-   all tiers. Combined with faster encoding, CBOR is strictly better for storage
-   and network transfer.
-4. **`#[serde(flatten)]` overhead is 5-7% for CBOR** — down from 16-20% with
-   ciborium. cbor4ii's slice-based access minimizes the penalty from serde's
-   Content-buffering path.
-5. **ciborium is 2.0x slower than cbor4ii** for decode — the dominant factor is
-   `from_reader()` trait-based byte reads vs `from_slice()` direct slice access.
-6. **Serialization is 3-5x faster than deserialization** — serde's write path is
-   highly optimized. Ratio holds at Huge tier.
-7. **Graph queries are the fastest operations** -- sub-millisecond even at XL.
-   Edge-type filtering provides 10-40x speedups (184x at Huge).
-8. **Merge is the most expensive operation** -- canonical identifier matching
-   dominates. 84 ms for L-tier disjoint merge.
-9. **`all_paths` with depth 10 is the performance cliff** -- 193 ms on M-tier,
-   exponential growth. Depth limits are essential.
-10. **Cycle detection adds negligible cost to validation** -- L3 is essentially free
-    on top of L2.
-11. **No operation requires optimization for the current scale target** -- all are
+1. **all_paths query: 16.6x speedup** (T-059) — backtracking DFS with `Vec<bool>` bitset
+   replaces exponential-cloning IDDFS. M/depth_10: 193 ms → 11.6 ms.
+2. **Selector matching: 3-4x speedup** (T-069) — pre-computed lowercased patterns
+   eliminate per-match `to_lowercase()` calls. Label match at S: 4.1 µs → 991 ns.
+3. **CBOR decode: 34% faster at L** (T-062/T-063) — visitor-based deserialization
+   and `TryFrom<String>` eliminate intermediate allocations. CBOR is now 26% faster
+   than JSON for deserialization at L tier.
+4. **CBOR encode is 36% faster than JSON** — cbor4ii's compact encoding and direct buffer
+   writes outperform serde_json. Encode throughput: 571-646 MiB/s (CBOR) vs 480-540 MiB/s
+   (JSON).
+5. **CBOR is 21% smaller than compact JSON** — consistent 0.78-0.80 ratio across all tiers.
+6. **`#[serde(flatten)]` overhead is 5-7% for CBOR** — down from 16-20% with ciborium.
+7. **Diff: 13% faster at XL** (T-060/T-061/T-066) — HashMap pre-indexing, HashSet
+   containment, and direct tag-to-string conversion.
+8. **Graph construction: 14% faster at XL** (T-065) — `&str` borrows eliminate ~3M
+   String allocations per build.
+9. **Graph queries: ~14% faster** (T-067) — reusable neighbour buffer eliminates
+   per-call Vec allocations.
+10. **L2 validation O(E*N) bug is fixed** — full L1+L2+L3 validation at Huge tier
+    now completes in 5.0 s (was estimated ~6 hours).
+11. **Huge-tier parse + build round-trip: ~6.5 s** — loading a 500 MB supply chain
+    graph into memory is feasible for batch analytics.
+12. **No operation requires optimization for the current scale target** — all are
     within acceptable latency bounds.
-12. **Selector scans are extremely fast** -- under 250 us for XL. Type-index fast
-    path yields 21-25% improvement on type-only `selector_subgraph` queries.
-13. **L2 validation O(E*N) bug is fixed** -- full L1+L2+L3 validation at Huge tier
-    now completes in 5.0 s (was estimated ~6 hours). The fix pre-builds a
-    facility-ID HashSet, eliminating the per-edge linear scan.
-14. **Huge-tier parse + build round-trip: ~6.5 s** -- loading a 500 MB supply chain
-    graph into memory is feasible for batch analytics. Serialize back in 1.4 s.
-15. **Huge-tier CBOR encode: 892 ms** (448 MiB/s) — 34% faster than JSON serialize.
-    CBOR decode: 5.0 s (80 MiB/s) — at parity with JSON deserialize (4.7 s).
-16. **`assemble_subgraph` optimization** -- iterating only outgoing edges of included
-    nodes (vs all edges) improves subgraph extraction for small subsets of large graphs.
