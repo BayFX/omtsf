@@ -1,44 +1,24 @@
 #![allow(clippy::expect_used)]
 
 use super::*;
-use crate::enums::{DisclosureScope, NodeType, NodeTypeTag, Sensitivity};
+use crate::enums::{DisclosureScope, NodeType, Sensitivity};
 use crate::file::OmtsFile;
-use crate::newtypes::{CalendarDate, FileSalt, NodeId, SemVer};
 use crate::structures::Node;
+use crate::test_helpers::{minimal_file, typed_node as node_no_identifiers};
 use crate::types::Identifier;
 use crate::validation::{Diagnostic, ValidationRule};
 use std::collections::BTreeMap;
 
-const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
-
 fn make_file(nodes: Vec<Node>, disclosure_scope: Option<DisclosureScope>) -> OmtsFile {
-    OmtsFile {
-        omtsf_version: SemVer::try_from("1.0.0").expect("valid"),
-        snapshot_date: CalendarDate::try_from("2026-02-19").expect("valid"),
-        file_salt: FileSalt::try_from(SALT).expect("valid"),
-        disclosure_scope,
-        previous_snapshot_ref: None,
-        snapshot_sequence: None,
-        reporting_entity: None,
-        nodes,
-        edges: vec![],
-        extra: BTreeMap::new(),
-    }
-}
-
-fn node_no_identifiers(id: &str, node_type: NodeType) -> Node {
-    Node {
-        id: NodeId::try_from(id).expect("valid id"),
-        node_type: NodeTypeTag::Known(node_type),
-        ..Node::default()
-    }
+    let mut file = minimal_file(nodes, vec![]);
+    file.disclosure_scope = disclosure_scope;
+    file
 }
 
 fn node_with_identifiers(id: &str, node_type: NodeType, identifiers: Vec<Identifier>) -> Node {
-    Node {
-        identifiers: Some(identifiers),
-        ..node_no_identifiers(id, node_type)
-    }
+    let mut n = node_no_identifiers(id, node_type);
+    n.identifiers = Some(identifiers);
+    n
 }
 
 fn opaque_identifier(value: &str) -> Identifier {

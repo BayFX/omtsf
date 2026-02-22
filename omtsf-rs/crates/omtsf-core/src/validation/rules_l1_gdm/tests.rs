@@ -1,67 +1,18 @@
 #![allow(clippy::expect_used)]
 
 use super::*;
-use crate::enums::{EdgeType, EdgeTypeTag, NodeType, NodeTypeTag};
+use crate::enums::{EdgeType, NodeType};
 use crate::file::OmtsFile;
-use crate::newtypes::{CalendarDate, EdgeId, FileSalt, NodeId, SemVer};
-use crate::structures::{Edge, EdgeProperties, Node};
-use std::collections::BTreeMap;
-
-const SALT: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+use crate::newtypes::NodeId;
+use crate::structures::{Edge, Node};
+use crate::test_helpers::{extension_node, minimal_file, typed_edge as edge, typed_node as node};
 
 fn make_file(nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
-    OmtsFile {
-        omtsf_version: SemVer::try_from("1.0.0").expect("valid"),
-        snapshot_date: CalendarDate::try_from("2026-02-19").expect("valid"),
-        file_salt: FileSalt::try_from(SALT).expect("valid"),
-        disclosure_scope: None,
-        previous_snapshot_ref: None,
-        snapshot_sequence: None,
-        reporting_entity: None,
-        nodes,
-        edges,
-        extra: BTreeMap::new(),
-    }
-}
-
-fn node(id: &str, node_type: NodeType) -> Node {
-    Node {
-        id: NodeId::try_from(id).expect("valid id"),
-        node_type: NodeTypeTag::Known(node_type),
-        ..Node::default()
-    }
-}
-
-fn extension_node(id: &str, type_str: &str) -> Node {
-    Node {
-        id: NodeId::try_from(id).expect("valid id"),
-        node_type: NodeTypeTag::Extension(type_str.to_owned()),
-        ..Node::default()
-    }
-}
-
-fn edge(id: &str, edge_type: EdgeType, source: &str, target: &str) -> Edge {
-    Edge {
-        id: EdgeId::try_from(id).expect("valid id"),
-        edge_type: EdgeTypeTag::Known(edge_type),
-        source: NodeId::try_from(source).expect("valid source"),
-        target: NodeId::try_from(target).expect("valid target"),
-        identifiers: None,
-        properties: EdgeProperties::default(),
-        extra: BTreeMap::new(),
-    }
+    minimal_file(nodes, edges)
 }
 
 fn extension_edge(id: &str, type_str: &str, source: &str, target: &str) -> Edge {
-    Edge {
-        id: EdgeId::try_from(id).expect("valid id"),
-        edge_type: EdgeTypeTag::Extension(type_str.to_owned()),
-        source: NodeId::try_from(source).expect("valid source"),
-        target: NodeId::try_from(target).expect("valid target"),
-        identifiers: None,
-        properties: EdgeProperties::default(),
-        extra: BTreeMap::new(),
-    }
+    crate::test_helpers::extension_edge(id, source, target, type_str)
 }
 
 fn run_rule(rule: &dyn ValidationRule, file: &OmtsFile) -> Vec<Diagnostic> {

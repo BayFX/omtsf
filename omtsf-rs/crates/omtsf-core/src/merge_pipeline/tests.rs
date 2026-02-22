@@ -1,10 +1,10 @@
 #![allow(clippy::expect_used)]
 
 use super::*;
-use crate::enums::{EdgeType, EdgeTypeTag, NodeType, NodeTypeTag};
+use crate::enums::{NodeType, NodeTypeTag};
 use crate::file::OmtsFile;
-use crate::newtypes::{CalendarDate, FileSalt, NodeId, SemVer};
-use crate::structures::{Edge, EdgeProperties, Node};
+use crate::structures::{Edge, Node};
+use crate::test_helpers::{file_salt, node_id, semver, supplies_edge as make_supplies_edge};
 use crate::types::Identifier;
 use crate::validation::{ValidationConfig, validate};
 use std::collections::BTreeMap;
@@ -12,22 +12,6 @@ use std::collections::BTreeMap;
 const SALT_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const SALT_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const SALT_C: &str = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
-
-fn semver(s: &str) -> SemVer {
-    SemVer::try_from(s).expect("valid SemVer")
-}
-
-fn date(s: &str) -> CalendarDate {
-    CalendarDate::try_from(s).expect("valid CalendarDate")
-}
-
-fn file_salt(s: &str) -> FileSalt {
-    FileSalt::try_from(s).expect("valid FileSalt")
-}
-
-fn node_id(s: &str) -> NodeId {
-    NodeId::try_from(s).expect("valid NodeId")
-}
 
 fn make_org_node(id: &str, name: Option<&str>, identifiers: Option<Vec<Identifier>>) -> Node {
     Node {
@@ -53,22 +37,10 @@ fn make_identifier(scheme: &str, value: &str) -> Identifier {
     }
 }
 
-fn make_supplies_edge(id: &str, src: &str, tgt: &str) -> Edge {
-    Edge {
-        id: node_id(id),
-        edge_type: EdgeTypeTag::Known(EdgeType::Supplies),
-        source: node_id(src),
-        target: node_id(tgt),
-        identifiers: None,
-        properties: EdgeProperties::default(),
-        extra: BTreeMap::new(),
-    }
-}
-
 fn minimal_file(salt: &str, nodes: Vec<Node>, edges: Vec<Edge>) -> OmtsFile {
     OmtsFile {
         omtsf_version: semver("1.0.0"),
-        snapshot_date: date("2026-02-20"),
+        snapshot_date: crate::test_helpers::date("2026-02-20"),
         file_salt: file_salt(salt),
         disclosure_scope: None,
         previous_snapshot_ref: None,
