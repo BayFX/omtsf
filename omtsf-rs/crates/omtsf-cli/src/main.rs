@@ -156,6 +156,8 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
                 edge_type,
                 ignore_field,
                 &cli.format,
+                cli.verbose,
+                cli.no_color,
             )
         }
 

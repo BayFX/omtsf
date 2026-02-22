@@ -284,6 +284,23 @@ pub fn write_summary<W: Write>(
     }
 }
 
+/// Writes timing information to `writer` in verbose mode.
+///
+/// This is a convenience wrapper over [`write_timing_human`] that skips output
+/// in JSON mode (timing is always emitted in human-readable form).
+///
+/// # Errors
+///
+/// Returns an error only if writing to `writer` fails.
+pub fn write_timing<W: Write>(
+    writer: &mut W,
+    label: &str,
+    duration: Duration,
+    config: &FormatterConfig,
+) -> std::io::Result<()> {
+    write_timing_human(writer, label, duration, config)
+}
+
 /// Returns the singular or plural form of `word` depending on `count`.
 fn pluralize<'a>(count: usize, singular: &'a str, plural: &'a str) -> &'a str {
     if count == 1 { singular } else { plural }

@@ -14,7 +14,7 @@ use omtsf_core::{OmtsFile, ValidationConfig, validate};
 
 use crate::OutputFormat;
 use crate::error::CliError;
-use crate::format::{FormatMode, FormatterConfig, write_diagnostic, write_summary};
+use crate::format::{FormatMode, FormatterConfig, write_diagnostic, write_summary, write_timing};
 
 /// Runs the `validate` command.
 ///
@@ -38,7 +38,9 @@ pub fn run(
 ) -> Result<(), CliError> {
     let config = config_for_level(level);
 
+    let validate_start = std::time::Instant::now();
     let result = validate(file, &config, None);
+    let validate_elapsed = validate_start.elapsed();
 
     let mode = match format {
         OutputFormat::Human => FormatMode::Human,
@@ -71,6 +73,13 @@ pub fn run(
     .map_err(|e| CliError::IoError {
         source: "stderr".to_owned(),
         detail: e.to_string(),
+    })?;
+
+    write_timing(&mut err_out, "validated", validate_elapsed, &fmt_config).map_err(|e| {
+        CliError::IoError {
+            source: "stderr".to_owned(),
+            detail: e.to_string(),
+        }
     })?;
 
     if result.has_errors() {

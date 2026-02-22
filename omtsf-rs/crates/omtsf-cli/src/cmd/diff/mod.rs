@@ -23,6 +23,7 @@ use omtsf_core::{DiffFilter, DiffResult, OmtsFile, diff_filtered};
 
 use crate::OutputFormat;
 use crate::error::CliError;
+use crate::format::{FormatterConfig, write_timing};
 
 /// Runs the `diff` command.
 ///
@@ -47,6 +48,8 @@ pub fn run(
     edge_types: &[String],
     ignore_fields: &[String],
     format: &OutputFormat,
+    verbose: bool,
+    no_color: bool,
 ) -> Result<(), CliError> {
     let filter = DiffFilter {
         node_types: if node_types.is_empty() {
@@ -62,9 +65,21 @@ pub fn run(
         ignore_fields: ignore_fields.iter().cloned().collect::<HashSet<_>>(),
     };
 
+    let diff_start = std::time::Instant::now();
     let result = diff_filtered(file_a, file_b, Some(&filter));
+    let diff_elapsed = diff_start.elapsed();
 
     write_result(&result, ids_only, summary_only, format)?;
+
+    let fmt_config = FormatterConfig::from_flags(no_color, false, verbose);
+    let stderr = std::io::stderr();
+    let mut err_out = stderr.lock();
+    write_timing(&mut err_out, "diffed", diff_elapsed, &fmt_config).map_err(|e| {
+        CliError::IoError {
+            source: "stderr".to_owned(),
+            detail: e.to_string(),
+        }
+    })?;
 
     if result.is_empty() {
         Ok(())
@@ -157,7 +172,18 @@ mod tests {
     fn run_identical_empty_files_returns_ok() {
         let a = parse(EMPTY);
         let b = parse(EMPTY);
-        let result = run(&a, &b, false, false, &[], &[], &[], &OutputFormat::Human);
+        let result = run(
+            &a,
+            &b,
+            false,
+            false,
+            &[],
+            &[],
+            &[],
+            &OutputFormat::Human,
+            false,
+            true,
+        );
         assert!(
             result.is_ok(),
             "expected Ok for identical files: {result:?}"
@@ -168,7 +194,18 @@ mod tests {
     fn run_identical_files_exit_code_is_0() {
         let a = parse(WITH_ORG_SAME_EXT_ID);
         let b = parse(WITH_ORG_SAME_EXT_ID);
-        let result = run(&a, &b, false, false, &[], &[], &[], &OutputFormat::Human);
+        let result = run(
+            &a,
+            &b,
+            false,
+            false,
+            &[],
+            &[],
+            &[],
+            &OutputFormat::Human,
+            false,
+            true,
+        );
         assert!(result.is_ok(), "identical files should exit 0: {result:?}");
     }
 
@@ -176,7 +213,18 @@ mod tests {
     fn run_different_files_returns_diff_has_differences() {
         let a = parse(EMPTY);
         let b = parse(WITH_ORG);
-        let result = run(&a, &b, false, false, &[], &[], &[], &OutputFormat::Human);
+        let result = run(
+            &a,
+            &b,
+            false,
+            false,
+            &[],
+            &[],
+            &[],
+            &OutputFormat::Human,
+            false,
+            true,
+        );
         match result {
             Err(CliError::DiffHasDifferences) => {}
             other => panic!("expected DiffHasDifferences, got {other:?}"),
@@ -187,8 +235,19 @@ mod tests {
     fn run_different_files_exit_code_is_1() {
         let a = parse(EMPTY);
         let b = parse(WITH_ORG);
-        let err = run(&a, &b, false, false, &[], &[], &[], &OutputFormat::Human)
-            .expect_err("should fail with differences");
+        let err = run(
+            &a,
+            &b,
+            false,
+            false,
+            &[],
+            &[],
+            &[],
+            &OutputFormat::Human,
+            false,
+            true,
+        )
+        .expect_err("should fail with differences");
         assert_eq!(err.exit_code(), 1);
     }
 
@@ -196,8 +255,19 @@ mod tests {
     fn run_ids_only_still_exits_1_for_differences() {
         let a = parse(EMPTY);
         let b = parse(WITH_ORG);
-        let err = run(&a, &b, true, false, &[], &[], &[], &OutputFormat::Human)
-            .expect_err("should still exit 1");
+        let err = run(
+            &a,
+            &b,
+            true,
+            false,
+            &[],
+            &[],
+            &[],
+            &OutputFormat::Human,
+            false,
+            true,
+        )
+        .expect_err("should still exit 1");
         assert_eq!(err.exit_code(), 1);
     }
 
@@ -205,8 +275,19 @@ mod tests {
     fn run_summary_only_exits_1_for_differences() {
         let a = parse(EMPTY);
         let b = parse(WITH_ORG);
-        let err = run(&a, &b, false, true, &[], &[], &[], &OutputFormat::Human)
-            .expect_err("should exit 1");
+        let err = run(
+            &a,
+            &b,
+            false,
+            true,
+            &[],
+            &[],
+            &[],
+            &OutputFormat::Human,
+            false,
+            true,
+        )
+        .expect_err("should exit 1");
         assert_eq!(err.exit_code(), 1);
     }
 
@@ -214,7 +295,18 @@ mod tests {
     fn run_json_identical_files_returns_ok() {
         let a = parse(EMPTY);
         let b = parse(EMPTY);
-        let result = run(&a, &b, false, false, &[], &[], &[], &OutputFormat::Json);
+        let result = run(
+            &a,
+            &b,
+            false,
+            false,
+            &[],
+            &[],
+            &[],
+            &OutputFormat::Json,
+            false,
+            true,
+        );
         assert!(result.is_ok(), "expected Ok: {result:?}");
     }
 
@@ -222,7 +314,18 @@ mod tests {
     fn run_json_different_files_returns_diff_has_differences() {
         let a = parse(EMPTY);
         let b = parse(WITH_ORG);
-        let result = run(&a, &b, false, false, &[], &[], &[], &OutputFormat::Json);
+        let result = run(
+            &a,
+            &b,
+            false,
+            false,
+            &[],
+            &[],
+            &[],
+            &OutputFormat::Json,
+            false,
+            true,
+        );
         assert!(
             matches!(result, Err(CliError::DiffHasDifferences)),
             "expected DiffHasDifferences: {result:?}"
