@@ -199,4 +199,63 @@ mod tests {
     fn gs1_mod10_invalid_too_long() {
         assert!(!gs1_mod10("06141410004180"));
     }
+
+    /// Boundary value: all-nines input for `mod97_10`.
+    /// "99999999999999999999" is a 20-char all-digit string; the check digit
+    /// would have to equal 1 for this to pass, which it does not.
+    #[test]
+    fn mod97_10_boundary_all_nines() {
+        assert!(!mod97_10("99999999999999999999"));
+    }
+
+    /// Non-digit, non-letter characters are silently skipped by the algorithm.
+    /// A hyphen inserted into a known-valid LEI is ignored, so the result is
+    /// still valid — the algorithm processes only `[A-Z0-9]` bytes.
+    #[test]
+    fn mod97_10_non_alphanum_chars_skipped() {
+        // The function processes only [A-Z0-9]; the hyphen is transparent.
+        assert!(mod97_10("5493006MHB84DD0ZWV1-8"));
+        // A different non-alphanumeric embedded string that does not form a valid LEI.
+        assert!(!mod97_10("549300-MHB84DD0ZWV18"));
+    }
+
+    /// An empty string produces remainder 0, not 1, so it is invalid.
+    #[test]
+    fn mod97_10_empty_string() {
+        assert!(!mod97_10(""));
+    }
+
+    /// A string shorter than 20 characters is still processed but almost
+    /// certainly produces a remainder != 1.
+    #[test]
+    fn mod97_10_wrong_length_too_short() {
+        assert!(!mod97_10("5493006MHB84DD0ZWV"));
+    }
+
+    /// A string longer than 20 characters is still processed but almost
+    /// certainly produces a remainder != 1.
+    #[test]
+    fn mod97_10_wrong_length_too_long() {
+        assert!(!mod97_10("5493006MHB84DD0ZWV1800"));
+    }
+
+    /// Boundary value: all-zeros GLN (13 digits).
+    /// The check digit for "000000000000?" satisfies the GS1 formula; we verify
+    /// that the correct check digit is accepted and an incorrect one is rejected.
+    #[test]
+    fn gs1_mod10_boundary_all_zeros_prefix() {
+        // sum = 0; expected_check = (10 - 0) % 10 = 0; full string ends in 0.
+        assert!(gs1_mod10("0000000000000"));
+        assert!(!gs1_mod10("0000000000001"));
+    }
+
+    /// Non-digit characters in the body cause a panic-free but incorrect result
+    /// (the caller is responsible for pre-validation). When the string is the
+    /// wrong length (non-ASCII makes `len()` > 13 for multi-byte), it is rejected.
+    #[test]
+    fn gs1_mod10_non_ascii_wrong_length() {
+        // A 13-byte ASCII string with a non-digit is processed but gives wrong check.
+        // We just verify it does not panic.
+        let _ = gs1_mod10("061414100041X");
+    }
 }

@@ -142,4 +142,61 @@ mod tests {
         assert!(msg.contains("AB"), "display should include hex: {msg}");
         assert!(msg.contains("CD"), "display should include hex: {msg}");
     }
+
+    #[test]
+    fn detect_zstd_exact_magic_only() {
+        let input = [0x28u8, 0xB5, 0x2F, 0xFD];
+        assert_eq!(
+            detect_encoding(&input).expect("zstd exact magic"),
+            Encoding::Zstd
+        );
+    }
+
+    #[test]
+    fn detect_cbor_exact_tag_only() {
+        let input = [0xD9u8, 0xD9, 0xF7];
+        assert_eq!(
+            detect_encoding(&input).expect("cbor exact tag"),
+            Encoding::Cbor
+        );
+    }
+
+    #[test]
+    fn detect_json_with_leading_tab() {
+        let input = b"\t{\"key\":\"val\"}";
+        assert_eq!(
+            detect_encoding(input).expect("tab-prefixed json"),
+            Encoding::Json
+        );
+    }
+
+    #[test]
+    fn detect_json_with_leading_cr() {
+        let input = b"\r{\"key\":\"val\"}";
+        assert_eq!(
+            detect_encoding(input).expect("cr-prefixed json"),
+            Encoding::Json
+        );
+    }
+
+    #[test]
+    fn detect_error_stores_at_most_four_bytes() {
+        let input = [0x01u8, 0x02, 0x03, 0x04, 0x05, 0x06];
+        let err = detect_encoding(&input).expect_err("should fail");
+        assert_eq!(err.first_bytes.len(), 4);
+    }
+
+    #[test]
+    fn detect_error_stores_fewer_when_input_short() {
+        let input = [0x01u8, 0x02];
+        let err = detect_encoding(&input).expect_err("should fail");
+        assert_eq!(err.first_bytes, vec![0x01, 0x02]);
+    }
+
+    #[test]
+    fn encoding_eq_and_clone() {
+        assert_eq!(Encoding::Json, Encoding::Json.clone());
+        assert_ne!(Encoding::Json, Encoding::Cbor);
+        assert_ne!(Encoding::Cbor, Encoding::Zstd);
+    }
 }

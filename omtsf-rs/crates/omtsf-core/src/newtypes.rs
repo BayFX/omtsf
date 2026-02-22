@@ -810,4 +810,68 @@ mod tests {
         assert!(v.starts_with("1."));
         assert_eq!(v.len(), 5);
     }
+
+    /// `CalendarDate` shape-only check: Feb 30 passes the regex (digit pattern
+    /// only) but would be rejected by semantic validation elsewhere.
+    #[test]
+    fn calendar_date_shape_accepts_feb_30() {
+        CalendarDate::try_from("2026-02-30").expect("shape-only check accepts Feb 30");
+    }
+
+    /// `CalendarDate` shape-only check: month 13 passes the regex.
+    #[test]
+    fn calendar_date_shape_accepts_month_13() {
+        CalendarDate::try_from("2026-13-01").expect("shape-only check accepts month 13");
+    }
+
+    /// `FileSalt`: exactly 63 hex chars (one short) must be rejected.
+    #[test]
+    fn file_salt_reject_63_chars() {
+        let s = "a".repeat(63);
+        assert!(FileSalt::try_from(s.as_str()).is_err());
+    }
+
+    /// `FileSalt`: special characters (non-hex) in a 64-char string must be rejected.
+    #[test]
+    fn file_salt_reject_special_chars() {
+        let s = format!("{}{}", "a".repeat(63), "!");
+        assert!(FileSalt::try_from(s.as_str()).is_err());
+    }
+
+    /// `NodeId`: any non-empty string is valid regardless of length.
+    #[test]
+    fn node_id_valid_very_long_string() {
+        let long = "x".repeat(10_000);
+        NodeId::try_from(long.as_str()).expect("very long non-empty string is valid NodeId");
+    }
+
+    /// `NodeId`: special characters are allowed since the spec only requires non-empty.
+    #[test]
+    fn node_id_valid_special_chars() {
+        NodeId::try_from("!@#$%^&*()").expect("special chars are valid in NodeId");
+    }
+
+    /// `TryFrom<String>` path for `CalendarDate` rejects empty.
+    #[test]
+    fn calendar_date_owned_rejects_empty() {
+        assert!(CalendarDate::try_from(String::new()).is_err());
+    }
+
+    /// `TryFrom<String>` path for `FileSalt` rejects empty.
+    #[test]
+    fn file_salt_owned_rejects_empty() {
+        assert!(FileSalt::try_from(String::new()).is_err());
+    }
+
+    /// `TryFrom<String>` path for `CountryCode` rejects lowercase.
+    #[test]
+    fn country_code_owned_rejects_lowercase() {
+        assert!(CountryCode::try_from(String::from("us")).is_err());
+    }
+
+    /// `TryFrom<String>` path for `NodeId` rejects empty.
+    #[test]
+    fn node_id_owned_rejects_empty() {
+        assert!(NodeId::try_from(String::new()).is_err());
+    }
 }

@@ -228,4 +228,21 @@ mod tests {
         assert!(!uf.is_empty());
         assert_eq!(uf.len(), 3);
     }
+
+    #[test]
+    fn large_component_merge() {
+        const N: usize = 64;
+        let mut uf = UnionFind::new(N);
+        for i in 1..N {
+            uf.union(0, i);
+        }
+        let root = uf.find(0);
+        for i in 0..N {
+            assert_eq!(
+                uf.find(i),
+                root,
+                "element {i} should share the root after merging all into one component"
+            );
+        }
+    }
 }
