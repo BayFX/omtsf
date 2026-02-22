@@ -4,6 +4,7 @@ members = [
     "crates/omtsf-cli",
     "crates/omtsf-wasm",
     "crates/omtsf-bench",
+    "crates/omtsf-excel",
 ]
 resolver = "3"
 

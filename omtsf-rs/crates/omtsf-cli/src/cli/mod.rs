@@ -3,6 +3,17 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
+/// Import format for the `import` subcommand.
+///
+/// Currently only `excel` is supported. Additional formats (e.g. CSV, Parquet)
+/// may be added in future releases.
+#[non_exhaustive]
+#[derive(Clone, Debug, ValueEnum)]
+pub enum ImportFormat {
+    /// Microsoft Excel `.xlsx` format.
+    Excel,
+}
+
 /// A CLI argument that is either a filesystem path or the stdin sentinel `"-"`.
 ///
 /// Parsing `"-"` yields [`PathOrStdin::Stdin`]; anything else yields
@@ -261,6 +272,19 @@ pub enum Command {
         /// Generate a realistic example file instead of a minimal skeleton.
         #[arg(long)]
         example: bool,
+    },
+
+    /// Import a supply-chain graph from an external format (e.g. Excel).
+    Import {
+        /// Path to the input file (e.g. `.xlsx`).
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+        /// Input format. Only `excel` is currently supported.
+        #[arg(long = "input-format", default_value = "excel", value_enum)]
+        input_format: ImportFormat,
+        /// Write output to this file instead of stdout.
+        #[arg(long, short = 'o', value_name = "OUTPUT")]
+        output: Option<PathBuf>,
     },
 
     /// Query nodes and edges by property predicates.

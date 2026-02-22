@@ -1,0 +1,16 @@
+[package]
+name = "omtsf-excel"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+description = "Excel import for the Open Multi-Tier Supply-Chain Framework"
+license = "Apache-2.0"
+
+[dependencies]
+omtsf-core = { path = "../omtsf-core", version = "0.1.0" }
+calamine = "0.26"
+serde_json = "1"
+thiserror = "2"
+
+[lints]
+workspace = true

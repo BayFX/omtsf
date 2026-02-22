@@ -5,8 +5,8 @@ pub mod format;
 pub mod io;
 
 pub use cli::{
-    Cli, Command, Direction, DisclosureScope, MergeStrategy, OutputFormat, PathOrStdin,
-    TargetEncoding,
+    Cli, Command, Direction, DisclosureScope, ImportFormat, MergeStrategy, OutputFormat,
+    PathOrStdin, TargetEncoding,
 };
 
 use clap::Parser;
@@ -184,6 +184,12 @@ fn dispatch(cli: &Cli) -> Result<(), error::CliError> {
                 &cli.format,
             )
         }
+
+        Command::Import {
+            file,
+            input_format,
+            output,
+        } => cmd::import::run(file, input_format, output.as_deref()),
     }
 }
 
