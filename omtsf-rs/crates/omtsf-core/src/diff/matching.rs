@@ -26,10 +26,10 @@ pub(super) fn match_nodes(
         }
     };
 
-    let active_a: Vec<usize> = (0..nodes_a.len())
+    let active_a: HashSet<usize> = (0..nodes_a.len())
         .filter(|&i| node_type_allowed(&nodes_a[i]))
         .collect();
-    let active_b: Vec<usize> = (0..nodes_b.len())
+    let active_b: HashSet<usize> = (0..nodes_b.len())
         .filter(|&i| node_type_allowed(&nodes_b[i]))
         .collect();
 
