@@ -671,6 +671,222 @@ def populate_example_data(wb):
     ws["E4"] = "public"
 
 
+# ── Supplier List (simplified single-sheet template) ────────────────────────
+
+SUPPLIER_LIST_FILL = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+METADATA_LABEL_FONT = Font(name="Calibri", size=10, bold=True, color="2F5496")
+METADATA_VALUE_FONT = Font(name="Calibri", size=10)
+METADATA_FILL = PatternFill(start_color="D9E2F3", end_color="D9E2F3", fill_type="solid")
+
+
+def create_supplier_list_workbook():
+    """Create the simplified single-sheet OMTS supplier list workbook.
+
+    Layout:
+      Row 1-2: Metadata key-value pairs (reporting entity, snapshot date)
+      Row 3:   Blank separator
+      Row 4:   Column headers
+      Row 5+:  Data rows
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Supplier List"
+
+    # ── Metadata area (rows 1-2) ────────────────────────────────────────────
+
+    for col in range(1, 5):
+        ws.cell(row=1, column=col).fill = METADATA_FILL
+        ws.cell(row=2, column=col).fill = METADATA_FILL
+
+    ws.cell(row=1, column=1, value="Reporting Entity").font = METADATA_LABEL_FONT
+    ws.cell(row=1, column=2).font = METADATA_VALUE_FONT
+    ws.cell(row=1, column=3, value="Snapshot Date").font = METADATA_LABEL_FONT
+    ws.cell(row=1, column=4).font = METADATA_VALUE_FONT
+
+    ws.cell(row=2, column=1, value="Disclosure Scope").font = METADATA_LABEL_FONT
+    ws.cell(row=2, column=2).font = METADATA_VALUE_FONT
+
+    # Data validation for disclosure scope
+    dv_scope = DataValidation(
+        type="list", formula1='"internal,partner,public"', allow_blank=True
+    )
+    dv_scope.promptTitle = "Disclosure Scope"
+    dv_scope.prompt = "Who will see this file? (default: partner)"
+    dv_scope.showInputMessage = True
+    ws.add_data_validation(dv_scope)
+    dv_scope.add("B2")
+
+    # ── Column headers (row 4) ──────────────────────────────────────────────
+
+    headers = [
+        "supplier_name",        # A  REQUIRED
+        "jurisdiction",         # B  ISO 3166-1 alpha-2
+        "tier",                 # C  1, 2, or 3 (default: 1)
+        "parent_supplier",      # D  name of tier N-1 supplier (tier 2/3)
+        "commodity",            # E  what they supply
+        "valid_from",           # F  relationship start (YYYY-MM-DD)
+        "annual_value",         # G
+        "value_currency",       # H  ISO 4217
+        "contract_ref",         # I
+        "lei",                  # J
+        "duns",                 # K
+        "vat",                  # L
+        "vat_country",          # M  ISO 3166-1 alpha-2
+        "internal_id",          # N
+        "risk_tier",            # O  label
+        "kraljic_quadrant",     # P  label
+        "approval_status",      # Q  label
+        "notes",                # R  free text (not imported into graph)
+    ]
+
+    HEADER_ROW = 4
+    for col, header in enumerate(headers, start=1):
+        cell = ws.cell(row=HEADER_ROW, column=col, value=header)
+        cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        cell.fill = SUPPLIER_LIST_FILL
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = THIN_BORDER
+
+    ws.row_dimensions[HEADER_ROW].height = 30
+    ws.auto_filter.ref = f"A{HEADER_ROW}:R{HEADER_ROW}"
+
+    # ── Data validations ────────────────────────────────────────────────────
+
+    dv_tier = DataValidation(type="list", formula1='"1,2,3"', allow_blank=True)
+    dv_tier.promptTitle = "Tier"
+    dv_tier.prompt = "Supply-chain tier: 1 = direct, 2 = sub-supplier, 3 = sub-sub-supplier"
+    dv_tier.showInputMessage = True
+    dv_tier.showErrorMessage = True
+    ws.add_data_validation(dv_tier)
+    dv_tier.add("C5:C10000")
+
+    dv_risk = DataValidation(
+        type="list", formula1='"critical,high,medium,low"', allow_blank=True
+    )
+    dv_risk.promptTitle = "Risk Tier"
+    dv_risk.prompt = "General risk classification"
+    dv_risk.showInputMessage = True
+    ws.add_data_validation(dv_risk)
+    dv_risk.add("O5:O10000")
+
+    dv_kraljic = DataValidation(
+        type="list",
+        formula1='"strategic,leverage,bottleneck,non-critical"',
+        allow_blank=True,
+    )
+    dv_kraljic.promptTitle = "Kraljic Quadrant"
+    dv_kraljic.prompt = "Kraljic portfolio classification"
+    dv_kraljic.showInputMessage = True
+    ws.add_data_validation(dv_kraljic)
+    dv_kraljic.add("P5:P10000")
+
+    dv_approval = DataValidation(
+        type="list",
+        formula1='"approved,conditional,pending,blocked,phase-out"',
+        allow_blank=True,
+    )
+    dv_approval.promptTitle = "Approval Status"
+    dv_approval.prompt = "Supplier approval status"
+    dv_approval.showInputMessage = True
+    ws.add_data_validation(dv_approval)
+    dv_approval.add("Q5:Q10000")
+
+    # ── Column widths ───────────────────────────────────────────────────────
+
+    set_col_widths(ws, {
+        "A": 30, "B": 14, "C": 8, "D": 30, "E": 20, "F": 14,
+        "G": 14, "H": 14, "I": 16, "J": 24, "K": 14, "L": 20,
+        "M": 14, "N": 16, "O": 12, "P": 18, "Q": 16, "R": 30,
+    })
+
+    return wb
+
+
+def populate_supplier_list_example(wb):
+    """Populate the supplier list with a realistic procurement scenario.
+
+    Scenario: Acme Manufacturing's direct and tier-2/3 supplier list for
+    steel fastener procurement.
+    """
+    ws = wb["Supplier List"]
+
+    # Metadata
+    ws["B1"] = "Acme Manufacturing GmbH"
+    ws["D1"] = "2026-02-22"
+    ws["B2"] = "partner"
+
+    # Row 5: Tier 1 — direct supplier
+    ws["A5"] = "Bolt Supplies Ltd"
+    ws["B5"] = "GB"
+    ws["C5"] = 1
+    ws["E5"] = "7318.15"
+    ws["F5"] = "2023-01-15"
+    ws["G5"] = 450000
+    ws["H5"] = "EUR"
+    ws["I5"] = "MSA-2023-001"
+    ws["K5"] = "234567890"
+    ws["O5"] = "low"
+    ws["P5"] = "strategic"
+    ws["Q5"] = "approved"
+
+    # Row 6: Tier 1 — direct supplier
+    ws["A6"] = "Nordic Fasteners AB"
+    ws["B6"] = "SE"
+    ws["C6"] = 1
+    ws["E6"] = "7318.15"
+    ws["F6"] = "2024-06-01"
+    ws["G6"] = 120000
+    ws["H6"] = "EUR"
+    ws["J6"] = "7317ABCDE1234567890"
+    ws["O6"] = "medium"
+    ws["P6"] = "leverage"
+    ws["Q6"] = "conditional"
+    ws["R6"] = "Under evaluation; trial order in progress"
+
+    # Row 7: Tier 1 — direct supplier
+    ws["A7"] = "Shanghai Steel Components Co"
+    ws["B7"] = "CN"
+    ws["C7"] = 1
+    ws["E7"] = "7228.70"
+    ws["F7"] = "2022-03-01"
+    ws["G7"] = 800000
+    ws["H7"] = "USD"
+    ws["I7"] = "FWA-2022-008"
+    ws["N7"] = "V-200891"
+    ws["O7"] = "high"
+    ws["P7"] = "bottleneck"
+    ws["Q7"] = "approved"
+
+    # Row 8: Tier 2 — sub-supplier of Bolt Supplies
+    ws["A8"] = "Yorkshire Steel Works"
+    ws["B8"] = "GB"
+    ws["C8"] = 2
+    ws["D8"] = "Bolt Supplies Ltd"
+    ws["E8"] = "7208.10"
+    ws["F8"] = "2021-09-01"
+    ws["O8"] = "low"
+    ws["Q8"] = "approved"
+
+    # Row 9: Tier 2 — sub-supplier of Shanghai Steel
+    ws["A9"] = "Baosteel Trading Co"
+    ws["B9"] = "CN"
+    ws["C9"] = 2
+    ws["D9"] = "Shanghai Steel Components Co"
+    ws["E9"] = "7207.11"
+    ws["F9"] = "2020-01-15"
+    ws["O9"] = "high"
+    ws["R9"] = "Primary raw material supplier for Shanghai Steel"
+
+    # Row 10: Tier 3 — sub-supplier of Baosteel
+    ws["A10"] = "Inner Mongolia Mining Corp"
+    ws["B10"] = "CN"
+    ws["C10"] = 3
+    ws["D10"] = "Baosteel Trading Co"
+    ws["E10"] = "2601.11"
+    ws["O10"] = "critical"
+    ws["R10"] = "Iron ore source; LKSG high-risk region"
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def create_workbook():
@@ -696,18 +912,31 @@ def create_workbook():
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # Generate empty template
+    # Generate empty full template
     wb_template = create_workbook()
     template_path = os.path.join(script_dir, "omts-import-template.xlsx")
     wb_template.save(template_path)
     print(f"Created: {template_path}")
 
-    # Generate example with data
+    # Generate full template with example data
     wb_example = create_workbook()
     populate_example_data(wb_example)
     example_path = os.path.join(script_dir, "omts-import-example.xlsx")
     wb_example.save(example_path)
     print(f"Created: {example_path}")
+
+    # Generate empty supplier list template
+    wb_sl_template = create_supplier_list_workbook()
+    sl_template_path = os.path.join(script_dir, "omts-supplier-list-template.xlsx")
+    wb_sl_template.save(sl_template_path)
+    print(f"Created: {sl_template_path}")
+
+    # Generate supplier list with example data
+    wb_sl_example = create_supplier_list_workbook()
+    populate_supplier_list_example(wb_sl_example)
+    sl_example_path = os.path.join(script_dir, "omts-supplier-list-example.xlsx")
+    wb_sl_example.save(sl_example_path)
+    print(f"Created: {sl_example_path}")
 
 
 if __name__ == "__main__":
