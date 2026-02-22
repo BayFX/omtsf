@@ -34,6 +34,21 @@ impl std::fmt::Display for CborError {
 
 impl std::error::Error for CborError {}
 
+/// Estimates the CBOR-encoded size of an [`OmtsFile`] in bytes.
+///
+/// Uses a conservative per-element heuristic derived from benchmark data:
+/// an XL file with 5 000 nodes + 10 007 edges encodes to ~2 507 KB, which
+/// is ~167 bytes per element. Rounding up to 200 bytes per element gives a
+/// slight overestimate that avoids reallocations for typical files. A fixed
+/// `HEADER_OVERHEAD` accounts for top-level scalar fields regardless of the
+/// node/edge count.
+fn estimate_cbor_size(file: &OmtsFile) -> usize {
+    const HEADER_OVERHEAD: usize = 256;
+    const BYTES_PER_NODE: usize = 200;
+    const BYTES_PER_EDGE: usize = 200;
+    HEADER_OVERHEAD + file.nodes.len() * BYTES_PER_NODE + file.edges.len() * BYTES_PER_EDGE
+}
+
 /// Encodes an [`OmtsFile`] to CBOR bytes.
 ///
 /// Prepends the self-describing CBOR tag 55799 (`0xD9 0xD9 0xF7`) so that
@@ -41,7 +56,8 @@ impl std::error::Error for CborError {}
 /// All map keys are emitted as CBOR text strings; date fields are text strings
 /// in `YYYY-MM-DD` form per SPEC-007 Section 4.2.
 pub fn encode_cbor(file: &OmtsFile) -> Result<Vec<u8>, CborError> {
-    let mut buf = Vec::from(SELF_DESCRIBING_TAG_BYTES);
+    let mut buf = Vec::with_capacity(estimate_cbor_size(file) + SELF_DESCRIBING_TAG_BYTES.len());
+    buf.extend_from_slice(&SELF_DESCRIBING_TAG_BYTES);
     ciborium::into_writer(file, &mut buf).map_err(|e| CborError::Encode(e.to_string()))?;
     Ok(buf)
 }
