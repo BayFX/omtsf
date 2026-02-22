@@ -5,7 +5,7 @@ use crate::newtypes::{EdgeId, NodeId};
 use crate::structures::{Edge, Node};
 use crate::types::{Identifier, Label};
 
-use super::helpers::tag_to_string;
+use super::helpers::{edge_type_str, node_type_str};
 
 /// A lightweight reference to a node, carrying just enough information for
 /// readable diff output without cloning the full [`Node`].
@@ -23,7 +23,7 @@ impl NodeRef {
     pub(super) fn from_node(node: &Node) -> Self {
         Self {
             id: node.id.clone(),
-            node_type: tag_to_string(&node.node_type),
+            node_type: node_type_str(&node.node_type).to_owned(),
             name: node.name.clone(),
         }
     }
@@ -46,7 +46,7 @@ impl EdgeRef {
     pub(super) fn from_edge(edge: &Edge) -> Self {
         Self {
             id: edge.id.clone(),
-            edge_type: tag_to_string(&edge.edge_type),
+            edge_type: edge_type_str(&edge.edge_type).to_owned(),
             source: edge.source.clone(),
             target: edge.target.clone(),
         }

@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use crate::file::OmtsFile;
 use crate::types::{Identifier, Label};
 
-use super::helpers::tag_to_string;
+use super::helpers::{edge_type_str, node_type_str};
 use super::matching::{match_edges, match_nodes};
 use super::props::{
     compare_edge_props, compare_identifiers, compare_labels, compare_node_properties,
@@ -84,7 +84,7 @@ pub fn diff_filtered(a: &OmtsFile, b: &OmtsFile, filter: Option<&DiffFilter>) ->
         let nd = NodeDiff {
             id_a: node_a.id.to_string(),
             id_b: node_b.id.to_string(),
-            node_type: tag_to_string(&node_a.node_type),
+            node_type: node_type_str(&node_a.node_type).to_owned(),
             matched_by: matched_by.clone(),
             property_changes,
             identifier_changes,
@@ -142,7 +142,7 @@ pub fn diff_filtered(a: &OmtsFile, b: &OmtsFile, filter: Option<&DiffFilter>) ->
         let ed = EdgeDiff {
             id_a: edge_a.id.to_string(),
             id_b: edge_b.id.to_string(),
-            edge_type: tag_to_string(&edge_a.edge_type),
+            edge_type: edge_type_str(&edge_a.edge_type).to_owned(),
             property_changes,
             identifier_changes,
             label_changes,

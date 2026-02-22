@@ -50,6 +50,31 @@ pub enum NodeTypeTag {
     Extension(String),
 }
 
+impl NodeTypeTag {
+    /// Returns the `snake_case` string representation of the tag.
+    ///
+    /// For known variants this is a `&'static str` with no allocation.
+    /// For extension variants the inner `String` is returned by reference.
+    pub fn as_str(&self) -> &str {
+        match self {
+            NodeTypeTag::Known(NodeType::Organization) => "organization",
+            NodeTypeTag::Known(NodeType::Facility) => "facility",
+            NodeTypeTag::Known(NodeType::Good) => "good",
+            NodeTypeTag::Known(NodeType::Person) => "person",
+            NodeTypeTag::Known(NodeType::Attestation) => "attestation",
+            NodeTypeTag::Known(NodeType::Consignment) => "consignment",
+            NodeTypeTag::Known(NodeType::BoundaryRef) => "boundary_ref",
+            NodeTypeTag::Extension(s) => s.as_str(),
+        }
+    }
+}
+
+impl AsRef<str> for NodeTypeTag {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 impl Serialize for NodeTypeTag {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
@@ -149,6 +174,40 @@ pub enum EdgeTypeTag {
     Known(EdgeType),
     /// An extension or future edge type not yet recognised by this crate.
     Extension(String),
+}
+
+impl EdgeTypeTag {
+    /// Returns the `snake_case` string representation of the tag.
+    ///
+    /// For known variants this is a `&'static str` with no allocation.
+    /// For extension variants the inner `String` is returned by reference.
+    pub fn as_str(&self) -> &str {
+        match self {
+            EdgeTypeTag::Known(EdgeType::Ownership) => "ownership",
+            EdgeTypeTag::Known(EdgeType::OperationalControl) => "operational_control",
+            EdgeTypeTag::Known(EdgeType::LegalParentage) => "legal_parentage",
+            EdgeTypeTag::Known(EdgeType::FormerIdentity) => "former_identity",
+            EdgeTypeTag::Known(EdgeType::BeneficialOwnership) => "beneficial_ownership",
+            EdgeTypeTag::Known(EdgeType::Supplies) => "supplies",
+            EdgeTypeTag::Known(EdgeType::Subcontracts) => "subcontracts",
+            EdgeTypeTag::Known(EdgeType::Tolls) => "tolls",
+            EdgeTypeTag::Known(EdgeType::Distributes) => "distributes",
+            EdgeTypeTag::Known(EdgeType::Brokers) => "brokers",
+            EdgeTypeTag::Known(EdgeType::Operates) => "operates",
+            EdgeTypeTag::Known(EdgeType::Produces) => "produces",
+            EdgeTypeTag::Known(EdgeType::ComposedOf) => "composed_of",
+            EdgeTypeTag::Known(EdgeType::SellsTo) => "sells_to",
+            EdgeTypeTag::Known(EdgeType::AttestedBy) => "attested_by",
+            EdgeTypeTag::Known(EdgeType::SameAs) => "same_as",
+            EdgeTypeTag::Extension(s) => s.as_str(),
+        }
+    }
+}
+
+impl AsRef<str> for EdgeTypeTag {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
 }
 
 impl Serialize for EdgeTypeTag {
