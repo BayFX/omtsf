@@ -687,7 +687,7 @@ pub fn merge_with_config(
     let metadata = MergeMetadata {
         source_files: source_files.clone(),
         reporting_entities: reporting_entities.clone(),
-        timestamp: "2026-02-20T00:00:00Z".to_owned(),
+        timestamp: now_utc_iso8601(),
         merged_node_count: output_nodes.len(),
         merged_edge_count: output_edges.len(),
         conflict_count,
@@ -732,6 +732,49 @@ pub fn merge_with_config(
         warnings,
         conflict_count,
     })
+}
+
+/// Returns the current UTC time as an ISO 8601 string (`YYYY-MM-DDTHH:MM:SSZ`).
+///
+/// Uses [`std::time::SystemTime`] and Unix epoch arithmetic to avoid any
+/// external dependency. WASM-safe: on WASM targets `SystemTime::now()` returns
+/// the Unix epoch (1970-01-01T00:00:00Z), which is a defined behaviour rather
+/// than an error.
+fn now_utc_iso8601() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    let (year, month, day, hour, minute, second) = epoch_secs_to_ymdhms(secs);
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
+}
+
+/// Converts a Unix timestamp in seconds to `(year, month, day, hour, minute, second)`.
+///
+/// Uses the proleptic Gregorian calendar algorithm from
+/// <http://howardhinnant.github.io/date_algorithms.html>. Accurate for all dates
+/// from 1970-01-01 onwards.
+fn epoch_secs_to_ymdhms(secs: u64) -> (u32, u32, u32, u32, u32, u32) {
+    let second = (secs % 60) as u32;
+    let minutes_total = secs / 60;
+    let minute = (minutes_total % 60) as u32;
+    let hours_total = minutes_total / 60;
+    let hour = (hours_total % 24) as u32;
+    let days = (hours_total / 24) as u32;
+
+    let z = days + 719_468;
+    let era = z / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+
+    (y, m, d, hour, minute, second)
 }
 
 /// Merges N optional scalar values using [`merge_scalars`], returning the
