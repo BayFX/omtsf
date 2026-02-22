@@ -787,6 +787,165 @@
 
 ---
 
+## Phase 11: Performance Optimization
+
+Findings from a parallel performance review of the codebase by two independent
+senior Rust engineers. Tasks are ordered by estimated impact.
+
+### T-059 -- Eliminate exponential cloning in `all_paths` query
+
+- **Spec Reference:** graph-engine.md Section 4
+- **Dependencies:** T-020
+- **Complexity:** M
+- **Crate:** omtsf-core
+- **Location:** `graph/queries/mod.rs:326-381`
+- **Issue:** Each IDDFS stack frame clones both `path: Vec<NodeIndex>` and `on_path: HashSet<NodeIndex>` for every neighbour explored. The `seen_paths: HashSet<Vec<NodeIndex>>` also hashes full path vectors. At M tier / depth 10, this costs 193 ms — the single slowest benchmark.
+- **Acceptance Criteria:**
+  - Replace per-frame clone with a single mutable path vector using push/pop backtracking
+  - Replace `on_path` HashSet clones with a `Vec<bool>` or bitset indexed by `NodeIndex`, toggled on push/pop
+  - `seen_paths` deduplication replaced with rolling hash or sorted insertion check
+  - `all_paths` M/depth_10 benchmark improves by at least 10x
+  - All existing `all_paths` tests continue to pass with identical results
+
+### T-060 -- Fix O(N*E) node lookup in diff edge matching
+
+- **Spec Reference:** diff.md Section 2.2
+- **Dependencies:** T-035
+- **Complexity:** S
+- **Crate:** omtsf-core
+- **Location:** `diff/matching.rs:219-233`
+- **Issue:** `node_type_allowed_for_id` closure does a linear search through ALL `nodes_a` and `nodes_b` to find a node by its ID string. Called for every edge endpoint, this is O(N) per call, O(N*E) total.
+- **Acceptance Criteria:**
+  - Pre-build `HashMap<&str, &Node>` for both `nodes_a` and `nodes_b` before edge matching begins
+  - `node_type_allowed_for_id` uses O(1) HashMap lookup instead of linear scan
+  - Diff L/XL benchmarks show measurable improvement
+  - All existing diff tests continue to pass
+
+### T-061 -- Replace Vec.contains() with HashSet in diff node matching
+
+- **Spec Reference:** diff.md Section 2.1
+- **Dependencies:** T-035
+- **Complexity:** S
+- **Crate:** omtsf-core
+- **Location:** `diff/matching.rs:54`
+- **Issue:** `active_a` and `active_b` are `Vec<usize>` and containment is checked with `.contains()` which is O(N) linear scan per call, inside a nested loop over all identifier buckets.
+- **Acceptance Criteria:**
+  - Replace `active_a` and `active_b` with `HashSet<usize>` or `Vec<bool>` for O(1) lookup
+  - All existing diff tests continue to pass
+
+### T-062 -- Eliminate double String allocation in newtype deserialization
+
+- **Spec Reference:** data-model.md Section 3
+- **Dependencies:** T-003
+- **Complexity:** S
+- **Crate:** omtsf-core
+- **Location:** `newtypes.rs:171-174` (SemVer), `:221-225` (CalendarDate), `:270-274` (FileSalt), `:320-324` (NodeId), `:374-378` (CountryCode)
+- **Issue:** Every newtype's `Deserialize` impl does `String::deserialize(d)?` then calls `Self::try_from(s.as_str())`, which internally calls `s.to_owned()` — allocating a second copy. The original String is dropped. At Huge tier, NodeId alone accounts for ~7-10M unnecessary String allocations.
+- **Acceptance Criteria:**
+  - Add `TryFrom<String>` impl to each newtype that moves the String instead of cloning
+  - Update `Deserialize` impls to use `TryFrom<String>` for the owned-String path
+  - Huge-tier CBOR decode benchmark shows measurable improvement (~5-8%)
+  - All existing tests continue to pass
+
+### T-063 -- Visitor-based deserialization for NodeTypeTag/EdgeTypeTag
+
+- **Spec Reference:** data-model.md Section 4.1
+- **Dependencies:** T-004
+- **Complexity:** M
+- **Crate:** omtsf-core
+- **Location:** `enums.rs:63-71` (NodeTypeTag), `:133-142` (EdgeTypeTag)
+- **Issue:** Deserializes into a full `String`, then creates a `StrDeserializer` to try `NodeType::deserialize()`. For known types (the vast majority), the String is allocated and immediately dropped. ~2.2M unnecessary String allocations at Huge tier.
+- **Acceptance Criteria:**
+  - Implement custom `Visitor` with `visit_str` that matches known variants by `&str` without allocation
+  - `visit_string` captures the owned String only for `Extension` variants
+  - All existing enum serde tests continue to pass
+  - Decode benchmarks show ~2-4% improvement at L+ tiers
+
+### T-064 -- Fix O(N*E) edge scan in L3-MRG-01 validation rule
+
+- **Spec Reference:** validation.md Section 4.3
+- **Dependencies:** T-017
+- **Complexity:** S
+- **Crate:** omtsf-core
+- **Location:** `validation/rules_l3.rs:105-171`
+- **Issue:** For each organization node, the rule scans ALL edges to find ownership edges targeting that node. With N org nodes and E edges, this is O(N*E). Same pattern as the L2 O(E*N) bug that was already fixed.
+- **Acceptance Criteria:**
+  - Pre-build `HashMap<&str, Vec<&Edge>>` keyed by target node ID, filtered to ownership edges
+  - Each org node lookup is O(1) amortized; total becomes O(N+E)
+  - Validation benchmarks at L+ tiers show measurable improvement
+  - All existing validation tests continue to pass
+
+### T-065 -- Eliminate String allocations in build_graph
+
+- **Spec Reference:** graph-engine.md Section 2
+- **Dependencies:** T-018
+- **Complexity:** M
+- **Crate:** omtsf-core
+- **Location:** `graph/mod.rs:230-267`
+- **Issue:** Two sources of unnecessary allocation: (1) `edge.source.to_string()` and `edge.target.to_string()` allocate new Strings solely for HashMap lookups (~3M allocations at Huge tier); (2) `node.id.to_string()` creates a String, then `local_id.clone()` creates a second copy for NodeWeight (~1.5M extra allocations).
+- **Acceptance Criteria:**
+  - Use `&str` borrows from node/edge IDs for HashMap lookups (via `HashMap::get<Q>` where `String: Borrow<str>`)
+  - Eliminate or reduce the double String allocation for node IDs in NodeWeight (e.g., store data_index and look up ID via file reference, or use single owned String)
+  - Huge-tier graph construction benchmark shows ~5-10% improvement
+  - All existing graph tests continue to pass
+
+### T-066 -- Replace serde_json tag_to_string with direct enum-to-str
+
+- **Spec Reference:** diff.md Section 2
+- **Dependencies:** T-035
+- **Complexity:** S
+- **Crate:** omtsf-core
+- **Location:** `diff/helpers.rs:8-14`
+- **Issue:** Uses `serde_json::to_value()` to convert an enum tag to a string — allocates a full `serde_json::Value` just to extract a `String`. Called very frequently throughout diff and edge matching.
+- **Acceptance Criteria:**
+  - Implement `AsRef<str>` or a method returning `&str` / `Cow<str>` on `NodeTypeTag` and `EdgeTypeTag`
+  - `tag_to_string` replaced with zero-allocation string access for known variants
+  - Extension variants return the inner String by reference
+  - All existing diff tests continue to pass
+
+### T-067 -- Return iterator from neighbours() instead of Vec allocation
+
+- **Spec Reference:** graph-engine.md Section 3
+- **Dependencies:** T-018
+- **Complexity:** M
+- **Crate:** omtsf-core
+- **Location:** `graph/queries/mod.rs:86-125`
+- **Issue:** `neighbours()` allocates a new `Vec<NodeIndex>` on every call during BFS traversal (reachability, shortest path, ego graph, etc.).
+- **Acceptance Criteria:**
+  - `neighbours()` returns an iterator (or accepts a `&mut Vec<NodeIndex>` buffer) instead of allocating
+  - All BFS/DFS callers updated to use the iterator or reusable buffer pattern
+  - Graph query benchmarks show measurable improvement at L+ tiers
+  - All existing graph query tests continue to pass
+
+### T-068 -- Reuse identifier index in merge pipeline
+
+- **Spec Reference:** merge.md Section 8
+- **Dependencies:** T-029
+- **Complexity:** S
+- **Crate:** omtsf-core
+- **Location:** `merge_pipeline/pipeline.rs:444-463`
+- **Issue:** `node_rep_to_canonical` iterates ALL nodes and recomputes `CanonicalId` for every identifier. The identifier index with canonical IDs was already built earlier in the pipeline (lines 65-83). This is redundant work.
+- **Acceptance Criteria:**
+  - Reuse the identifier index already computed at the start of the pipeline
+  - Eliminate the redundant `CanonicalId` computation pass
+  - All existing merge tests continue to pass (including proptest algebraic properties)
+
+### T-069 -- Pre-compute lowercased selector patterns
+
+- **Spec Reference:** graph-engine.md Section 5
+- **Dependencies:** T-021
+- **Complexity:** S
+- **Crate:** omtsf-core
+- **Location:** `graph/selectors/mod.rs:228-237`
+- **Issue:** `matches_node` calls `name.to_lowercase()` and `pat.to_lowercase()` on every selector evaluation. For `selector_subgraph` iterating all nodes, this allocates new strings per node per pattern.
+- **Acceptance Criteria:**
+  - Pre-compute lowercased patterns at `SelectorSet` construction time
+  - Compute `to_lowercase()` once per node evaluation, not per pattern
+  - Selector match benchmarks show measurable improvement
+  - All existing selector tests continue to pass
+
+---
+
 ## Notes: Spec Ambiguities Discovered During Planning
 
 1. **`control_type` disambiguation (data-model.md Section 4.5).** The spec reuses the JSON key `"control_type"` across two edge types with disjoint variant sets (`operational_control` vs `beneficial_ownership`). The data model stores this as `serde_json::Value`. Implementors should verify that the validation engine enforces the correct variant set per edge type, and that the diff engine compares `control_type` values structurally without assuming a single enum.
