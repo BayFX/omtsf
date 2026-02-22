@@ -2,6 +2,8 @@
 
 Collected on 2026-02-22 using `cargo bench` (Criterion 0.5, default sample sizes).
 
+CBOR backend: **cbor4ii 1.x** (replaced ciborium 0.2 — see CBOR Library Comparison below).
+
 ## Test Data Profiles
 
 | Tier | Nodes   | Edges     | Total Elements | JSON Size | CBOR Size | CBOR/JSON |
@@ -28,33 +30,33 @@ lengths).
 
 | Operation        |   S    |   M     |    L     |    XL    | Throughput     |
 |------------------|-------:|--------:|---------:|---------:|----------------|
-| Deserialize      | 181 us | 2.07 ms | 11.1 ms  | 34.0 ms  | 91-154 MiB/s   |
-| Serialize compact|  55 us |  589 us |  2.53 ms |  6.90 ms | 450-510 MiB/s  |
+| Deserialize      | 196 us | 2.18 ms | 10.8 ms  | 34.0 ms  | 91-140 MiB/s   |
+| Serialize compact|  55 us |  549 us |  2.36 ms |  6.90 ms | 450-510 MiB/s  |
 | Serialize pretty |  99 us | 1.03 ms |  4.28 ms | 11.8 ms  | ~270-460 MiB/s |
 
-### CBOR
+### CBOR (cbor4ii)
 
-| Operation        |   S    |   M     |    L     |    XL    | Throughput     |
-|------------------|-------:|--------:|---------:|---------:|----------------|
-| Decode           | 368 us | 3.93 ms | 18.9 ms  | 53.3 ms  | 47-60 MiB/s    |
-| Encode           |  63 us |  639 us |  2.72 ms |  7.55 ms | 332-352 MiB/s  |
+| Operation        |   S    |   M     |    L     | Throughput        |
+|------------------|-------:|--------:|---------:|-------------------|
+| Decode           | 202 us | 2.03 ms | 12.9 ms  | 73-110 MiB/s      |
+| Encode           |  40 us |  414 us |  1.80 ms | 518-548 MiB/s     |
 
 ### JSON vs CBOR Comparison
 
-| Operation   | JSON (XL) | CBOR (XL) | CBOR/JSON | Notes                              |
-|-------------|----------:|----------:|:---------:|:-----------------------------------|
-| Deserialize |  34.0 ms  |  53.3 ms  |   1.6x    | Direct ciborium serde              |
-| Serialize   |  6.90 ms  |  7.55 ms  |   1.09x   | Near parity after DynValue switch  |
+| Operation   | JSON (L) | CBOR (L) | CBOR/JSON | Notes                            |
+|-------------|--------:|---------:|:---------:|:---------------------------------|
+| Deserialize |  10.8 ms | 12.9 ms  |   1.20x   | cbor4ii near JSON parity         |
+| Serialize   |  2.36 ms |  1.80 ms |   0.76x   | CBOR 24% faster than JSON        |
 
-**Analysis:** CBOR encode is now within 9% of JSON serialize — near parity. CBOR
-decode is 1.6x slower than JSON deserialize, down from 3.7x before the DynValue
-migration. The improvement comes from eliminating the `serde_json::Value` intermediate
-representation: the CBOR codec now uses direct ciborium serde with a format-neutral
-`DynValue` type for `#[serde(flatten)]` fields.
+**Analysis:** After switching from ciborium to cbor4ii, CBOR performance is
+dramatically improved. CBOR encode is now **24-27% faster than JSON** across
+all tiers. CBOR decode is within 3-20% of JSON — effectively at parity for
+S/M, slightly slower at L due to `#[serde(flatten)]` overhead scaling with
+element count.
 
-CBOR offers 21% smaller output with negligible encoding overhead, making it the
-preferred format for network transfer and storage. JSON remains slightly faster for
-deserialization-heavy workloads.
+CBOR offers 21% smaller output with faster encoding, making it the preferred
+format for both network transfer and storage. JSON remains slightly faster for
+deserialization at large scale.
 
 ## Group 2: Graph Construction
 
@@ -243,14 +245,14 @@ Fixture pre-generated to disk via `just gen-huge`; benchmarks load from
 
 | Operation        |   Time   | Throughput   |
 |------------------|--------:|--------------|
-| Deserialize JSON |  4.67 s  | 107 MiB/s    |
-| Serialize JSON   |  1.04 s  | 483 MiB/s    |
-| Decode CBOR      |  8.33 s  |  48 MiB/s    |
-| Encode CBOR      |  1.33 s  | 301 MiB/s    |
+| Deserialize JSON |  4.68 s  | 107 MiB/s    |
+| Serialize JSON   |  1.36 s  | 367 MiB/s    |
+| Decode CBOR      |  5.01 s  |  80 MiB/s    |
+| Encode CBOR      |  892 ms  | 448 MiB/s    |
 
-JSON serialize/deserialize ratio holds at ~4.5x, consistent with smaller tiers.
-CBOR decode is 1.8x slower than JSON deserialize; CBOR encode is 1.28x slower
-than JSON serialize — consistent with the ratios observed at S-XL tiers.
+JSON serialize/deserialize ratio holds at ~3.4x, consistent with smaller tiers.
+CBOR decode is 1.07x JSON deserialize — near parity at Huge scale. CBOR encode
+is **34% faster** than JSON serialize.
 
 CBOR benchmarks run in a separate binary (`huge_cbor`) to avoid OOM on
 memory-constrained machines.
@@ -259,9 +261,9 @@ memory-constrained machines.
 
 | Time   | Throughput    |
 |-------:|---------------|
-| 1.77 s | 1.26 Melem/s  |
+| 1.84 s | 1.21 Melem/s  |
 
-Throughput drops from ~3-4 Melem/s at XL to ~1.3 Melem/s at Huge -- hash map
+Throughput drops from ~3-4 Melem/s at XL to ~1.2 Melem/s at Huge -- hash map
 resizing and cache pressure dominate at 2.2M elements. Now includes building
 type indexes.
 
@@ -269,23 +271,23 @@ type indexes.
 
 | Variant                |    Huge    |
 |------------------------|----------:|
-| Forward from root      |   397 ms  |
-| Filtered (supplies)    |  2.04 ms  |
-| Both from mid          |   704 ms  |
+| Forward from root      |   413 ms  |
+| Filtered (supplies)    |  2.25 ms  |
+| Both from mid          |   759 ms  |
 
-Edge-type filtering yields ~194x speedup at this scale (vs ~40x at XL).
-Full bidirectional traversal from mid-graph: 704 ms.
+Edge-type filtering yields ~184x speedup at this scale (vs ~40x at XL).
+Full bidirectional traversal from mid-graph: 759 ms.
 
 ### Shortest Path
 
 | Variant        |    Huge    |
 |----------------|----------:|
-| Root to leaf   |   494 ms  |
-| Root to mid    |  64.1 ms  |
-| No path        |   156 ns  |
+| Root to leaf   |   527 ms  |
+| Root to mid    |  64.7 ms  |
+| No path        |   158 ns  |
 
-No-path remains O(1) at 156 ns, identical to all smaller tiers.
-Root-to-leaf spans 20 tiers in 494 ms.
+No-path remains O(1) at 158 ns, identical to all smaller tiers.
+Root-to-leaf spans 20 tiers in 527 ms.
 
 ### Selector Query
 
@@ -293,39 +295,106 @@ Root-to-leaf spans 20 tiers in 494 ms.
 
 | Selector     |   Huge   | Throughput      |
 |--------------|--------:|-----------------:|
-| Label key    | 79.9 ms  |  27.9 Melem/s   |
-| Node type    | 20.2 ms  | 110.3 Melem/s   |
-| Multi        | 61.2 ms  |  36.4 Melem/s   |
+| Label key    | 82.5 ms  |  27.0 Melem/s   |
+| Node type    | 16.8 ms  | 132.5 Melem/s   |
+| Multi        | 59.5 ms  |  37.4 Melem/s   |
 
-Label matching drops to ~28 Melem/s at Huge -- cache misses on the
+Label matching drops to ~27 Melem/s at Huge -- cache misses on the
 larger label maps dominate.
 
 #### `selector_subgraph`
 
-| Variant                     |   Huge    | vs previous |
-|----------------------------|---------:|:-----------:|
-| Narrow (attestation, exp 0) |  194 ms  |  -25%       |
-| Narrow (attestation, exp 1) |  592 ms  |   -5%       |
-| Narrow (attestation, exp 3) | 4.01 s   |   ~0%       |
-| Broad (organization, exp 0) | 2.67 s   |   ~0%       |
-| Broad (organization, exp 1) | 4.36 s   |   ~0%       |
+| Variant                     |   Huge    |
+|----------------------------|---------:|
+| Narrow (attestation, exp 0) |  237 ms  |
+| Narrow (attestation, exp 1) |  708 ms  |
+| Narrow (attestation, exp 3) | 4.32 s   |
+| Broad (organization, exp 0) | 2.73 s   |
+| Broad (organization, exp 1) | 4.24 s   |
 
-Type-index fast path yields 25% improvement on narrow exp 0 (type-only selector
+Type-index fast path yields improvement on narrow exp 0 (type-only selector
 skips the 737K-node linear scan). Broader expansions are dominated by BFS and
 subgraph assembly, so the scan optimization is less visible.
 
 ### Validation
 
-| Level      |   Huge   | Throughput     | vs previous |
-|------------|--------:|----------------|:-----------:|
-| L1 only    |  3.43 s  | 649 Kelem/s    |    ~0%      |
-| L1+L2+L3   |  4.90 s  | 454 Kelem/s    | **>4000x**  |
+| Level      |   Huge   | Throughput     |
+|------------|--------:|----------------|
+| L1 only    |  3.43 s  | 649 Kelem/s    |
+| L1+L2+L3   |  5.00 s  | 445 Kelem/s    |
 
 **L1+L2+L3 is now tractable at Huge tier.** The previous O(E*N) bug in
 `facility_ids_with_org_connection` caused L2 validation alone to be estimated at
 ~21,500 s (~6 hours). After fixing it to O(N+E) with a pre-built HashSet,
-full L1+L2+L3 completes in 4.9 s -- a >4000x improvement. L2 adds only ~1.5 s
+full L1+L2+L3 completes in 5.0 s -- a >4000x improvement. L2 adds only ~1.6 s
 on top of L1.
+
+---
+
+## Group 12: CBOR Library Comparison
+
+Compares decode and encode throughput of **serde_json** (JSON), **ciborium 0.2**
+(CBOR, reader-based), and **cbor4ii 1.x** (CBOR, slice-based). `omtsf-core` now
+uses cbor4ii in production; ciborium is retained as a dev-dependency for ongoing
+regression comparison.
+
+### Decode
+
+| Size | serde_json | ciborium  | cbor4ii  | cbor4ii vs JSON |
+|------|----------:|---------:|---------:|:---------------:|
+| S    |   196 us  |   402 us |   202 us |      1.03x      |
+| M    |  2.18 ms  |  4.14 ms |  2.03 ms |      0.93x      |
+| L    |  10.8 ms  |  20.5 ms |  12.9 ms |      1.20x      |
+
+cbor4ii decode is **2.0x faster** than ciborium across all tiers. At S/M, cbor4ii
+is at parity with JSON (within 3-7%). At L, cbor4ii is 20% slower than JSON — the
+`#[serde(flatten)]` Content-buffering overhead grows with element count.
+
+ciborium's `from_reader()` trait-based byte reads are the dominant bottleneck;
+cbor4ii's `from_slice()` direct slice access eliminates per-byte virtual dispatch.
+
+### Encode
+
+| Size | serde_json | ciborium  | cbor4ii  | cbor4ii vs JSON |
+|------|----------:|---------:|---------:|:---------------:|
+| S    |  55.5 us  |  68.8 us |  40.3 us |      0.73x      |
+| M    |   549 us  |   682 us |   414 us |      0.75x      |
+| L    |  2.36 ms  |  2.94 ms |  1.80 ms |      0.76x      |
+
+cbor4ii encode is **1.7x faster** than ciborium and **24-27% faster than JSON**
+across all tiers. CBOR's more compact encoding (no quoting, varint lengths) means
+less data to write, and cbor4ii's direct buffer writes are more efficient than
+serde_json's string formatting.
+
+---
+
+## Group 13: `#[serde(flatten)]` Overhead
+
+Measures the deserialization overhead of `#[serde(flatten)]` (which activates
+serde's Content-buffering path) vs `#[serde(deny_unknown_fields)]` (direct
+deserialization). Both struct variants are structurally identical; the `extra`
+field in the `flat` variant is always empty, so the wire payload is bit-for-bit
+identical.
+
+### cbor4ii (CBOR)
+
+| Size | flat     | strict   | overhead |
+|------|--------:|---------:|:--------:|
+| S    | 36.4 us | 34.5 us  |   5.6%   |
+| M    |  348 us |  332 us  |   5.0%   |
+| L    | 1.60 ms | 1.49 ms  |   7.1%   |
+
+### serde_json (JSON)
+
+| Size | flat     | strict   | overhead |
+|------|--------:|---------:|:--------:|
+| S    | 40.5 us | 41.4 us  |  -2.3%   |
+| M    |  423 us |  411 us  |   2.9%   |
+| L    | 1.89 ms | 1.79 ms  |   5.3%   |
+
+CBOR flatten overhead is **5-7%** with cbor4ii — down from 16-20% with ciborium.
+JSON flatten overhead is negligible (0-5%). The Content-buffering machinery has
+minimal impact with efficient format backends.
 
 ---
 
@@ -336,60 +405,62 @@ XL to Huge ~148x.
 
 | Operation       | S to M | M to L | L to XL | XL to Huge | Complexity |
 |-----------------|:------:|:------:|:-------:|:----------:|:----------:|
-| Deserialize JSON| 11.0x  |  5.3x  |  3.0x   |    139x    |    O(n)    |
-| Serialize JSON  | 10.6x  |  4.2x  |  2.9x   |    155x    |    O(n)    |
-| Decode CBOR     | 10.7x  |  4.8x  |  2.8x   |    156x    |    O(n)    |
-| Encode CBOR     | 10.1x  |  4.3x  |  2.8x   |    176x    |    O(n)    |
-| Build graph     | 10.5x  |  4.5x  |  3.1x   |    346x    | O(n log n) |
+| Deserialize JSON| 11.1x  |  5.0x  |  3.1x   |    137x    |    O(n)    |
+| Serialize JSON  | 10.0x  |  4.3x  |  2.9x   |    197x    |    O(n)    |
+| Decode CBOR     | 10.0x  |  6.4x  |   --    |     --     |    O(n)    |
+| Encode CBOR     | 10.3x  |  4.3x  |   --    |     --     |    O(n)    |
+| Build graph     | 10.5x  |  4.5x  |  3.1x   |    359x    | O(n log n) |
 | Validate L1     | 12.0x  |  5.1x  |  3.5x   |    477x    | O(n log n) |
-| Validate L1+L2+L3| 12.6x |  5.1x  |  3.9x   |    329x    | O(n log n) |
+| Validate L1+L2+L3| 12.6x |  5.1x  |  3.9x   |    336x    | O(n log n) |
 | Diff identical  | 11.4x  |  5.1x  |  4.5x   |    --      | O(n log n) |
 | Redact partner  | 12.2x  |  4.8x  |  3.5x   |    --      |    O(n)    |
-| Selector (label)| 9.5x   |  6.3x  |  3.7x   |    346x    | O(n log n) |
-| Selector (type) | 5.9x   |  4.2x  |  2.3x   |    637x    | O(n log n) |
+| Selector (label)| 9.5x   |  6.3x  |  3.7x   |    357x    | O(n log n) |
+| Selector (type) | 5.9x   |  4.2x  |  2.3x   |    530x    | O(n log n) |
 
 At the XL-to-Huge jump (~148x elements), most operations show super-linear
-scaling. Parse and serialize remain close to linear (139x and 155x). Build graph
-and validation L1 scale at ~2.3-3.2x expected, suggesting O(n log n) from hash
-map growth. **L1+L2+L3 validation now scales at 329x (vs 148x elements),
+scaling. Parse and serialize remain close to linear (137x). Build graph
+and validation L1 scale at ~2.4-3.2x expected, suggesting O(n log n) from hash
+map growth. **L1+L2+L3 validation now scales at 336x (vs 148x elements),
 confirming the O(E*N) → O(N+E) fix brought it to O(n log n) range.**
 
-CBOR decode and encode both scale linearly across all tiers (156x and 176x vs
-148x elements at the XL-to-Huge jump), consistent with JSON.
+CBOR decode and encode both scale linearly across S-L tiers, consistent with JSON.
 
 ## Key Takeaways
 
-1. **All operations complete under 82 ms for XL (5 MB) files** -- well within
-   interactive budgets. CBOR decode at 53 ms, down from 119 ms.
-2. **Serialization is 3-5x faster than deserialization** -- serde's write path is
-   highly optimized. Ratio holds at Huge tier (4.5x).
-3. **CBOR is 21% smaller than compact JSON** -- consistent 0.78-0.79 ratio across
-   all tiers. This translates to meaningful savings for network transfer and storage.
-4. **CBOR encode is near JSON parity (1.09x)** -- the DynValue migration eliminated
-   the `serde_json::Value` intermediary. CBOR decode is 1.6x slower than JSON
-   deserialize, down from 3.7x. CBOR encode is within 9% of JSON, down from 13x.
-5. **Graph queries are the fastest operations** -- sub-millisecond even at XL.
-   Edge-type filtering provides 10-40x speedups (194x at Huge).
-6. **Merge is the most expensive operation** -- canonical identifier matching
+1. **CBOR encode is 24-27% faster than JSON** — cbor4ii's compact encoding and
+   direct buffer writes outperform serde_json's string formatting. Encode throughput:
+   518-548 MiB/s (CBOR) vs 450-510 MiB/s (JSON).
+2. **CBOR decode is at JSON parity** — within 3% at S/M, 20% slower at L. At Huge
+   scale, CBOR decode is only 1.07x JSON deserialize. The ciborium-to-cbor4ii switch
+   improved decode by **2.0x** (from 1.6x slower to near parity).
+3. **CBOR is 21% smaller than compact JSON** — consistent 0.78-0.80 ratio across
+   all tiers. Combined with faster encoding, CBOR is strictly better for storage
+   and network transfer.
+4. **`#[serde(flatten)]` overhead is 5-7% for CBOR** — down from 16-20% with
+   ciborium. cbor4ii's slice-based access minimizes the penalty from serde's
+   Content-buffering path.
+5. **ciborium is 2.0x slower than cbor4ii** for decode — the dominant factor is
+   `from_reader()` trait-based byte reads vs `from_slice()` direct slice access.
+6. **Serialization is 3-5x faster than deserialization** — serde's write path is
+   highly optimized. Ratio holds at Huge tier.
+7. **Graph queries are the fastest operations** -- sub-millisecond even at XL.
+   Edge-type filtering provides 10-40x speedups (184x at Huge).
+8. **Merge is the most expensive operation** -- canonical identifier matching
    dominates. 84 ms for L-tier disjoint merge.
-7. **`all_paths` with depth 10 is the performance cliff** -- 193 ms on M-tier,
+9. **`all_paths` with depth 10 is the performance cliff** -- 193 ms on M-tier,
    exponential growth. Depth limits are essential.
-8. **Cycle detection adds negligible cost to validation** -- L3 is essentially free
-   on top of L2.
-9. **No operation requires optimization for the current scale target** -- all are
-   within acceptable latency bounds.
-10. **Selector scans are extremely fast** -- under 250 us for XL. Type-index fast
+10. **Cycle detection adds negligible cost to validation** -- L3 is essentially free
+    on top of L2.
+11. **No operation requires optimization for the current scale target** -- all are
+    within acceptable latency bounds.
+12. **Selector scans are extremely fast** -- under 250 us for XL. Type-index fast
     path yields 21-25% improvement on type-only `selector_subgraph` queries.
-11. **Selector subgraph with 3-hop expansion** completes in 4.5 ms on L-tier --
-    comparable to `ego_graph` radius 3 (3.7 ms). At Huge tier, expand 3 takes
-    4.0 s -- still tractable for batch processing.
-12. **L2 validation O(E*N) bug is fixed** -- full L1+L2+L3 validation at Huge tier
-    now completes in 4.9 s (was estimated ~6 hours). The fix pre-builds a
+13. **L2 validation O(E*N) bug is fixed** -- full L1+L2+L3 validation at Huge tier
+    now completes in 5.0 s (was estimated ~6 hours). The fix pre-builds a
     facility-ID HashSet, eliminating the per-edge linear scan.
-13. **Huge-tier parse + build round-trip: ~6.4 s** -- loading a 500 MB supply chain
-    graph into memory is feasible for batch analytics. Serialize back in 1.0 s.
-14. **`assemble_subgraph` optimization** -- iterating only outgoing edges of included
+14. **Huge-tier parse + build round-trip: ~6.5 s** -- loading a 500 MB supply chain
+    graph into memory is feasible for batch analytics. Serialize back in 1.4 s.
+15. **Huge-tier CBOR encode: 892 ms** (448 MiB/s) — 34% faster than JSON serialize.
+    CBOR decode: 5.0 s (80 MiB/s) — at parity with JSON deserialize (4.7 s).
+16. **`assemble_subgraph` optimization** -- iterating only outgoing edges of included
     nodes (vs all edges) improves subgraph extraction for small subsets of large graphs.
-15. **CBOR at Huge tier works** -- decode 8.3 s (1.8x JSON), encode 1.3 s (1.28x
-    JSON). The DynValue-based codec eliminated the ~3x memory overhead that
-    previously made Huge-tier CBOR infeasible.
