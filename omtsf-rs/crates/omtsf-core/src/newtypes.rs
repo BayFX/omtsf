@@ -1,9 +1,10 @@
 /// Validated newtype wrappers for core OMTSF domain string types.
 ///
 /// Each newtype enforces a regex-based shape constraint at construction time via
-/// [`TryFrom<&str>`]. Once constructed, the inner value is immutable (no
-/// `DerefMut`). Serde `Deserialize` impls re-run validation so invalid data
-/// cannot enter the type system from untrusted JSON.
+/// [`TryFrom<&str>`] (borrows) or [`TryFrom<String>`] (owned, zero extra
+/// allocation). Once constructed, the inner value is immutable (no `DerefMut`).
+/// Serde `Deserialize` impls re-run validation so invalid data cannot enter the
+/// type system from untrusted JSON.
 use std::fmt;
 use std::ops::Deref;
 use std::sync::LazyLock;
@@ -113,6 +114,22 @@ impl TryFrom<&str> for SemVer {
     }
 }
 
+impl TryFrom<String> for SemVer {
+    type Error = NewtypeError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        if SEMVER_RE.is_match(&s) {
+            Ok(Self(s))
+        } else {
+            Err(NewtypeError::InvalidFormat {
+                type_name: "SemVer",
+                expected: "MAJOR.MINOR.PATCH (e.g. 1.0.0)",
+                got: s,
+            })
+        }
+    }
+}
+
 impl SemVer {
     /// Returns the major version component parsed from the stored string.
     ///
@@ -170,7 +187,7 @@ impl Serialize for SemVer {
 impl<'de> Deserialize<'de> for SemVer {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let s = String::deserialize(d)?;
-        Self::try_from(s.as_str()).map_err(de::Error::custom)
+        Self::try_from(s).map_err(de::Error::custom)
     }
 }
 
@@ -199,6 +216,22 @@ impl TryFrom<&str> for CalendarDate {
     }
 }
 
+impl TryFrom<String> for CalendarDate {
+    type Error = NewtypeError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        if CALENDAR_DATE_RE.is_match(&s) {
+            Ok(Self(s))
+        } else {
+            Err(NewtypeError::InvalidFormat {
+                type_name: "CalendarDate",
+                expected: "YYYY-MM-DD (e.g. 2026-02-19)",
+                got: s,
+            })
+        }
+    }
+}
+
 impl Deref for CalendarDate {
     type Target = str;
     fn deref(&self) -> &str {
@@ -221,7 +254,7 @@ impl Serialize for CalendarDate {
 impl<'de> Deserialize<'de> for CalendarDate {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let s = String::deserialize(d)?;
-        Self::try_from(s.as_str()).map_err(de::Error::custom)
+        Self::try_from(s).map_err(de::Error::custom)
     }
 }
 
@@ -243,6 +276,22 @@ impl TryFrom<&str> for FileSalt {
                 type_name: "FileSalt",
                 expected: "64 lowercase hex characters [0-9a-f]{64}",
                 got: s.to_owned(),
+            })
+        }
+    }
+}
+
+impl TryFrom<String> for FileSalt {
+    type Error = NewtypeError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        if FILE_SALT_RE.is_match(&s) {
+            Ok(Self(s))
+        } else {
+            Err(NewtypeError::InvalidFormat {
+                type_name: "FileSalt",
+                expected: "64 lowercase hex characters [0-9a-f]{64}",
+                got: s,
             })
         }
     }
@@ -270,7 +319,7 @@ impl Serialize for FileSalt {
 impl<'de> Deserialize<'de> for FileSalt {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let s = String::deserialize(d)?;
-        Self::try_from(s.as_str()).map_err(de::Error::custom)
+        Self::try_from(s).map_err(de::Error::custom)
     }
 }
 
@@ -298,6 +347,22 @@ impl TryFrom<&str> for NodeId {
     }
 }
 
+impl TryFrom<String> for NodeId {
+    type Error = NewtypeError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        if s.is_empty() {
+            Err(NewtypeError::InvalidFormat {
+                type_name: "NodeId",
+                expected: "non-empty string",
+                got: s,
+            })
+        } else {
+            Ok(Self(s))
+        }
+    }
+}
+
 impl Deref for NodeId {
     type Target = str;
     fn deref(&self) -> &str {
@@ -320,7 +385,7 @@ impl Serialize for NodeId {
 impl<'de> Deserialize<'de> for NodeId {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let s = String::deserialize(d)?;
-        Self::try_from(s.as_str()).map_err(de::Error::custom)
+        Self::try_from(s).map_err(de::Error::custom)
     }
 }
 
@@ -352,6 +417,22 @@ impl TryFrom<&str> for CountryCode {
     }
 }
 
+impl TryFrom<String> for CountryCode {
+    type Error = NewtypeError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        if COUNTRY_CODE_RE.is_match(&s) {
+            Ok(Self(s))
+        } else {
+            Err(NewtypeError::InvalidFormat {
+                type_name: "CountryCode",
+                expected: "two uppercase ASCII letters (e.g. US, DE)",
+                got: s,
+            })
+        }
+    }
+}
+
 impl Deref for CountryCode {
     type Target = str;
     fn deref(&self) -> &str {
@@ -374,7 +455,7 @@ impl Serialize for CountryCode {
 impl<'de> Deserialize<'de> for CountryCode {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let s = String::deserialize(d)?;
-        Self::try_from(s.as_str()).map_err(de::Error::custom)
+        Self::try_from(s).map_err(de::Error::custom)
     }
 }
 
