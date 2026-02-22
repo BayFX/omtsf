@@ -375,6 +375,50 @@ def create_corporate_structure_sheet(wb):
     return ws
 
 
+def create_persons_sheet(wb):
+    """Create the Persons sheet for beneficial owners and key individuals."""
+    ws = wb.create_sheet("Persons")
+
+    headers = [
+        "id",                       # A
+        "name",                     # B - REQUIRED
+        "jurisdiction",             # C - ISO 3166-1 alpha-2
+        "role",                     # D
+        "nationality",              # E - ISO 3166-1 alpha-2
+    ]
+
+    for col, header in enumerate(headers, start=1):
+        ws.cell(row=1, column=col, value=header)
+
+    style_header_row(ws, len(headers))
+    set_col_widths(ws, {"A": 18, "B": 30, "C": 14, "D": 20, "E": 14})
+    return ws
+
+
+def create_same_as_sheet(wb):
+    """Create the Same As sheet for entity deduplication assertions."""
+    ws = wb.create_sheet("Same As")
+
+    headers = [
+        "entity_a",                 # A - ref to node ID
+        "entity_b",                 # B - ref to node ID
+        "confidence",               # C - definite/probable/possible
+        "basis",                    # D - justification (e.g., name_match, manual_review)
+    ]
+
+    for col, header in enumerate(headers, start=1):
+        ws.cell(row=1, column=col, value=header)
+
+    style_header_row(ws, len(headers))
+
+    add_data_validation(ws, "C",
+                        ["definite", "probable", "possible"],
+                        "Confidence", "Confidence level of the equivalence assertion")
+
+    set_col_widths(ws, {"A": 20, "B": 20, "C": 14, "D": 40})
+    return ws
+
+
 def create_identifiers_sheet(wb):
     """Create the Identifiers sheet for advanced multi-identifier scenarios."""
     ws = wb.create_sheet("Identifiers")
@@ -427,10 +471,12 @@ def create_readme_sheet(wb):
         ("Organizations", "Legal entities (companies, NGOs, government bodies)."),
         ("Facilities", "Physical locations (factories, warehouses, farms, mines)."),
         ("Goods", "Products, materials, or commodities."),
+        ("Persons", "Beneficial owners, key individuals (sensitivity: confidential by default)."),
         ("Attestations", "Certifications, audits, due diligence statements."),
         ("Consignments", "Batches, lots, shipments (optional, for CBAM/EUDR)."),
         ("Supply Relationships", "Supply, subcontracting, tolling, distribution edges."),
         ("Corporate Structure", "Ownership, legal parentage, operational control edges."),
+        ("Same As", "Entity deduplication: link nodes that represent the same real-world entity."),
         ("Identifiers", "Advanced: additional identifiers beyond the common columns."),
         ("", ""),
         ("REQUIRED FIELDS", ""),
@@ -460,6 +506,16 @@ def create_readme_sheet(wb):
         ("EDGE DIRECTION", ""),
         ("Supply Relationships: supplier_id = who supplies, buyer_id = who buys", ""),
         ("Corporate Structure: subsidiary_id = child entity, parent_id = parent entity", ""),
+        ("", ""),
+        ("ENTITY DEDUPLICATION", ""),
+        ("Use the Same As sheet to link nodes that represent the same real-world entity", ""),
+        ("but appear as separate rows (e.g., same company under different names/IDs).", ""),
+        ("The import command uses these to generate same_as edges for merge operations.", ""),
+        ("", ""),
+        ("PERSON NODE PRIVACY", ""),
+        ("Person nodes default to confidential sensitivity (SPEC-004).", ""),
+        ("If disclosure_scope is 'public', the import command will reject the file", ""),
+        ("if any person nodes are present.", ""),
         ("", ""),
         ("SPEC VERSION", ""),
         ("This template targets OMTS spec version 0.1.0", ""),
@@ -626,9 +682,11 @@ def create_workbook():
     create_facilities_sheet(wb)
     create_goods_sheet(wb)
     create_attestations_sheet(wb)
+    create_persons_sheet(wb)
     create_consignments_sheet(wb)
     create_supply_relationships_sheet(wb)
     create_corporate_structure_sheet(wb)
+    create_same_as_sheet(wb)
     create_identifiers_sheet(wb)
     create_readme_sheet(wb)
 

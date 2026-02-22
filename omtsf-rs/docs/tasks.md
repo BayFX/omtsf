@@ -1059,6 +1059,36 @@ and senior QA engineer assessments. Tasks ordered by priority.
 
 ---
 
+## Phase 13: Excel Import
+
+### T-077 -- Implement `import-excel` command
+
+- **Spec Reference:** Expert panel report (`docs/reviews/excel-import-format-panel-report.md`), SPEC-001 through SPEC-005
+- **Dependencies:** T-008, T-011, T-013, T-014, T-015, T-040
+- **Complexity:** XL
+- **Crate:** omtsf-cli (Excel I/O), omtsf-core (tabular-to-graph conversion logic)
+- **Description:** Read a multi-sheet `.xlsx` workbook in the OMTS Excel import format (see `tests/fixtures/excel/`) and convert it to a valid `.omts` file. The template has 12 sheets: README, Metadata, Organizations, Facilities, Goods, Persons, Attestations, Consignments, Supply Relationships, Corporate Structure, Same As, and Identifiers.
+- **Acceptance Criteria:**
+  - `omtsf import-excel <input.xlsx> [-o output.omts]` reads an Excel file and writes a valid `.omts` file
+  - Uses `calamine` crate for `.xlsx` reading; dependency confined to `omtsf-cli` (not in `omtsf-core`)
+  - **Metadata sheet:** reads `snapshot_date` (required), `reporting_entity`, `disclosure_scope`, data quality defaults
+  - **Node sheets** (Organizations, Facilities, Goods, Persons, Attestations, Consignments): each row becomes a node with the appropriate `type`; common identifier columns on Organizations sheet (lei, duns, nat_reg, vat, internal) converted to identifier records
+  - **Edge sheets** (Supply Relationships, Corporate Structure): each row becomes an edge; domain-friendly column names (supplier_id/buyer_id, subsidiary_id/parent_id) mapped to source/target per edge type direction convention
+  - **Same As sheet:** each row becomes a `same_as` edge with confidence and basis properties
+  - **Identifiers sheet:** rows merged with inline identifier columns from node sheets; deduplicated per L1-EID-11
+  - **Attestations sheet:** `attested_entity_id` and `scope` columns generate `attested_by` edges automatically
+  - **Auto-generated fields:** `file_salt` via CSPRNG (always fresh), `omtsf_version` set to current, node/edge IDs generated as stable slugs when blank (e.g., `org-bolt-supplies-ltd`)
+  - **Two-pass parse:** (1) collect all nodes into ID map, (2) resolve edge source/target references
+  - **Validation:** structural errors (missing required columns, unresolved references) fail fast with `{Sheet}!{Column}{Row}` cell references; L1 validation (check digits, referential integrity, type constraints) runs on the constructed graph before writing output; L2 warnings emitted but do not block output
+  - **Sensitivity defaults:** applied per SPEC-004 Section 2 (lei/duns/gln=public, nat-reg/vat/internal=restricted, person identifiers=confidential); `disclosure_scope` validated against identifier sensitivity (L1-SDI-02)
+  - **Person node + public scope:** import refuses to produce output, emits diagnostic referencing SPEC-004 Section 5
+  - **Header row validation:** column headers validated against expected manifest before reading data rows; unrecognized headers produce warnings
+  - Output passes `omtsf validate` at L1 with zero errors
+  - Integration test: `omtsf import-excel tests/fixtures/excel/omts-import-example.xlsx | omtsf validate -` exits 0
+  - Integration test: round-trip — import example Excel, validate output, inspect node/edge counts match expected
+
+---
+
 ## Notes: Spec Ambiguities Discovered During Planning
 
 1. **`control_type` disambiguation (data-model.md Section 4.5).** The spec reuses the JSON key `"control_type"` across two edge types with disjoint variant sets (`operational_control` vs `beneficial_ownership`). The data model stores this as `serde_json::Value`. Implementors should verify that the validation engine enforces the correct variant set per edge type, and that the diff engine compares `control_type` values structurally without assuming a single enum.
