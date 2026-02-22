@@ -75,7 +75,18 @@ pub struct SelectorSet {
     /// Jurisdiction filter values (OR within group, node-only).
     pub jurisdictions: Vec<CountryCode>,
     /// Name substring filter values (OR within group, case-insensitive, node-only).
+    ///
+    /// The original patterns as supplied by the caller. Prefer reading
+    /// [`names_lowered`][Self::names_lowered] in hot-path code; this field is
+    /// kept for display and round-trip purposes.
     pub names: Vec<String>,
+    /// Pre-lowercased name patterns, parallel to [`names`][Self::names].
+    ///
+    /// Populated automatically by [`from_selectors`][Self::from_selectors].
+    /// If you construct `SelectorSet` by writing to `names` directly, also
+    /// push the lowercased form here so that [`matches_node`][Self::matches_node]
+    /// performs correct case-insensitive matching without redundant allocations.
+    pub names_lowered: Vec<String>,
 }
 
 impl SelectorSet {
@@ -142,7 +153,10 @@ impl SelectorSet {
                     set.identifier_scheme_values.push((s, v));
                 }
                 Selector::Jurisdiction(c) => set.jurisdictions.push(c),
-                Selector::Name(n) => set.names.push(n),
+                Selector::Name(n) => {
+                    set.names_lowered.push(n.to_lowercase());
+                    set.names.push(n);
+                }
             }
         }
         set
@@ -224,12 +238,12 @@ impl SelectorSet {
             }
         }
 
-        if !self.names.is_empty() {
+        if !self.names_lowered.is_empty() {
             let has_match = node.name.as_ref().is_some_and(|name| {
                 let name_lower = name.to_lowercase();
-                self.names
+                self.names_lowered
                     .iter()
-                    .any(|pat| name_lower.contains(pat.to_lowercase().as_str()))
+                    .any(|pat| name_lower.contains(pat.as_str()))
             });
             if !has_match {
                 return false;
