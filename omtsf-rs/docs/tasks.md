@@ -1091,7 +1091,7 @@ and senior QA engineer assessments. Tasks ordered by priority.
   - Integration test: `omtsf import --format excel tests/fixtures/excel/omts-import-example.xlsx | omtsf validate -` exits 0
   - Integration test: round-trip — import example Excel, validate output, inspect node/edge counts match expected
 
-### T-078 -- Implement `export` command with `--format excel`
+### T-078 -- Implement `export` command with `--format excel` ✅
 
 - **Spec Reference:** Expert panel report (`docs/reviews/excel-import-format-panel-report.md`), SPEC-001 through SPEC-005
 - **Dependencies:** T-008, T-040, T-077
