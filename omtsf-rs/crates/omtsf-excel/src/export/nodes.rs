@@ -4,11 +4,14 @@
 /// Organization nodes include inline identifier columns (lei, duns, `nat_reg`,
 /// vat, internal) mirroring the import-side layout. Boundary ref nodes are
 /// omitted as they are import-time artifacts.
+///
+/// Every sheet includes a `labels` column (`key=value;key2=value2` encoding)
+/// and a `_conflicts` column (JSON array, only populated on merged files).
 use rust_xlsxwriter::{Worksheet, XlsxError};
 
 use omtsf_core::enums::{NodeType, NodeTypeTag};
 use omtsf_core::structures::Node;
-use omtsf_core::types::Identifier;
+use omtsf_core::types::{Identifier, Label};
 
 use crate::error::ExportError;
 use crate::export::style::{set_column_widths, write_header_row};
@@ -29,6 +32,27 @@ fn wf64(ws: &mut Worksheet, row: u32, col: u16, val: f64) -> Result<(), ExportEr
         })
 }
 
+/// Serialises a `labels` vec as `key=value;key2` (value omitted for flag labels).
+fn labels_to_str(labels: &[Label]) -> String {
+    labels
+        .iter()
+        .map(|l| match &l.value {
+            Some(v) => format!("{}={}", l.key, v),
+            None => l.key.clone(),
+        })
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
+/// Returns the JSON-serialised `_conflicts` array from the node's `extra` map,
+/// or an empty string if absent.
+fn conflicts_str(node: &Node) -> String {
+    node.extra
+        .get("_conflicts")
+        .and_then(|v| serde_json::to_string(v).ok())
+        .unwrap_or_default()
+}
+
 /// Sets up the Organizations sheet headers and column widths, then writes all
 /// organization rows from `nodes`.
 ///
@@ -41,6 +65,7 @@ pub fn write_organizations(ws: &mut Worksheet, nodes: &[Node]) -> Result<u32, Ex
             "name",
             "jurisdiction",
             "status",
+            "governance_structure",
             "lei",
             "duns",
             "nat_reg_value",
@@ -49,6 +74,8 @@ pub fn write_organizations(ws: &mut Worksheet, nodes: &[Node]) -> Result<u32, Ex
             "vat_country",
             "internal_id",
             "internal_system",
+            "labels",
+            "_conflicts",
         ],
     )?;
     set_column_widths(
@@ -58,14 +85,17 @@ pub fn write_organizations(ws: &mut Worksheet, nodes: &[Node]) -> Result<u32, Ex
             (1, 30.0),
             (2, 14.0),
             (3, 12.0),
-            (4, 22.0),
-            (5, 14.0),
-            (6, 20.0),
-            (7, 22.0),
-            (8, 20.0),
-            (9, 14.0),
-            (10, 20.0),
-            (11, 22.0),
+            (4, 24.0),
+            (5, 22.0),
+            (6, 14.0),
+            (7, 20.0),
+            (8, 22.0),
+            (9, 20.0),
+            (10, 14.0),
+            (11, 20.0),
+            (12, 22.0),
+            (13, 30.0),
+            (14, 30.0),
         ],
     )?;
 
@@ -95,9 +125,29 @@ fn write_org_row(worksheet: &mut Worksheet, row: u32, node: &Node) -> Result<(),
         node.status.as_ref().map(org_status_str).unwrap_or(""),
     )?;
 
+    // governance_structure: serialise DynValue to JSON string if present.
+    let gov_str = node
+        .governance_structure
+        .as_ref()
+        .and_then(|v| {
+            v.as_str()
+                .map(str::to_owned)
+                .or_else(|| serde_json::to_string(v).ok())
+        })
+        .unwrap_or_default();
+    ws(worksheet, row, 4, &gov_str)?;
+
     if let Some(ids) = &node.identifiers {
         write_org_inline_ids(worksheet, row, ids)?;
     }
+
+    let labels_str = node
+        .labels
+        .as_deref()
+        .map(labels_to_str)
+        .unwrap_or_default();
+    ws(worksheet, row, 13, &labels_str)?;
+    ws(worksheet, row, 14, &conflicts_str(node))?;
 
     Ok(())
 }
@@ -110,22 +160,22 @@ fn write_org_inline_ids(
     let find = |scheme: &str| ids.iter().find(|id| id.scheme.to_lowercase() == scheme);
 
     if let Some(lei) = find("lei") {
-        ws(worksheet, row, 4, &lei.value)?;
+        ws(worksheet, row, 5, &lei.value)?;
     }
     if let Some(duns) = find("duns") {
-        ws(worksheet, row, 5, &duns.value)?;
+        ws(worksheet, row, 6, &duns.value)?;
     }
     if let Some(nat) = find("nat-reg") {
-        ws(worksheet, row, 6, &nat.value)?;
-        ws(worksheet, row, 7, nat.authority.as_deref().unwrap_or(""))?;
+        ws(worksheet, row, 7, &nat.value)?;
+        ws(worksheet, row, 8, nat.authority.as_deref().unwrap_or(""))?;
     }
     if let Some(vat) = find("vat") {
-        ws(worksheet, row, 8, &vat.value)?;
-        ws(worksheet, row, 9, vat.authority.as_deref().unwrap_or(""))?;
+        ws(worksheet, row, 9, &vat.value)?;
+        ws(worksheet, row, 10, vat.authority.as_deref().unwrap_or(""))?;
     }
     if let Some(int) = find("internal") {
-        ws(worksheet, row, 10, &int.value)?;
-        ws(worksheet, row, 11, int.authority.as_deref().unwrap_or(""))?;
+        ws(worksheet, row, 11, &int.value)?;
+        ws(worksheet, row, 12, int.authority.as_deref().unwrap_or(""))?;
     }
 
     Ok(())
@@ -144,6 +194,8 @@ pub fn write_facilities(worksheet: &mut Worksheet, nodes: &[Node]) -> Result<u32
             "address",
             "latitude",
             "longitude",
+            "labels",
+            "_conflicts",
         ],
     )?;
     set_column_widths(
@@ -155,6 +207,8 @@ pub fn write_facilities(worksheet: &mut Worksheet, nodes: &[Node]) -> Result<u32
             (3, 40.0),
             (4, 12.0),
             (5, 12.0),
+            (6, 30.0),
+            (7, 30.0),
         ],
     )?;
 
@@ -190,6 +244,14 @@ fn write_facility_row(worksheet: &mut Worksheet, row: u32, node: &Node) -> Resul
         }
     }
 
+    let labels_str = node
+        .labels
+        .as_deref()
+        .map(labels_to_str)
+        .unwrap_or_default();
+    ws(worksheet, row, 6, &labels_str)?;
+    ws(worksheet, row, 7, &conflicts_str(node))?;
+
     Ok(())
 }
 
@@ -197,8 +259,28 @@ fn write_facility_row(worksheet: &mut Worksheet, row: u32, node: &Node) -> Resul
 ///
 /// Returns the number of data rows written.
 pub fn write_goods(worksheet: &mut Worksheet, nodes: &[Node]) -> Result<u32, ExportError> {
-    write_header_row(worksheet, &["id", "name", "commodity_code", "unit"])?;
-    set_column_widths(worksheet, &[(0, 24.0), (1, 30.0), (2, 20.0), (3, 12.0)])?;
+    write_header_row(
+        worksheet,
+        &[
+            "id",
+            "name",
+            "commodity_code",
+            "unit",
+            "labels",
+            "_conflicts",
+        ],
+    )?;
+    set_column_widths(
+        worksheet,
+        &[
+            (0, 24.0),
+            (1, 30.0),
+            (2, 20.0),
+            (3, 12.0),
+            (4, 30.0),
+            (5, 30.0),
+        ],
+    )?;
 
     let mut row: u32 = 1;
     for node in nodes {
@@ -212,6 +294,13 @@ pub fn write_goods(worksheet: &mut Worksheet, nodes: &[Node]) -> Result<u32, Exp
                 node.commodity_code.as_deref().unwrap_or(""),
             )?;
             ws(worksheet, row, 3, node.unit.as_deref().unwrap_or(""))?;
+            let labels_str = node
+                .labels
+                .as_deref()
+                .map(labels_to_str)
+                .unwrap_or_default();
+            ws(worksheet, row, 4, &labels_str)?;
+            ws(worksheet, row, 5, &conflicts_str(node))?;
             row += 1;
         }
     }
@@ -222,8 +311,21 @@ pub fn write_goods(worksheet: &mut Worksheet, nodes: &[Node]) -> Result<u32, Exp
 ///
 /// Returns the number of data rows written.
 pub fn write_persons(worksheet: &mut Worksheet, nodes: &[Node]) -> Result<u32, ExportError> {
-    write_header_row(worksheet, &["id", "name", "jurisdiction", "role"])?;
-    set_column_widths(worksheet, &[(0, 24.0), (1, 30.0), (2, 14.0), (3, 20.0)])?;
+    write_header_row(
+        worksheet,
+        &["id", "name", "jurisdiction", "role", "labels", "_conflicts"],
+    )?;
+    set_column_widths(
+        worksheet,
+        &[
+            (0, 24.0),
+            (1, 30.0),
+            (2, 14.0),
+            (3, 20.0),
+            (4, 30.0),
+            (5, 30.0),
+        ],
+    )?;
 
     let mut row: u32 = 1;
     for node in nodes {
@@ -237,6 +339,13 @@ pub fn write_persons(worksheet: &mut Worksheet, nodes: &[Node]) -> Result<u32, E
                 node.jurisdiction.as_ref().map(|c| c.as_ref()).unwrap_or(""),
             )?;
             ws(worksheet, row, 3, node.role.as_deref().unwrap_or(""))?;
+            let labels_str = node
+                .labels
+                .as_deref()
+                .map(labels_to_str)
+                .unwrap_or_default();
+            ws(worksheet, row, 4, &labels_str)?;
+            ws(worksheet, row, 5, &conflicts_str(node))?;
             row += 1;
         }
     }
@@ -265,6 +374,10 @@ pub fn write_attestations(worksheet: &mut Worksheet, nodes: &[Node]) -> Result<u
             "reference",
             "attested_entity_id",
             "scope",
+            "risk_severity",
+            "risk_likelihood",
+            "labels",
+            "_conflicts",
         ],
     )?;
     set_column_widths(
@@ -282,6 +395,10 @@ pub fn write_attestations(worksheet: &mut Worksheet, nodes: &[Node]) -> Result<u
             (9, 30.0),
             (10, 24.0),
             (11, 24.0),
+            (12, 16.0),
+            (13, 18.0),
+            (14, 30.0),
+            (15, 30.0),
         ],
     )?;
 
@@ -349,6 +466,36 @@ fn write_attestation_row(
     )?;
     ws(worksheet, row, 9, node.reference.as_deref().unwrap_or(""))?;
 
+    // Columns 10 and 11 (attested_entity_id, scope) are filled by the
+    // attested_by back-fill pass in the edge module.
+
+    ws(
+        worksheet,
+        row,
+        12,
+        node.risk_severity
+            .as_ref()
+            .map(risk_severity_str)
+            .unwrap_or(""),
+    )?;
+    ws(
+        worksheet,
+        row,
+        13,
+        node.risk_likelihood
+            .as_ref()
+            .map(risk_likelihood_str)
+            .unwrap_or(""),
+    )?;
+
+    let labels_str = node
+        .labels
+        .as_deref()
+        .map(labels_to_str)
+        .unwrap_or_default();
+    ws(worksheet, row, 14, &labels_str)?;
+    ws(worksheet, row, 15, &conflicts_str(node))?;
+
     Ok(())
 }
 
@@ -369,6 +516,8 @@ pub fn write_consignments(worksheet: &mut Worksheet, nodes: &[Node]) -> Result<u
             "direct_emissions_co2e",
             "indirect_emissions_co2e",
             "installation_id",
+            "labels",
+            "_conflicts",
         ],
     )?;
     set_column_widths(
@@ -384,6 +533,8 @@ pub fn write_consignments(worksheet: &mut Worksheet, nodes: &[Node]) -> Result<u
             (7, 22.0),
             (8, 24.0),
             (9, 24.0),
+            (10, 30.0),
+            (11, 30.0),
         ],
     )?;
 
@@ -448,6 +599,14 @@ fn write_consignment_row(
             .unwrap_or(""),
     )?;
 
+    let labels_str = node
+        .labels
+        .as_deref()
+        .map(labels_to_str)
+        .unwrap_or_default();
+    ws(worksheet, row, 10, &labels_str)?;
+    ws(worksheet, row, 11, &conflicts_str(node))?;
+
     Ok(())
 }
 
@@ -487,5 +646,23 @@ fn attestation_status_str(s: &omtsf_core::enums::AttestationStatus) -> &'static 
         omtsf_core::enums::AttestationStatus::Revoked => "revoked",
         omtsf_core::enums::AttestationStatus::Expired => "expired",
         omtsf_core::enums::AttestationStatus::Withdrawn => "withdrawn",
+    }
+}
+
+fn risk_severity_str(s: &omtsf_core::enums::RiskSeverity) -> &'static str {
+    match s {
+        omtsf_core::enums::RiskSeverity::Critical => "critical",
+        omtsf_core::enums::RiskSeverity::High => "high",
+        omtsf_core::enums::RiskSeverity::Medium => "medium",
+        omtsf_core::enums::RiskSeverity::Low => "low",
+    }
+}
+
+fn risk_likelihood_str(s: &omtsf_core::enums::RiskLikelihood) -> &'static str {
+    match s {
+        omtsf_core::enums::RiskLikelihood::VeryLikely => "very_likely",
+        omtsf_core::enums::RiskLikelihood::Likely => "likely",
+        omtsf_core::enums::RiskLikelihood::Possible => "possible",
+        omtsf_core::enums::RiskLikelihood::Unlikely => "unlikely",
     }
 }

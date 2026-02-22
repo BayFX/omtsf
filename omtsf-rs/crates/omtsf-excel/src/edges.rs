@@ -11,7 +11,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use calamine::{Data, Range};
 
-use omtsf_core::enums::{ConsolidationBasis, EdgeType, EdgeTypeTag};
+use omtsf_core::dynvalue::DynValue;
+use omtsf_core::enums::{ConsolidationBasis, EdgeType, EdgeTypeTag, EventType};
 use omtsf_core::newtypes::{CalendarDate, EdgeId, NodeId};
 use omtsf_core::structures::{Edge, EdgeProperties};
 
@@ -240,6 +241,14 @@ fn parse_corporate_structure(
         let consolidation_basis = read_optional_string(row, &headers, "consolidation_basis")
             .as_deref()
             .and_then(parse_consolidation_basis);
+        let control_type = read_optional_string(row, &headers, "control_type")
+            .map(|s| DynValue::from(serde_json::json!(s)));
+        let event_type = read_optional_string(row, &headers, "event_type")
+            .as_deref()
+            .and_then(parse_event_type);
+        let effective_date = read_optional_string(row, &headers, "effective_date")
+            .and_then(|s| CalendarDate::try_from(s.as_str()).ok());
+        let description = read_optional_string(row, &headers, "description");
 
         let properties = EdgeProperties {
             valid_from,
@@ -247,6 +256,10 @@ fn parse_corporate_structure(
             percentage,
             direct,
             consolidation_basis,
+            control_type,
+            event_type,
+            effective_date,
+            description,
             ..Default::default()
         };
 
@@ -473,6 +486,7 @@ fn parse_supply_edge_type(s: &str) -> EdgeType {
         "brokers" => EdgeType::Brokers,
         "operates" => EdgeType::Operates,
         "produces" => EdgeType::Produces,
+        "composed_of" | "composed of" => EdgeType::ComposedOf,
         "sells_to" | "sells to" => EdgeType::SellsTo,
         _ => EdgeType::Supplies,
     }
@@ -495,6 +509,17 @@ fn parse_consolidation_basis(s: &str) -> Option<ConsolidationBasis> {
         "us_gaap_asc810" | "us gaap asc810" | "gaap" => Some(ConsolidationBasis::UsGaapAsc810),
         "other" => Some(ConsolidationBasis::Other),
         "unknown" => Some(ConsolidationBasis::Unknown),
+        _ => None,
+    }
+}
+
+fn parse_event_type(s: &str) -> Option<EventType> {
+    match s.trim().to_lowercase().as_str() {
+        "merger" => Some(EventType::Merger),
+        "acquisition" => Some(EventType::Acquisition),
+        "rename" => Some(EventType::Rename),
+        "demerger" => Some(EventType::Demerger),
+        "spin_off" | "spin off" => Some(EventType::SpinOff),
         _ => None,
     }
 }

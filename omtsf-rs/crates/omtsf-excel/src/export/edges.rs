@@ -3,9 +3,9 @@
 /// Also writes back `attested_by` edges into the Attestations sheet rows as
 /// `attested_entity_id` and `scope` columns.
 ///
-/// Supply Relationships uses domain columns: `supplier_id` (source) / `buyer_id`
-/// (target). Corporate Structure uses: `subsidiary_id` (source) / `parent_id`
-/// (target). These conventions mirror the import-side column names.
+/// Supply Relationships uses generic columns: `source_id` / `target_id`.
+/// Corporate Structure uses: `subsidiary_id` (source) / `parent_id` (target).
+/// These conventions mirror the import-side column names.
 use std::collections::HashMap;
 
 use rust_xlsxwriter::{Worksheet, XlsxError};
@@ -43,7 +43,31 @@ fn wu32(worksheet: &mut Worksheet, row: u32, col: u16, val: u32) -> Result<(), E
         })
 }
 
+/// Returns the JSON-serialised `_conflicts` array from an extra map,
+/// or an empty string if absent.
+fn conflicts_str(extra: &omtsf_core::dynvalue::DynMap) -> String {
+    extra
+        .get("_conflicts")
+        .and_then(|v| serde_json::to_string(v).ok())
+        .unwrap_or_default()
+}
+
+/// Serialises a `labels` vec as `key=value;key2=value2` (value omitted for flag labels).
+pub fn labels_to_str(labels: &[omtsf_core::types::Label]) -> String {
+    labels
+        .iter()
+        .map(|l| match &l.value {
+            Some(v) => format!("{}={}", l.key, v),
+            None => l.key.clone(),
+        })
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
 /// Writes the Supply Relationships sheet.
+///
+/// Uses `supplier_id` / `buyer_id` column names to match the import-side
+/// column names, ensuring round-trip fidelity.
 ///
 /// Returns the number of data rows written.
 pub fn write_supply_relationships(
@@ -67,6 +91,8 @@ pub fn write_supply_relationships(
             "value_currency",
             "contract_ref",
             "share_of_buyer_demand",
+            "labels",
+            "_conflicts",
         ],
     )?;
     set_column_widths(
@@ -86,6 +112,8 @@ pub fn write_supply_relationships(
             (11, 16.0),
             (12, 20.0),
             (13, 20.0),
+            (14, 30.0),
+            (15, 30.0),
         ],
     )?;
 
@@ -164,10 +192,19 @@ fn write_supply_row(worksheet: &mut Worksheet, row: u32, edge: &Edge) -> Result<
         wf64(worksheet, row, 13, sbd)?;
     }
 
+    let labels_str = p.labels.as_deref().map(labels_to_str).unwrap_or_default();
+    ws(worksheet, row, 14, &labels_str)?;
+    ws(worksheet, row, 15, &conflicts_str(&edge.extra))?;
+
     Ok(())
 }
 
 /// Writes the Corporate Structure sheet.
+///
+/// Includes all type-specific properties: `percentage`, `direct`,
+/// `consolidation_basis` (for `ownership`/`legal_parentage`/`beneficial_ownership`),
+/// `control_type` (for `operational_control`/`beneficial_ownership`), and
+/// `event_type`, `effective_date`, `description` (for `former_identity`).
 ///
 /// Returns the number of data rows written.
 pub fn write_corporate_structure(
@@ -186,6 +223,12 @@ pub fn write_corporate_structure(
             "percentage",
             "direct",
             "consolidation_basis",
+            "control_type",
+            "event_type",
+            "effective_date",
+            "description",
+            "labels",
+            "_conflicts",
         ],
     )?;
     set_column_widths(
@@ -200,6 +243,12 @@ pub fn write_corporate_structure(
             (6, 12.0),
             (7, 10.0),
             (8, 22.0),
+            (9, 22.0),
+            (10, 18.0),
+            (11, 14.0),
+            (12, 30.0),
+            (13, 30.0),
+            (14, 30.0),
         ],
     )?;
 
@@ -265,6 +314,42 @@ fn write_corp_row(worksheet: &mut Worksheet, row: u32, edge: &Edge) -> Result<()
             .map(consolidation_basis_str)
             .unwrap_or(""),
     )?;
+
+    // control_type is stored as DynValue; serialise to JSON string if present.
+    let control_type_str = p
+        .control_type
+        .as_ref()
+        .and_then(|v| {
+            v.as_str()
+                .map(str::to_owned)
+                .or_else(|| serde_json::to_string(v).ok())
+        })
+        .unwrap_or_default();
+    ws(worksheet, row, 9, &control_type_str)?;
+
+    ws(
+        worksheet,
+        row,
+        10,
+        p.event_type.as_ref().map(event_type_str).unwrap_or(""),
+    )?;
+
+    ws(
+        worksheet,
+        row,
+        11,
+        p.effective_date
+            .as_ref()
+            .map(std::string::ToString::to_string)
+            .as_deref()
+            .unwrap_or(""),
+    )?;
+
+    ws(worksheet, row, 12, p.description.as_deref().unwrap_or(""))?;
+
+    let labels_str = p.labels.as_deref().map(labels_to_str).unwrap_or_default();
+    ws(worksheet, row, 13, &labels_str)?;
+    ws(worksheet, row, 14, &conflicts_str(&edge.extra))?;
 
     Ok(())
 }
@@ -366,5 +451,15 @@ fn consolidation_basis_str(s: &omtsf_core::enums::ConsolidationBasis) -> &'stati
         omtsf_core::enums::ConsolidationBasis::UsGaapAsc810 => "us_gaap_asc810",
         omtsf_core::enums::ConsolidationBasis::Other => "other",
         omtsf_core::enums::ConsolidationBasis::Unknown => "unknown",
+    }
+}
+
+fn event_type_str(s: &omtsf_core::enums::EventType) -> &'static str {
+    match s {
+        omtsf_core::enums::EventType::Merger => "merger",
+        omtsf_core::enums::EventType::Acquisition => "acquisition",
+        omtsf_core::enums::EventType::Rename => "rename",
+        omtsf_core::enums::EventType::Demerger => "demerger",
+        omtsf_core::enums::EventType::SpinOff => "spin_off",
     }
 }

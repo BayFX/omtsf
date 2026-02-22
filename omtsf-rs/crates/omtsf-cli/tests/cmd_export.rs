@@ -238,7 +238,10 @@ fn export_produces_valid_xlsx_magic_bytes() {
 
 #[test]
 fn export_import_example_xlsx_round_trip() {
-    // Import the example workbook, export it, verify the output is valid xlsx.
+    // Full round-trip: import xlsx → export to xlsx → re-import → validate →
+    // assert node/edge counts match the original.
+
+    // Step 1: import the example workbook.
     let import_tmp = tempfile::NamedTempFile::new().expect("temp file");
     let omts_path = import_tmp.path().with_extension("omts");
 
@@ -261,6 +264,7 @@ fn export_import_example_xlsx_round_trip() {
         String::from_utf8_lossy(&import_out.stderr)
     );
 
+    // Step 2: export the .omts to a new xlsx file.
     let export_tmp = tempfile::NamedTempFile::new().expect("temp file");
     let xlsx_path = export_tmp.path().with_extension("xlsx");
 
@@ -286,4 +290,137 @@ fn export_import_example_xlsx_round_trip() {
         bytes.starts_with(&[0x50, 0x4B, 0x03, 0x04]),
         "round-trip output must be a valid xlsx file"
     );
+
+    // Step 3: re-import the exported xlsx.
+    let reimport_tmp = tempfile::NamedTempFile::new().expect("temp file");
+    let reimport_omts_path = reimport_tmp.path().with_extension("omts");
+
+    let reimport_out = Command::new(omtsf_bin())
+        .args([
+            "import",
+            xlsx_path.to_str().expect("xlsx path"),
+            "-o",
+            reimport_omts_path.to_str().expect("re-import omts path"),
+        ])
+        .output()
+        .expect("run omtsf re-import");
+
+    assert_eq!(
+        reimport_out.status.code(),
+        Some(0),
+        "re-import must succeed; stderr: {}",
+        String::from_utf8_lossy(&reimport_out.stderr)
+    );
+
+    // Step 4: validate the re-imported file.
+    let validate_out = Command::new(omtsf_bin())
+        .args(["validate", reimport_omts_path.to_str().expect("path")])
+        .output()
+        .expect("run omtsf validate");
+
+    assert_eq!(
+        validate_out.status.code(),
+        Some(0),
+        "validate must succeed on re-imported file; stderr: {}",
+        String::from_utf8_lossy(&validate_out.stderr)
+    );
+
+    // Step 5: assert node and edge counts match the original.
+    let orig_node_count = query_count(&omts_path);
+    let reimport_node_count = query_count(&reimport_omts_path);
+    assert_eq!(
+        orig_node_count, reimport_node_count,
+        "node count must match after round-trip (original={orig_node_count}, re-imported={reimport_node_count})"
+    );
+
+    let orig_edge_count = query_edge_count(&omts_path);
+    let reimport_edge_count = query_edge_count(&reimport_omts_path);
+    assert_eq!(
+        orig_edge_count, reimport_edge_count,
+        "edge count must match after round-trip (original={orig_edge_count}, re-imported={reimport_edge_count})"
+    );
+}
+
+/// Parses a `nodes: N` or `edges: N` line from `omtsf query --count` output.
+fn parse_count_line(stdout: &str, prefix: &str) -> u64 {
+    stdout
+        .lines()
+        .find_map(|line| {
+            let line = line.trim();
+            line.strip_prefix(prefix)
+                .and_then(|s| s.trim().parse::<u64>().ok())
+        })
+        .unwrap_or(0)
+}
+
+/// Returns the total node count across all known node types.
+fn query_count(path: &std::path::Path) -> u64 {
+    let out = Command::new(omtsf_bin())
+        .args([
+            "query",
+            "--count",
+            "--node-type",
+            "organization",
+            "--node-type",
+            "facility",
+            "--node-type",
+            "good",
+            "--node-type",
+            "person",
+            "--node-type",
+            "attestation",
+            "--node-type",
+            "consignment",
+            path.to_str().expect("path"),
+        ])
+        .output()
+        .expect("run omtsf query --count nodes");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    parse_count_line(&stdout, "nodes:")
+}
+
+/// Returns the total edge count across all known edge types.
+fn query_edge_count(path: &std::path::Path) -> u64 {
+    let out = Command::new(omtsf_bin())
+        .args([
+            "query",
+            "--count",
+            "--edge-type",
+            "supplies",
+            "--edge-type",
+            "ownership",
+            "--edge-type",
+            "attested_by",
+            "--edge-type",
+            "same_as",
+            "--edge-type",
+            "subcontracts",
+            "--edge-type",
+            "tolls",
+            "--edge-type",
+            "distributes",
+            "--edge-type",
+            "brokers",
+            "--edge-type",
+            "operates",
+            "--edge-type",
+            "produces",
+            "--edge-type",
+            "composed_of",
+            "--edge-type",
+            "sells_to",
+            "--edge-type",
+            "legal_parentage",
+            "--edge-type",
+            "operational_control",
+            "--edge-type",
+            "beneficial_ownership",
+            "--edge-type",
+            "former_identity",
+            path.to_str().expect("path"),
+        ])
+        .output()
+        .expect("run omtsf query --count edges");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    parse_count_line(&stdout, "edges:")
 }
