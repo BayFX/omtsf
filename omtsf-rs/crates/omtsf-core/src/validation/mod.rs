@@ -599,7 +599,7 @@ pub fn build_registry(config: &ValidationConfig) -> Vec<Box<dyn ValidationRule>>
     use rules_l1_gdm::{GdmRule01, GdmRule02, GdmRule03, GdmRule04, GdmRule05, GdmRule06};
     use rules_l1_sdi::{L1Sdi01, L1Sdi02};
     use rules_l2::{L2Eid01, L2Eid04, L2Gdm01, L2Gdm02, L2Gdm03, L2Gdm04};
-    use rules_l3::{L3Eid01, L3Mrg01};
+    use rules_l3::{L3Eid01, L3Mrg01, L3Mrg02};
 
     let mut registry: Vec<Box<dyn ValidationRule>> = Vec::new();
 
@@ -637,6 +637,7 @@ pub fn build_registry(config: &ValidationConfig) -> Vec<Box<dyn ValidationRule>>
     if config.run_l3 {
         registry.push(Box::new(L3Eid01));
         registry.push(Box::new(L3Mrg01));
+        registry.push(Box::new(L3Mrg02));
     }
 
     registry

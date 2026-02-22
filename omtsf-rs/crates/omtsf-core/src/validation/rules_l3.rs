@@ -1,4 +1,4 @@
-/// L3-EID-01 and L3-MRG-01: Enrichment rules that cross-reference external data sources.
+/// L3 enrichment rules: L3-EID-01, L3-MRG-01, and L3-MRG-02.
 ///
 /// L3 rules are off by default and require a concrete [`ExternalDataSource`] to produce
 /// any findings. When `external_data` is `None`, each rule skips its checks entirely.
@@ -6,12 +6,19 @@
 /// [`Severity::Info`] diagnostics for findings that cannot be determined from the
 /// file alone.
 ///
+/// [`L3Mrg02`] is the exception: it does not use `external_data` at all. It builds
+/// a petgraph representation of the file and runs cycle detection on the
+/// `legal_parentage` subgraph. It is gated on `run_l3` only because cycle detection
+/// is computationally heavier than L1/L2 checks and is considered an enrichment-level
+/// quality observation rather than a hard conformance requirement.
+///
 /// Rules are registered in [`crate::validation::build_registry`] when
 /// [`crate::validation::ValidationConfig::run_l3`] is `true`.
 use std::collections::HashMap;
 
 use crate::enums::{EdgeType, EdgeTypeTag};
 use crate::file::OmtsFile;
+use crate::graph::{build_graph, detect_cycles};
 
 use super::external::ExternalDataSource;
 use super::{Diagnostic, Level, Location, RuleId, Severity, ValidationRule};
@@ -176,6 +183,70 @@ impl ValidationRule for L3Mrg01 {
                     ),
                 ));
             }
+        }
+    }
+}
+
+/// L3-MRG-02 — The `legal_parentage` subgraph SHOULD form a forest (directed
+/// acyclic graph); a cycle indicates a subsidiary that is, directly or
+/// indirectly, its own parent.
+///
+/// This rule builds the petgraph representation of the file and runs Kahn's
+/// topological-sort cycle detection ([`detect_cycles`]) restricted to
+/// `legal_parentage` edges. For each cycle found it emits one [`Severity::Info`]
+/// diagnostic at the [`Location::Global`] level, listing the cycle participants
+/// by their graph-local node IDs.
+///
+/// Unlike the other L3 rules this rule does not consult [`ExternalDataSource`]
+/// at all; it operates on the graph structure alone. It is gated on
+/// [`crate::validation::ValidationConfig::run_l3`] because cycle detection is
+/// computationally heavier than L1/L2 per-element checks.
+///
+/// If `build_graph` fails (e.g. on a file that slipped past L1 checks), the
+/// rule emits no diagnostics and returns silently.
+pub struct L3Mrg02;
+
+impl ValidationRule for L3Mrg02 {
+    fn id(&self) -> RuleId {
+        RuleId::L3Mrg02
+    }
+
+    fn level(&self) -> Level {
+        Level::L3
+    }
+
+    fn check(
+        &self,
+        file: &OmtsFile,
+        diags: &mut Vec<Diagnostic>,
+        _external_data: Option<&dyn ExternalDataSource>,
+    ) {
+        let Ok(graph) = build_graph(file) else {
+            return;
+        };
+
+        let lp_filter = [EdgeTypeTag::Known(EdgeType::LegalParentage)]
+            .into_iter()
+            .collect();
+        let cycles = detect_cycles(&graph, &lp_filter);
+
+        for cycle in cycles {
+            let node_ids: Vec<String> = cycle
+                .iter()
+                .filter_map(|idx| graph.node_weight(*idx))
+                .map(|w| w.local_id.clone())
+                .collect();
+
+            let cycle_str = node_ids.join(" → ");
+            diags.push(Diagnostic::new(
+                RuleId::L3Mrg02,
+                Severity::Info,
+                Location::Global,
+                format!(
+                    "legal_parentage cycle detected: {cycle_str}; \
+                     a subsidiary cannot be its own parent"
+                ),
+            ));
         }
     }
 }
@@ -514,5 +585,157 @@ mod tests {
 
         let not_found = source.nat_reg_lookup("RA000548", "UNKNOWN");
         assert!(not_found.is_none());
+    }
+
+    fn legal_parentage_edge(id: &str, source: &str, target: &str) -> Edge {
+        Edge {
+            id: EdgeId::try_from(id).expect("valid id"),
+            edge_type: EdgeTypeTag::Known(EdgeType::LegalParentage),
+            source: NodeId::try_from(source).expect("valid source"),
+            target: NodeId::try_from(target).expect("valid target"),
+            identifiers: None,
+            properties: EdgeProperties::default(),
+            extra: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn mrg02_acyclic_legal_parentage_produces_no_diagnostic() {
+        // a → b → c (linear chain, no cycles)
+        let file = make_file(
+            vec![org_node("a"), org_node("b"), org_node("c")],
+            vec![
+                legal_parentage_edge("e-ab", "a", "b"),
+                legal_parentage_edge("e-bc", "b", "c"),
+            ],
+        );
+        let diags = run_l3(&L3Mrg02, &file, None);
+        assert!(
+            diags.is_empty(),
+            "acyclic legal_parentage graph must produce no diagnostic; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn mrg02_empty_file_produces_no_diagnostic() {
+        let file = make_file(vec![], vec![]);
+        let diags = run_l3(&L3Mrg02, &file, None);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn mrg02_two_node_cycle_produces_info_diagnostic() {
+        // a → b → a
+        let file = make_file(
+            vec![org_node("a"), org_node("b")],
+            vec![
+                legal_parentage_edge("e-ab", "a", "b"),
+                legal_parentage_edge("e-ba", "b", "a"),
+            ],
+        );
+        let diags = run_l3(&L3Mrg02, &file, None);
+        assert!(
+            !diags.is_empty(),
+            "two-node cycle must produce at least one Info diagnostic"
+        );
+        assert_eq!(diags[0].rule_id, RuleId::L3Mrg02);
+        assert_eq!(diags[0].severity, Severity::Info);
+        assert_eq!(diags[0].location, Location::Global);
+        assert!(
+            diags[0].message.contains("legal_parentage cycle"),
+            "message should mention cycle: {}",
+            diags[0].message
+        );
+    }
+
+    #[test]
+    fn mrg02_three_node_cycle_produces_info_diagnostic() {
+        // a → b → c → a
+        let file = make_file(
+            vec![org_node("a"), org_node("b"), org_node("c")],
+            vec![
+                legal_parentage_edge("e-ab", "a", "b"),
+                legal_parentage_edge("e-bc", "b", "c"),
+                legal_parentage_edge("e-ca", "c", "a"),
+            ],
+        );
+        let diags = run_l3(&L3Mrg02, &file, None);
+        assert!(
+            !diags.is_empty(),
+            "three-node cycle must produce at least one Info diagnostic"
+        );
+        assert!(diags.iter().all(|d| d.rule_id == RuleId::L3Mrg02));
+        assert!(diags.iter().all(|d| d.severity == Severity::Info));
+    }
+
+    #[test]
+    fn mrg02_ownership_cycle_does_not_trigger_rule() {
+        // Ownership cycle is permitted; L3-MRG-02 only checks legal_parentage.
+        let file = make_file(
+            vec![org_node("a"), org_node("b")],
+            vec![
+                ownership_edge("e-ab", "a", "b", None),
+                ownership_edge("e-ba", "b", "a", None),
+            ],
+        );
+        let diags = run_l3(&L3Mrg02, &file, None);
+        assert!(
+            diags.is_empty(),
+            "ownership cycles must not trigger MRG-02; got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn mrg02_external_data_not_required() {
+        // MRG-02 should run even when external_data is None (it doesn't use it).
+        let file = make_file(
+            vec![org_node("a"), org_node("b")],
+            vec![
+                legal_parentage_edge("e-ab", "a", "b"),
+                legal_parentage_edge("e-ba", "b", "a"),
+            ],
+        );
+        let diags_none = run_l3(&L3Mrg02, &file, None);
+        assert!(
+            !diags_none.is_empty(),
+            "MRG-02 should detect cycles regardless of external_data"
+        );
+    }
+
+    #[test]
+    fn mrg02_cycle_message_contains_participant_ids() {
+        // a → b → a; the cycle message should name both nodes.
+        let file = make_file(
+            vec![org_node("subsidiary-x"), org_node("parent-y")],
+            vec![
+                legal_parentage_edge("e-1", "subsidiary-x", "parent-y"),
+                legal_parentage_edge("e-2", "parent-y", "subsidiary-x"),
+            ],
+        );
+        let diags = run_l3(&L3Mrg02, &file, None);
+        assert!(!diags.is_empty());
+        let msg = &diags[0].message;
+        assert!(
+            msg.contains("subsidiary-x") || msg.contains("parent-y"),
+            "cycle message should contain at least one participant ID: {msg}"
+        );
+    }
+
+    #[test]
+    fn mrg02_tree_structure_produces_no_diagnostic() {
+        // a → b, a → c, b → d: a valid corporate tree (no cycle)
+        let file = make_file(
+            vec![org_node("a"), org_node("b"), org_node("c"), org_node("d")],
+            vec![
+                legal_parentage_edge("e-ab", "a", "b"),
+                legal_parentage_edge("e-ac", "a", "c"),
+                legal_parentage_edge("e-bd", "b", "d"),
+            ],
+        );
+        let diags = run_l3(&L3Mrg02, &file, None);
+        assert!(
+            diags.is_empty(),
+            "tree-shaped legal_parentage graph must produce no diagnostic; got: {diags:?}"
+        );
     }
 }

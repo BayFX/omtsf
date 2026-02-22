@@ -493,7 +493,7 @@ fn build_registry_l2_only_has_six_rules() {
 }
 
 #[test]
-fn build_registry_l3_only_has_two_rules() {
+fn build_registry_l3_only_has_three_rules() {
     let cfg = ValidationConfig {
         run_l1: false,
         run_l2: false,
@@ -502,8 +502,8 @@ fn build_registry_l3_only_has_two_rules() {
     let registry = build_registry(&cfg);
     assert_eq!(
         registry.len(),
-        2,
-        "L3-EID-01 + L3-MRG-01 = 2 L3 rules registered when run_l3 is true"
+        3,
+        "L3-EID-01 + L3-MRG-01 + L3-MRG-02 = 3 L3 rules registered when run_l3 is true"
     );
     let ids: Vec<_> = registry.iter().map(|r| r.id()).collect();
     assert!(
@@ -513,6 +513,10 @@ fn build_registry_l3_only_has_two_rules() {
     assert!(
         ids.contains(&RuleId::L3Mrg01),
         "L3-MRG-01 must be in registry"
+    );
+    assert!(
+        ids.contains(&RuleId::L3Mrg02),
+        "L3-MRG-02 must be in registry"
     );
     assert!(
         registry.iter().all(|r| r.level() == Level::L3),
