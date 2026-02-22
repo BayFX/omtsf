@@ -73,6 +73,11 @@ gen-huge:
 # Run huge-tier benchmarks (~500 MB, 20-tier supply chain)
 bench-huge:
     cargo bench -p omtsf-bench --bench huge_file
+    cargo bench -p omtsf-bench --bench huge_cbor
+
+# Run huge-tier CBOR benchmarks only
+bench-huge-cbor:
+    cargo bench -p omtsf-bench --bench huge_cbor
 
 # Generate fixture files to disk for manual inspection
 generate-fixtures:

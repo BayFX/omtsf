@@ -3,7 +3,8 @@
 //! This benchmark binary is intentionally separate from the smaller-tier benchmarks
 //! so that `cargo bench` remains fast for development. Run via `just bench-huge`.
 //!
-//! The fixture is generated once to disk by `just gen-huge` and loaded here.
+//! The JSON fixture is pre-generated to disk by `just gen-huge` and loaded here.
+//! CBOR benchmarks live in `huge_cbor.rs` (separate binary to avoid OOM).
 //! Setup is cached in a `OnceLock` so the deserialization cost is paid once.
 #![allow(clippy::expect_used)]
 

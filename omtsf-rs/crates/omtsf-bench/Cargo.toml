@@ -64,5 +64,9 @@ harness = false
 name = "huge_file"
 harness = false
 
+[[bench]]
+name = "huge_cbor"
+harness = false
+
 [lints]
 workspace = true
