@@ -3,9 +3,9 @@
 /// Also writes back `attested_by` edges into the Attestations sheet rows as
 /// `attested_entity_id` and `scope` columns.
 ///
-/// Supply Relationships uses generic columns: `source_id` / `target_id`.
-/// Corporate Structure uses: `subsidiary_id` (source) / `parent_id` (target).
-/// These conventions mirror the import-side column names.
+/// Supply Relationships uses `supplier_id` / `buyer_id` columns.
+/// Corporate Structure uses `subsidiary_id` (source) / `parent_id` (target).
+/// These conventions mirror the import-side column names for round-trip fidelity.
 use std::collections::HashMap;
 
 use rust_xlsxwriter::{Worksheet, XlsxError};
