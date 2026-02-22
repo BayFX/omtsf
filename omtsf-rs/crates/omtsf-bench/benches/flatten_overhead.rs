@@ -100,9 +100,7 @@ fn make_strict_nodes(count: usize) -> Vec<NodeStrict> {
 }
 
 fn cbor_encode<T: serde::Serialize>(value: &T) -> Vec<u8> {
-    let mut buf = Vec::new();
-    ciborium::into_writer(value, &mut buf).expect("ciborium encode");
-    buf
+    cbor4ii::serde::to_vec(Vec::new(), value).expect("cbor4ii encode")
 }
 
 fn bench_flatten_overhead(c: &mut Criterion) {
@@ -147,7 +145,7 @@ fn bench_flatten_overhead(c: &mut Criterion) {
             |b, bytes| {
                 b.iter(|| {
                     let _: Vec<NodeFlat> =
-                        ciborium::from_reader(bytes.as_slice()).expect("cbor decode flat");
+                        cbor4ii::serde::from_slice(bytes).expect("cbor decode flat");
                 });
             },
         );
@@ -159,7 +157,7 @@ fn bench_flatten_overhead(c: &mut Criterion) {
             |b, bytes| {
                 b.iter(|| {
                     let _: Vec<NodeStrict> =
-                        ciborium::from_reader(bytes.as_slice()).expect("cbor decode strict");
+                        cbor4ii::serde::from_slice(bytes).expect("cbor decode strict");
                 });
             },
         );

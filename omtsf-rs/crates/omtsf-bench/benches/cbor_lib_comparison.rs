@@ -1,22 +1,36 @@
 //! CBOR library comparison: `serde_json` vs ciborium vs cbor4ii.
 //!
-//! Evaluates `cbor4ii` 1.x as a potential faster replacement for `ciborium` 0.2,
-//! using `serde_json` as a baseline. All three encode/decode the same `OmtsFile`
-//! at S, M, and L size tiers.
+//! Compares decode and encode throughput of the two CBOR backends.
+//! `omtsf-core` uses `cbor4ii` in production; `ciborium` is retained here
+//! as a dev-dependency for ongoing regression comparison.
 //!
 //! # Self-describing tag
 //!
-//! `cbor4ii` does not prepend the self-describing CBOR tag 55799 automatically.
+//! Neither CBOR library prepends the self-describing tag 55799 automatically.
 //! The helpers below prepend `[0xD9, 0xD9, 0xF7]` on encode and strip it on
-//! decode to produce byte-for-byte equivalent output to `omtsf_core::cbor`.
+//! decode, matching the `omtsf_core::cbor` convention.
 #![allow(clippy::expect_used)]
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use omtsf_bench::{SizeTier, generate_supply_chain};
 use omtsf_core::OmtsFile;
-use omtsf_core::cbor::{decode_cbor, encode_cbor};
 
 const SELF_DESCRIBING_TAG: [u8; 3] = [0xD9, 0xD9, 0xF7];
+
+fn ciborium_encode(file: &OmtsFile) -> Vec<u8> {
+    let mut buf = Vec::from(SELF_DESCRIBING_TAG);
+    ciborium::into_writer(file, &mut buf).expect("ciborium encode");
+    buf
+}
+
+fn ciborium_decode(bytes: &[u8]) -> OmtsFile {
+    let payload = if bytes.starts_with(&SELF_DESCRIBING_TAG) {
+        &bytes[3..]
+    } else {
+        bytes
+    };
+    ciborium::from_reader(payload).expect("ciborium decode")
+}
 
 fn cbor4ii_encode(file: &OmtsFile) -> Vec<u8> {
     let buf = Vec::from(SELF_DESCRIBING_TAG);
@@ -51,7 +65,7 @@ fn bench_decode(c: &mut Criterion) {
             });
         });
 
-        let ciborium_bytes = encode_cbor(&file).expect("ciborium encode");
+        let ciborium_bytes = ciborium_encode(&file);
         let ciborium_len = ciborium_bytes.len() as u64;
         group.throughput(Throughput::Bytes(ciborium_len));
         group.bench_with_input(
@@ -59,7 +73,7 @@ fn bench_decode(c: &mut Criterion) {
             &ciborium_bytes,
             |b, bytes| {
                 b.iter(|| {
-                    let _ = decode_cbor(bytes).expect("ciborium decode");
+                    let _ = ciborium_decode(bytes);
                 });
             },
         );
@@ -100,12 +114,12 @@ fn bench_encode(c: &mut Criterion) {
             });
         });
 
-        let ciborium_bytes = encode_cbor(&file).expect("ciborium encode");
+        let ciborium_bytes = ciborium_encode(&file);
         let ciborium_len = ciborium_bytes.len() as u64;
         group.throughput(Throughput::Bytes(ciborium_len));
         group.bench_with_input(BenchmarkId::new("ciborium", name), &file, |b, file| {
             b.iter(|| {
-                let _ = encode_cbor(file).expect("ciborium encode");
+                let _ = ciborium_encode(file);
             });
         });
 

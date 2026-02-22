@@ -595,7 +595,7 @@ dependencies = [
 name = "omtsf-core"
 version = "0.1.0"
 dependencies = [
- "ciborium",
+ "cbor4ii",
  "getrandom 0.2.17",
  "petgraph",
  "proptest",

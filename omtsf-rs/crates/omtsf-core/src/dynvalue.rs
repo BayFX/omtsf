@@ -244,7 +244,7 @@ impl From<DynValue> for serde_json::Value {
 impl Serialize for DynValue {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
-            Self::Null => serializer.serialize_unit(),
+            Self::Null => serializer.serialize_none(),
             Self::Bool(b) => serializer.serialize_bool(*b),
             Self::Integer(i) => serializer.serialize_i64(*i),
             Self::UnsignedInteger(u) => serializer.serialize_u64(*u),
@@ -518,5 +518,14 @@ mod tests {
         let nan1 = DynValue::Float(f64::NAN);
         let nan2 = DynValue::Float(f64::NAN);
         assert_eq!(nan1, nan2);
+    }
+
+    #[test]
+    fn null_round_trips_cbor() {
+        let v = DynValue::Null;
+        let cbor = cbor4ii::serde::to_vec(Vec::new(), &v).expect("serialize");
+        assert_eq!(cbor, [0xF6], "DynValue::Null must encode as CBOR null");
+        let back: DynValue = cbor4ii::serde::from_slice(&cbor).expect("deserialize");
+        assert_eq!(v, back);
     }
 }

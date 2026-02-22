@@ -7,7 +7,7 @@
 //!
 //! Because [`OmtsFile`] now uses [`crate::DynValue`] for its `extra` fields
 //! instead of `serde_json::Value`, the data model can be serialized directly
-//! with ciborium's serde backend without an intermediate JSON representation.
+//! with cbor4ii's serde backend without an intermediate JSON representation.
 
 use crate::OmtsFile;
 
@@ -58,7 +58,7 @@ fn estimate_cbor_size(file: &OmtsFile) -> usize {
 pub fn encode_cbor(file: &OmtsFile) -> Result<Vec<u8>, CborError> {
     let mut buf = Vec::with_capacity(estimate_cbor_size(file) + SELF_DESCRIBING_TAG_BYTES.len());
     buf.extend_from_slice(&SELF_DESCRIBING_TAG_BYTES);
-    ciborium::into_writer(file, &mut buf).map_err(|e| CborError::Encode(e.to_string()))?;
+    let buf = cbor4ii::serde::to_vec(buf, file).map_err(|e| CborError::Encode(e.to_string()))?;
     Ok(buf)
 }
 
@@ -72,7 +72,7 @@ pub fn decode_cbor(bytes: &[u8]) -> Result<OmtsFile, CborError> {
     } else {
         bytes
     };
-    ciborium::from_reader(payload).map_err(|e| CborError::Decode(e.to_string()))
+    cbor4ii::serde::from_slice(payload).map_err(|e| CborError::Decode(e.to_string()))
 }
 
 #[cfg(test)]
