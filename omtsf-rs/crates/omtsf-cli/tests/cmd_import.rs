@@ -18,7 +18,7 @@ fn omtsf_bin() -> PathBuf {
 /// Path to an Excel fixture file relative to the repo root.
 fn excel_fixture(name: &str) -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("../../../tests/fixtures/excel");
+    path.push("../../../templates/excel");
     path.push(name);
     path
 }
