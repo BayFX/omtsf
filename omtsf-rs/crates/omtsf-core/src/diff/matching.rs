@@ -13,7 +13,8 @@ use super::types::{DiffFilter, NodeMatchResult};
 ///
 /// Builds canonical identifier indices for both files, finds matching pairs
 /// via shared identifiers, computes transitive closure using union-find,
-/// detects ambiguous groups, and classifies unmatched nodes.
+/// detects ambiguous groups, and classifies unmatched nodes. Nodes that
+/// lack external identifiers fall back to matching by node ID.
 pub(super) fn match_nodes(
     nodes_a: &[Node],
     nodes_b: &[Node],
@@ -89,6 +90,31 @@ pub(super) fn match_nodes(
                         .push(canonical_id.as_str().to_owned());
                 }
             }
+        }
+    }
+
+    // Fallback: match remaining nodes by node ID when identifier-based
+    // matching didn't reach them (e.g. nodes with no external identifiers).
+    let id_matched_a: HashSet<usize> = pair_matched_by.keys().map(|&(ai, _)| ai).collect();
+    let id_matched_b: HashSet<usize> = pair_matched_by.keys().map(|&(_, bi)| bi).collect();
+
+    let mut b_id_map: HashMap<&str, usize> = HashMap::new();
+    for &bi in &active_b {
+        if !id_matched_b.contains(&bi) {
+            b_id_map.insert(&nodes_b[bi].id, bi);
+        }
+    }
+
+    for &ai in &active_a {
+        if id_matched_a.contains(&ai) {
+            continue;
+        }
+        if let Some(&bi) = b_id_map.get(&*nodes_a[ai].id) {
+            uf.union(ai, len_a + bi);
+            pair_matched_by
+                .entry((ai, bi))
+                .or_default()
+                .push(format!("node-id:{}", nodes_a[ai].id));
         }
     }
 

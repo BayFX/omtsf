@@ -261,19 +261,30 @@ fn pipeline_import_through_all_commands() {
         "CBOR output must start with self-describing tag 55799"
     );
 
-    // -- Step 11: diff --
-    // Diff the imported file against the org-only subgraph (a subset).
+    // -- Step 11: diff (identical) --
+    let diff_identical = Command::new(omtsf_bin())
+        .args(["diff", &imported_path, &imported_path])
+        .output()
+        .expect("run omtsf diff (identical)");
+    assert_eq!(
+        diff_identical.status.code(),
+        Some(0),
+        "diff of a file against itself must report no differences (exit 0); stderr: {}",
+        String::from_utf8_lossy(&diff_identical.stderr)
+    );
+
+    // -- Step 12: diff (different) --
     let diff_out = Command::new(omtsf_bin())
         .args(["diff", &imported_path, &subgraph_path])
         .output()
-        .expect("run omtsf diff");
+        .expect("run omtsf diff (different)");
     assert_eq!(
         diff_out.status.code(),
         Some(1),
         "diff of full graph vs org-only subgraph must show differences (exit 1)"
     );
 
-    // -- Step 12: diff --summary-only --
+    // -- Step 12b: diff --summary-only --
     let diff_summary_out = Command::new(omtsf_bin())
         .args(["diff", "--summary-only", &imported_path, &subgraph_path])
         .output()
@@ -621,7 +632,19 @@ fn pipeline_supplier_list_import_through_all_commands() {
         "CBOR output must start with self-describing tag 55799"
     );
 
-    // -- Step 11: diff --
+    // -- Step 11: diff (identical) --
+    let diff_identical = Command::new(omtsf_bin())
+        .args(["diff", &imported_path, &imported_path])
+        .output()
+        .expect("run omtsf diff (identical)");
+    assert_eq!(
+        diff_identical.status.code(),
+        Some(0),
+        "diff of a file against itself must report no differences (exit 0); stderr: {}",
+        String::from_utf8_lossy(&diff_identical.stderr)
+    );
+
+    // -- Step 12: diff (different) --
     // Create a single-node subgraph to produce a meaningful subset for diffing.
     let small_subgraph_out = Command::new(omtsf_bin())
         .args(["subgraph", &imported_path, first_node_id])
@@ -641,14 +664,14 @@ fn pipeline_supplier_list_import_through_all_commands() {
     let diff_out = Command::new(omtsf_bin())
         .args(["diff", &imported_path, &small_sub_path])
         .output()
-        .expect("run omtsf diff");
+        .expect("run omtsf diff (different)");
     assert_eq!(
         diff_out.status.code(),
         Some(1),
         "diff of full graph vs single-node subgraph must show differences (exit 1)"
     );
 
-    // -- Step 12: diff --summary-only --
+    // -- Step 12b: diff --summary-only --
     let diff_summary_out = Command::new(omtsf_bin())
         .args(["diff", "--summary-only", &imported_path, &small_sub_path])
         .output()
