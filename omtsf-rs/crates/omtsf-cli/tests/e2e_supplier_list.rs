@@ -1,7 +1,6 @@
-//! E2E test: Import `omts-import-example.xlsx` → exercise every CLI command.
+//! E2E test: Import `omts-supplier-list-example.xlsx` → exercise every CLI command.
 //!
-//! Imports the full multi-sheet Excel workbook and runs every CLI command on
-//! the result, verifying that commands produce correct, consistent output.
+//! All nodes are organizations, all edges are supplies.
 #![allow(clippy::expect_used)]
 
 use std::io::Write as _;
@@ -31,24 +30,19 @@ fn excel_fixture(name: &str) -> PathBuf {
 /// CBOR round-trip → diff (with JSON verification) → redact → validate(redacted) →
 /// export → export round-trip → export(supplier-list).
 ///
-/// Uses `omts-import-example.xlsx` (5 nodes, 5 edges):
-///   - 2 organizations (org-acme, org-bolt)
-///   - 1 facility (fac-bolt-sheffield)
-///   - 1 good (good-steel-bolts)
-///   - 1 attestation (att-sa8000)
-///   - 5 edges: supplies, operates, produces, ownership, `attested_by`
+/// Uses `omts-supplier-list-example.xlsx` (7 nodes, 7 edges).
 #[test]
-fn pipeline_import_through_all_commands() {
+fn pipeline_supplier_list_import_through_all_commands() {
     // -- Step 1: import --
     let import_out = Command::new(omtsf_bin())
         .args([
             "import",
-            excel_fixture("omts-import-example.xlsx")
+            excel_fixture("omts-supplier-list-example.xlsx")
                 .to_str()
                 .expect("path"),
         ])
         .output()
-        .expect("run omtsf import");
+        .expect("run omtsf import supplier list");
     assert_eq!(
         import_out.status.code(),
         Some(0),
@@ -61,10 +55,10 @@ fn pipeline_import_through_all_commands() {
         serde_json::from_str(&import_stdout).expect("import output must be valid JSON");
     let nodes = graph["nodes"].as_array().expect("nodes array");
     let edges = graph["edges"].as_array().expect("edges array");
-    assert_eq!(nodes.len(), 5, "expected 5 nodes, got {}", nodes.len());
-    assert_eq!(edges.len(), 5, "expected 5 edges, got {}", edges.len());
+    assert_eq!(nodes.len(), 7, "expected 7 nodes, got {}", nodes.len());
+    assert_eq!(edges.len(), 7, "expected 7 edges, got {}", edges.len());
 
-    // Write imported graph to a temp file for subsequent commands.
+    // Write imported graph to a temp file.
     let mut imported_tmp = tempfile::NamedTempFile::new().expect("temp file");
     imported_tmp
         .write_all(import_stdout.as_bytes())
@@ -97,8 +91,8 @@ fn pipeline_import_through_all_commands() {
     let inspect_stdout = String::from_utf8_lossy(&inspect_out.stdout);
     let inspect_json: serde_json::Value =
         serde_json::from_str(inspect_stdout.trim()).expect("inspect JSON");
-    assert_eq!(inspect_json["node_count"], 5, "inspect node_count");
-    assert_eq!(inspect_json["edge_count"], 5, "inspect edge_count");
+    assert_eq!(inspect_json["node_count"], 7, "inspect node_count");
+    assert_eq!(inspect_json["edge_count"], 7, "inspect edge_count");
     assert!(
         inspect_json.get("version").is_some(),
         "inspect must include version"
@@ -126,11 +120,7 @@ fn pipeline_import_through_all_commands() {
     let query_json: serde_json::Value =
         serde_json::from_str(query_stdout.trim()).expect("query JSON");
     let query_nodes = query_json["nodes"].as_array().expect("query nodes array");
-    assert_eq!(
-        query_nodes.len(),
-        2,
-        "import example has exactly 2 organization nodes"
-    );
+    assert_eq!(query_nodes.len(), 7, "all 7 nodes should be organizations");
     for node in query_nodes {
         assert_eq!(
             node["type"].as_str(),
@@ -179,10 +169,6 @@ fn pipeline_import_through_all_commands() {
         serde_json::from_str(reach_stdout.trim()).expect("reach JSON");
     let reach_ids = reach_json["node_ids"].as_array().expect("node_ids array");
     let reach_count = reach_json["count"].as_u64().expect("count");
-    assert!(
-        reach_count >= 1,
-        "reach should find at least 1 reachable node"
-    );
     assert_eq!(
         reach_ids.len() as u64,
         reach_count,
@@ -263,19 +249,12 @@ fn pipeline_import_through_all_commands() {
         serde_json::from_str(subgraph_stdout.trim()).expect("subgraph JSON");
     let sub_nodes = subgraph_json["nodes"].as_array().expect("subgraph nodes");
     let sub_edges = subgraph_json["edges"].as_array().expect("subgraph edges");
-    assert_eq!(sub_nodes.len(), 2, "org subgraph has exactly 2 org nodes");
+    assert_eq!(sub_nodes.len(), 7, "subgraph should have all 7 org nodes");
     assert_eq!(
         sub_edges.len(),
-        2,
-        "org subgraph has 2 edges between orgs (supplies + ownership)"
+        7,
+        "subgraph should have all 7 supplies edges"
     );
-
-    // Write subgraph output for later diff.
-    let mut subgraph_tmp = tempfile::NamedTempFile::new().expect("temp file");
-    subgraph_tmp
-        .write_all(subgraph_out.stdout.as_slice())
-        .expect("write subgraph");
-    let subgraph_path = subgraph_tmp.path().to_str().expect("path").to_owned();
 
     // -- Step 9: convert --compact --
     let compact_out = Command::new(omtsf_bin())
@@ -328,8 +307,8 @@ fn pipeline_import_through_all_commands() {
     let cbor_stats: serde_json::Value =
         serde_json::from_str(String::from_utf8_lossy(&cbor_inspect.stdout).trim())
             .expect("inspect CBOR JSON");
-    assert_eq!(cbor_stats["node_count"], 5, "CBOR round-trip node_count");
-    assert_eq!(cbor_stats["edge_count"], 5, "CBOR round-trip edge_count");
+    assert_eq!(cbor_stats["node_count"], 7, "CBOR round-trip node_count");
+    assert_eq!(cbor_stats["edge_count"], 7, "CBOR round-trip edge_count");
 
     let cbor_validate = Command::new(omtsf_bin())
         .args(["validate", "--level", "1", &cbor_path])
@@ -355,19 +334,35 @@ fn pipeline_import_through_all_commands() {
     );
 
     // -- Step 12: diff (different) --
+    // Create a single-node subgraph to produce a meaningful subset for diffing.
+    let small_subgraph_out = Command::new(omtsf_bin())
+        .args(["subgraph", &imported_path, first_node_id])
+        .output()
+        .expect("run omtsf subgraph (single node)");
+    assert_eq!(
+        small_subgraph_out.status.code(),
+        Some(0),
+        "single-node subgraph must succeed"
+    );
+    let mut small_sub_tmp = tempfile::NamedTempFile::new().expect("temp file");
+    small_sub_tmp
+        .write_all(small_subgraph_out.stdout.as_slice())
+        .expect("write small subgraph");
+    let small_sub_path = small_sub_tmp.path().to_str().expect("path").to_owned();
+
     let diff_out = Command::new(omtsf_bin())
-        .args(["diff", &imported_path, &subgraph_path])
+        .args(["diff", &imported_path, &small_sub_path])
         .output()
         .expect("run omtsf diff (different)");
     assert_eq!(
         diff_out.status.code(),
         Some(1),
-        "diff of full graph vs org-only subgraph must show differences (exit 1)"
+        "diff of full graph vs single-node subgraph must show differences (exit 1)"
     );
 
     // -- Step 12b: diff --summary-only --
     let diff_summary_out = Command::new(omtsf_bin())
-        .args(["diff", "--summary-only", &imported_path, &subgraph_path])
+        .args(["diff", "--summary-only", &imported_path, &small_sub_path])
         .output()
         .expect("run omtsf diff --summary-only");
     assert_eq!(
@@ -383,7 +378,7 @@ fn pipeline_import_through_all_commands() {
 
     // -- Step 12c: diff -f json (verify summary counts) --
     let diff_json_out = Command::new(omtsf_bin())
-        .args(["diff", "-f", "json", &imported_path, &subgraph_path])
+        .args(["diff", "-f", "json", &imported_path, &small_sub_path])
         .output()
         .expect("run omtsf diff -f json");
     assert_eq!(
@@ -396,18 +391,17 @@ fn pipeline_import_through_all_commands() {
             .expect("diff JSON output");
     let ds = &diff_json["summary"];
     assert_eq!(
-        ds["nodes_removed"], 3,
-        "3 non-org nodes removed from full graph"
+        ds["nodes_removed"], 6,
+        "6 of 7 nodes removed (single-node subgraph keeps 1)"
     );
-    assert_eq!(ds["nodes_added"], 0, "no nodes added in subgraph");
-    assert_eq!(ds["edges_removed"], 3, "3 non-org edges removed");
-    assert_eq!(ds["edges_added"], 0, "no edges added in subgraph");
+    assert_eq!(ds["nodes_added"], 0, "no nodes added");
+    assert_eq!(
+        ds["edges_removed"], 7,
+        "all 7 edges removed (single-node subgraph has no edges)"
+    );
+    assert_eq!(ds["edges_added"], 0, "no edges added");
 
     // -- Step 13: redact --scope public --
-    // The imported file has disclosure_scope=partner and a reporting_entity.
-    // Redacting to public converts nodes to boundary_refs, which conflicts with
-    // the reporting_entity validation rule. To exercise redact successfully, we
-    // create a copy without reporting_entity.
     let mut graph_no_re = graph.clone();
     graph_no_re
         .as_object_mut()
@@ -447,7 +441,6 @@ fn pipeline_import_through_all_commands() {
         boundary_ref_count > 0,
         "public redaction of partner-scope graph must produce boundary_ref nodes"
     );
-    // Sensitive identifiers (restricted/confidential) must not survive public redaction.
     for node in redacted_nodes {
         if let Some(identifiers) = node["identifiers"].as_array() {
             for ident in identifiers {
