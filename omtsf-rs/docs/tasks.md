@@ -1205,3 +1205,220 @@ and senior QA engineer assessments. Tasks ordered by priority.
 8. **Redact node selection mechanism (cli-interface.md Section 3.3).** The CLI defines `--scope` but does not describe how the user specifies which non-person nodes to retain vs. replace (e.g., `--retain <node-id>...`, a config file, or retaining all nodes by default). This flag set needs further specification before T-034 and T-041 can be fully implemented.
 
 9. **L2 rule L2-EID-03 (validation.md Section 4.2).** The rule references "valid GLEIF RA codes per snapshot" but no list of valid RA codes is provided in the spec or in the implementation documents. The implementor must source this data or stub the rule.
+
+---
+
+## Phase 14: Expert Panel Findings — Rust Implementation Fixes
+
+Findings from the full-app expert panel review (2026-02-23). Tasks cover both
+Rust-specific bugs/improvements and spec-alignment changes required by updated
+specifications (SPEC-001 through SPEC-007, revision 2).
+
+### T-080 -- Fix `on_path` bitset allocation bug in `dfs_paths`
+
+- **Source:** Expert panel C2 (Graph Modeling Expert)
+- **Dependencies:** T-020
+- **Complexity:** S
+- **Crate:** omtsf-core
+- **Location:** `graph/queries/mod.rs` — `dfs_paths` function
+- **Issue:** The `on_path` vector is allocated as `vec![false; graph.node_count()]` but indexed by `NodeIndex::index()`. If any node has been removed from a `StableDiGraph`, `node_count()` decreases while the max live index does not, causing potential out-of-bounds panics.
+- **Acceptance Criteria:**
+  - Replace `graph.node_count()` with `graph.node_bound()` for the `on_path` allocation
+  - Add a test with a graph that has removed nodes (non-dense NodeIndex space) to verify no panic
+  - All existing path query tests continue to pass
+
+### T-081 -- Fix regex fallback chains in newtypes.rs
+
+- **Source:** Expert panel C8 (Systems Engineering Expert)
+- **Dependencies:** T-003
+- **Complexity:** S
+- **Crate:** omtsf-core
+- **Location:** `newtypes.rs` — five-deep nested `unwrap_or_else` chains
+- **Issue:** Regex initialization uses five nested `unwrap_or_else` fallbacks that substitute progressively more general regexes. If the primary regex fails to compile, validation semantics silently change instead of failing loudly.
+- **Acceptance Criteria:**
+  - Replace fallback chains with `regex_lite` crate (guaranteed to compile basic patterns) or compile-time assertion (e.g., `LazyLock` with panic-on-failure in debug builds)
+  - No silent degradation of validation regex patterns
+  - All existing newtype tests continue to pass
+
+### T-082 -- Implement merge-group safety thresholds (SPEC-003 Section 4.1)
+
+- **Source:** Expert panel C4 (Entity ID, Graph Modeling)
+- **Spec Reference:** SPEC-003 Section 4.1 (updated)
+- **Dependencies:** T-029
+- **Complexity:** M
+- **Crate:** omtsf-core
+- **Issue:** The merge engine emits warnings for large merge groups but has no concrete thresholds matching the updated spec. SPEC-003 now defines: 4--9 nodes = warning, 10+ = prominent warning with option to split/reject.
+- **Acceptance Criteria:**
+  - Implement tiered warnings per updated SPEC-003 Section 4.1
+  - Warning messages include group member nodes and bridging identifiers
+  - `same_as`-linked nodes counted separately as specified
+  - Default thresholds configurable via `MergeConfig`
+  - Tests: group of 3 (no warning), group of 5 (warning), group of 12 (prominent warning)
+
+### T-083 -- Implement `tier` property reconciliation on merge
+
+- **Source:** Expert panel M2 (Supply Chain, Graph Modeling)
+- **Spec Reference:** SPEC-003 Section 4.2 (new)
+- **Dependencies:** T-029
+- **Complexity:** M
+- **Crate:** omtsf-core
+- **Issue:** Merging files with different `reporting_entity` values produces conflicting `tier` values. Updated SPEC-003 Section 4.2 defines reconciliation rules: retain primary perspective's tier, record others in `_conflicts` with `reporting_entity` context.
+- **Acceptance Criteria:**
+  - When merging files with same `reporting_entity`, `tier` values follow normal scalar merge
+  - When merging files with different `reporting_entity`, `tier` conflicts include source `reporting_entity` in conflict records
+  - When merged file omits `reporting_entity`, all `tier` values go to `_conflicts`
+  - Tests covering each scenario
+
+### T-084 -- Add `supplies` edge new properties: `lead_time_days`, `sole_source`, `visibility_depth`
+
+- **Source:** Expert panel M3, M17 (Supply Chain)
+- **Spec Reference:** SPEC-001 Section 6.1 (updated)
+- **Dependencies:** T-006
+- **Complexity:** M
+- **Crate:** omtsf-core
+- **Issue:** SPEC-001 now defines three new optional properties on `supplies` edges: `lead_time_days` (integer), `sole_source` (boolean), and `visibility_depth` (integer). Data model, serialization, and validation need updates.
+- **Acceptance Criteria:**
+  - `EdgeProperties` struct updated with `lead_time_days: Option<i64>`, `sole_source: Option<bool>`, `visibility_depth: Option<i64>`
+  - Serde round-trip tests for edges with these properties
+  - Properties appear in diff output, merge conflict detection, and JSON/CBOR round-trip
+  - JSON schema updated to include new properties
+  - Existing tests continue to pass
+
+### T-085 -- Add attestation `coverage_period_from` / `coverage_period_to` properties
+
+- **Source:** Expert panel M7 (Regulatory Compliance)
+- **Spec Reference:** SPEC-001 Section 4.5 (updated)
+- **Dependencies:** T-005
+- **Complexity:** S
+- **Crate:** omtsf-core
+- **Issue:** SPEC-001 now defines `coverage_period_from` and `coverage_period_to` on attestation nodes for EUDR DDS aggregate coverage semantics.
+- **Acceptance Criteria:**
+  - `Node` struct updated with optional `coverage_period_from` and `coverage_period_to` fields (both `Option<CalendarDate>`)
+  - Fields populated only for `attestation` node type; ignored for other types
+  - Serde round-trip tests, diff detection, merge handling
+  - JSON schema updated
+  - Existing tests continue to pass
+
+### T-086 -- Add `composed_of` DAG validation rule (L2-GDM-05)
+
+- **Source:** Expert panel M16 (Graph Modeling)
+- **Spec Reference:** SPEC-001 Section 9.2 (updated)
+- **Dependencies:** T-016, T-022
+- **Complexity:** M
+- **Crate:** omtsf-core
+- **Issue:** SPEC-001 now includes L2-GDM-05 requiring the `composed_of` subgraph to be acyclic. The cycle detection machinery already exists (T-022) but no validation rule invokes it for `composed_of`.
+- **Acceptance Criteria:**
+  - New L2 validation rule `L2-GDM-05` that builds the `composed_of` edge subgraph and runs cycle detection
+  - Produces `Severity::Warning` with involved node IDs when cycles found
+  - Test with acyclic `composed_of` (no warning), test with cyclic `composed_of` (warning)
+
+### T-087 -- Add L2-SDI-01 and L2-SDI-02 validation rules
+
+- **Source:** Expert panel M15, M20 (Security & Privacy)
+- **Spec Reference:** SPEC-004 Section 7.2 (new)
+- **Dependencies:** T-015
+- **Complexity:** M
+- **Crate:** omtsf-core
+- **Issue:** SPEC-004 now defines two new L2 validation rules: L2-SDI-01 warns when person node identifiers have `sensitivity: "public"` override; L2-SDI-02 warns when unrecognized schemes in public-scope files lack explicit sensitivity.
+- **Acceptance Criteria:**
+  - L2-SDI-01: fires when any identifier on a `person` node has `sensitivity: "public"`
+  - L2-SDI-02: fires in files with `disclosure_scope: "public"` when an extension scheme identifier has no explicit `sensitivity` field
+  - Both produce `Severity::Warning` diagnostics
+  - Tests for each rule with triggering and non-triggering inputs
+
+### T-088 -- Add L2-EID-09 validation rule (DUNS branch warning)
+
+- **Source:** Expert panel C6 (Entity ID)
+- **Spec Reference:** SPEC-002 Section 6.2 (updated)
+- **Dependencies:** T-016
+- **Complexity:** S
+- **Crate:** omtsf-core
+- **Issue:** SPEC-002 now includes L2-EID-09 warning for DUNS numbers on `organization` nodes that may be branch-level. Since branch/HQ determination requires external data, this rule should emit an informational warning when a DUNS is found on an org node without `verification_status: "verified"`.
+- **Acceptance Criteria:**
+  - New L2 rule fires when `organization` node has `duns` identifier without `verification_status: "verified"` or `verification_status: "reported"`
+  - Warning text advises verifying HQ vs. branch level
+  - Tests with verified/unverified DUNS on org nodes
+
+### T-089 -- Implement VAT number normalization
+
+- **Source:** Expert panel M9 (Procurement, Entity ID)
+- **Spec Reference:** SPEC-002 Section 5.1 `vat` (updated)
+- **Dependencies:** T-024
+- **Complexity:** M
+- **Crate:** omtsf-core
+- **Issue:** SPEC-002 now mandates that VAT `value` fields include the country prefix for EU member states. Merge identity comparison and canonical ID computation must handle both normalized and unnormalized forms for backward compatibility.
+- **Acceptance Criteria:**
+  - L2 validation warning when a `vat` identifier's `value` does not start with the `authority` country code (suggesting unnormalized input)
+  - Canonical ID computation normalizes VAT values by prepending authority if not already prefixed
+  - Merge identity predicate handles both forms correctly
+  - Tests: `vat:DE:DE123456789` and `vat:DE:123456789` treated as equivalent for merge
+
+### T-090 -- Optimize merge pipeline to avoid pre-cloning all nodes
+
+- **Source:** Expert panel M6 (Systems Engineering)
+- **Dependencies:** T-029
+- **Complexity:** L
+- **Crate:** omtsf-core
+- **Location:** `merge_pipeline/pipeline.rs`
+- **Issue:** The merge pipeline calls `.clone()` on every node and edge when building working lists. For merging 10 files of 50K nodes each, this produces 500K full struct clones with heap-allocated BTreeMaps before any deduplication begins.
+- **Acceptance Criteria:**
+  - Refactor merge pipeline to use references or indices into the source files instead of cloning all data upfront
+  - Only clone/move data for nodes that are actually merge candidates
+  - Merge benchmarks show measurable improvement for multi-file merges
+  - All existing merge tests and proptest algebraic property tests continue to pass
+
+### T-091 -- Convert `all_paths` DFS to iterative with explicit stack
+
+- **Source:** Expert panel M10 (Systems Engineering)
+- **Dependencies:** T-020
+- **Complexity:** M
+- **Crate:** omtsf-core
+- **Location:** `graph/queries/mod.rs`
+- **Issue:** The `all_paths` implementation uses recursive DFS with user-controlled `max_depth`. On untrusted input with deep paths, stack depth is proportional to path length, risking stack overflow.
+- **Acceptance Criteria:**
+  - Replace recursive DFS with iterative implementation using explicit `Vec`-based stack
+  - Stack depth bounded by `max_depth` parameter (default 20)
+  - All existing `all_paths` tests produce identical results
+  - No performance regression (likely improvement from reduced function call overhead)
+
+### T-092 -- Add EORI and CBAM installation ID extension schemes
+
+- **Source:** Expert panel M19 (Regulatory Compliance)
+- **Spec Reference:** SPEC-002 Section 5.2 (updated)
+- **Dependencies:** T-004
+- **Complexity:** S
+- **Crate:** omtsf-core
+- **Issue:** SPEC-002 now defines `org.eu.eori` and `org.eu.cbam-installation` as known extension schemes. The implementation should recognize these in validation and documentation.
+- **Acceptance Criteria:**
+  - Extension scheme list in validation includes `org.eu.eori` and `org.eu.cbam-installation`
+  - JSON schema updated with these schemes in the extension scheme documentation
+  - Test that files with these schemes pass validation
+
+### T-093 -- Add `uflpa-screened-clear` label to recommended vocabulary
+
+- **Source:** Expert panel M18 (Regulatory Compliance)
+- **Spec Reference:** SPEC-001 Appendix B.3 (updated)
+- **Dependencies:** T-004
+- **Complexity:** S
+- **Crate:** omtsf-core
+- **Issue:** SPEC-001 now defines `uflpa-screened-clear` as a recommended label key for negative screening. The JSON schema and any label validation should recognize this.
+- **Acceptance Criteria:**
+  - JSON schema updated with `uflpa-screened-clear` in the recommended labels documentation
+  - Fixture files updated to include an example of this label
+  - Existing tests continue to pass
+
+### T-094 -- Implement content hash computation (SPEC-007 Section 8.2)
+
+- **Source:** Expert panel M4 (Data Format)
+- **Spec Reference:** SPEC-007 Section 8.2 (new)
+- **Dependencies:** T-008, T-050
+- **Complexity:** L
+- **Crate:** omtsf-core
+- **Issue:** SPEC-007 now defines the canonical content bytes for `file_integrity.content_hash`: parse → re-serialize to canonical JSON (sorted keys, compact, no `file_integrity`) → SHA-256. No implementation exists.
+- **Acceptance Criteria:**
+  - `compute_content_hash(file: &OmtsFile) -> String` produces canonical JSON, excludes `file_integrity`, and returns hex-encoded SHA-256
+  - Canonical JSON uses sorted keys at every level, compact format, numbers without trailing zeros
+  - Hash is identical regardless of input encoding (JSON, CBOR, compressed)
+  - Test: same file in JSON and CBOR produce identical content hash
+  - Test: modifying a node name changes the hash
+  - `omtsf convert` with `--hash` flag (or similar) includes computed content hash in output

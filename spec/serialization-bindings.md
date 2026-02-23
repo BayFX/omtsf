@@ -211,9 +211,35 @@ Implementations MUST declare which profile they conform to. An implementation MA
 
 ## 8. Hash Operations
 
+### 8.1 Identifier and Boundary Reference Hashing
+
 Hash operations defined in other OMTSF specifications operate on **logical strings**, not on serialized bytes:
 
 - **Boundary reference hashing** (OMTSF-SPEC-004, Section 4) uses the canonical string form of identifiers (OMTSF-SPEC-002, Section 4) concatenated with the file salt. The hash input is independent of whether the file is serialized as JSON or CBOR.
 - **Canonical identifier strings** (OMTSF-SPEC-002, Section 4) are defined as text, not as encoding-specific byte sequences.
 
 Implementations MUST produce identical hash values regardless of the serialization encoding used for the file. There is no "canonical serialized form" for hashing purposes.
+
+### 8.2 Content Hash (`file_integrity.content_hash`)
+
+The `file_integrity.content_hash` field, when present, contains a SHA-256 hash (hex-encoded, lowercase) computed over the **canonical content bytes** of the file. The canonical content bytes are defined as follows:
+
+1. Parse the file into the abstract data model (OMTSF-SPEC-001).
+2. Re-serialize the abstract model to **JSON** using the following canonical rules:
+   - Keys sorted lexicographically (UTF-8 byte order) at every nesting level.
+   - No whitespace between tokens (compact serialization).
+   - Numbers serialized without trailing zeros (e.g., `51` not `51.0`, but `51.5` not `51.50`).
+   - The `file_integrity` object itself MUST be excluded from the serialization before hashing.
+3. Compute `SHA-256` over the UTF-8 bytes of the resulting JSON string.
+
+This definition ensures that two logically equivalent files (regardless of original encoding — JSON, CBOR, or compressed) produce the same content hash. Implementations MUST use this canonical JSON form for content hash computation, even when the file is stored as CBOR.
+
+### 8.3 Opt-In Deterministic CBOR Profile
+
+For use cases that require byte-level reproducibility of CBOR output (e.g., content-addressed storage, signature verification), implementations MAY support an opt-in deterministic CBOR encoding profile:
+
+- Map keys sorted lexicographically by UTF-8 byte order (RFC 8949, Section 4.2.1, "length-first" deterministic encoding).
+- Preferred serialization of integer and float values (shortest encoding).
+- Arrays preserve element order as defined in the abstract model.
+
+This profile is OPTIONAL. Implementations that support deterministic CBOR SHOULD document it in their conformance statement. The default CBOR profile (Section 4.1) does not require deterministic key ordering.

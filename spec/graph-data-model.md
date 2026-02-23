@@ -143,6 +143,8 @@ A document, certificate, audit result, or due diligence statement that is linked
 | `reference` | No | string | Document reference number or URI |
 | `risk_severity` | No | enum | Risk severity classification: `critical`, `high`, `medium`, `low`. |
 | `risk_likelihood` | No | enum | Likelihood of the identified risk: `very_likely`, `likely`, `possible`, `unlikely`. |
+| `coverage_period_from` | No | ISO 8601 date | Start of the period covered by this attestation. For EUDR DDS annual submissions, this is the start of the reporting year. Distinct from `valid_from` (when the attestation document became effective). |
+| `coverage_period_to` | No | ISO 8601 date | End of the period covered by this attestation. Enables aggregate coverage semantics: a single DDS may cover all consignments of a commodity placed during this period. |
 
 Attestation nodes MAY carry an `identifiers` array (e.g., an EUDR due diligence statement number, an internal audit ID).
 
@@ -224,6 +226,8 @@ Direct legal parent-subsidiary relationship. Maps to GLEIF Level 2 `IS_DIRECTLY_
 
 **Direction convention:** Edge points from child (subsidiary) to parent. `source` = subsidiary, `target` = parent.
 
+**GLEIF Level 2 coverage limitation.** GLEIF Level 2 relationship data only covers entities where both parent and child hold LEIs — a minority of commercial entities globally. The absence of `legal_parentage` edges in an OMTSF file does NOT mean an entity has no corporate parent; it means the relationship is not represented in this file. Consumers MUST NOT infer flat ownership structures from the absence of `legal_parentage` edges.
+
 ### 5.4 `former_identity`
 
 Represents identity transformation events: mergers, acquisitions, renames, and demergers.
@@ -276,6 +280,9 @@ A direct commercial supply relationship: one entity sells goods or services to a
 | `value_currency` | No | string | ISO 4217 currency code for `annual_value` (e.g., `EUR`, `USD`) |
 | `tier` | No | integer | Supply chain tier relative to the reporting entity (1 = direct, 2 = tier 2, etc.) |
 | `share_of_buyer_demand` | No | number (0--100) | Percentage of the buyer's total demand for this commodity fulfilled by this supplier. Enables supply concentration and disruption impact modeling. |
+| `lead_time_days` | No | integer | Typical lead time in calendar days from order to delivery. Enables disruption impact and alternate supplier analysis. |
+| `sole_source` | No | boolean | `true` if this supplier is the only source for this commodity for the buyer. Default: `false`. Critical for supply risk assessment. |
+| `visibility_depth` | No | integer | Number of tiers below this edge for which the reporting entity has visibility. `0` = no visibility beyond this direct relationship; `1` = tier N+1 suppliers are known; `null`/absent = unknown. Enables consumers to distinguish genuinely flat supply chains from incompletely mapped ones. |
 
 **Direction convention:** `source` = supplier, `target` = buyer.
 
@@ -369,6 +376,8 @@ A bill-of-materials relationship between a `good` node and its component inputs.
 **Direction convention:** `source` = parent/assembled good, `target` = component good or consignment.
 
 **Usage:** A good node "Finished Widget" with `composed_of` edges to "Steel Rod" and "Plastic Housing" represents a two-component BOM.
+
+**DAG constraint.** Bills of materials are directed acyclic graphs by physical necessity (a component cannot contain itself). The `composed_of` subgraph SHOULD be acyclic. Validators SHOULD detect and report cycles in the `composed_of` subgraph (see L2-GDM-05 in Section 9.2).
 
 ### 6.9 `sells_to`
 
@@ -517,6 +526,7 @@ These rules SHOULD be satisfied. Violations produce warnings, not errors.
 | L2-GDM-02 | `ownership` edges SHOULD have `valid_from` set |
 | L2-GDM-03 | Every `organization` and `facility` node, and every `supplies`, `subcontracts`, and `tolls` edge, SHOULD carry a `data_quality` object (Section 8.3). Provenance metadata is essential for merge conflict resolution and regulatory audit trails. |
 | L2-GDM-04 | If any `supplies` edge carries a `tier` property, the file SHOULD declare `reporting_entity` in the file header. Without a reporting entity, `tier` values are ambiguous. |
+| L2-GDM-05 | The `composed_of` edge subgraph SHOULD be acyclic (a DAG). Cycles in `composed_of` represent physically impossible bills of materials and will cause infinite loops in BOM explosion algorithms. |
 
 ### 9.3 Structural Constraints
 
@@ -816,7 +826,8 @@ This appendix defines recommended label keys for common supply chain, procuremen
 | `csddd-in-scope` | *(boolean flag, no value)* | Entity is within scope of EU Corporate Sustainability Due Diligence Directive (CSDDD) obligations. |
 | `eudr-commodity-scope` | `cattle`, `cocoa`, `coffee`, `oil-palm`, `rubber`, `soya`, `wood` | EUDR commodity classification for the entity or supply relationship. Multiple values permitted. |
 | `eudr-country-risk` | `low`, `standard`, `high` | EUDR country risk classification per European Commission benchmarking. |
-| `uflpa-entity-list` | *(boolean flag, no value)* | Entity appears on the UFLPA Entity List maintained by DHS. |
+| `uflpa-entity-list` | *(boolean flag, no value)* | Entity appears on the UFLPA Entity List maintained by DHS. Nodes carrying this label SHOULD have `data_quality.last_verified` set to indicate when the entity list screening was performed. |
+| `uflpa-screened-clear` | *(boolean flag, no value)* | Entity has been screened against the UFLPA Entity List and was NOT found. Enables distinguishing "not screened" from "screened and cleared." Nodes carrying this label SHOULD have `data_quality.last_verified` set. |
 | `cbam-in-scope` | *(boolean flag, no value)* | Entity or facility is subject to EU Carbon Border Adjustment Mechanism reporting. |
 
 ### B.4 Risk and Compliance

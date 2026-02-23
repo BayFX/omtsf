@@ -82,7 +82,27 @@ UNTDID code list 3055 ("Code list responsible agency code") provides a parallel 
 
 ---
 
-## 5. GS1 EPCIS 2.0
+## 5. UN/CEFACT Transparency Protocol (UNTP)
+
+The UN/CEFACT United Nations Transparency Protocol (UNTP) defines a suite of standards for supply chain transparency, including the Digital Product Passport (DPP), Digital Facility Record, and Digital Traceability Event. UNTP targets the same regulatory domain as OMTSF (EUDR, CSDDD, CBAM) with overlapping but distinct approaches.
+
+| Aspect | UNTP | OMTSF |
+|--------|------|-------|
+| **Focus** | Per-product/per-facility credentials with linked data | Supply network graph with multi-tier relationships |
+| **Data Model** | JSON-LD / W3C Verifiable Credentials | Directed labeled property multigraph |
+| **Identity** | W3C DID, GS1 Digital Link | Composite multi-scheme identifiers |
+| **Primary Use** | Product-level provenance and compliance credentials | Network-level due diligence and risk analysis |
+| **Sharing Model** | Credential exchange (issuer/holder/verifier) | File exchange (graph snapshots) |
+
+**Complementarity.** UNTP and OMTSF are complementary rather than competing. UNTP provides per-product verifiable credentials; OMTSF provides the structural supply network context in which those products flow. A typical deployment may use UNTP Digital Product Passports for product-level compliance data and OMTSF for the multi-tier supply network graph that contextualizes those products.
+
+**Interoperability path.** OMTSF `attestation` nodes can reference UNTP credentials via the `reference` field (a URI pointing to a UNTP Digital Product Passport or Digital Facility Record). Shared GS1 identifiers (GLN on `facility` nodes, GTIN on `good` nodes via extension scheme `org.gs1.gtin`) provide the linking keys between OMTSF graph elements and UNTP credential subjects.
+
+**Engagement.** The OMTSF project SHOULD engage with the UN/CEFACT UNTP working group to define a formal mapping between UNTP credential types and OMTSF node/edge types, and to ensure that OMTSF's identifier model is compatible with UNTP's identity layer.
+
+---
+
+## 6. GS1 EPCIS 2.0
 
 GS1 EPCIS 2.0 (Electronic Product Code Information Services) captures event-level supply chain visibility data: what happened, when, where, and why. OMTSF and EPCIS are complementary:
 
@@ -97,6 +117,6 @@ GS1 EPCIS 2.0 (Electronic Product Code Information Services) captures event-leve
 
 ---
 
-## 6. W3C Verifiable Credentials
+## 7. W3C Verifiable Credentials
 
 The OMTSF `attestation` node type (OMTSF-SPEC-001, Section 4.5) captures certification and audit data in a format designed for graph integration. The W3C Verifiable Credentials (VC) Data Model provides a complementary approach focused on cryptographic verifiability. OMTSF attestation nodes may carry a `reference` value that is a Verifiable Credential URI, linking the graph-embedded attestation to a cryptographically verifiable credential.

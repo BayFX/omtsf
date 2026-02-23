@@ -122,6 +122,8 @@ Conformant OMTSF validators MUST recognize the following schemes and enforce the
 - **`authority` field:** Not required.
 - **Note:** D&B assigns separate DUNS numbers to HQ and branch levels. The HQ DUNS identifies the legal entity; branch DUNS numbers identify locations and SHOULD be assigned to `facility` nodes. When it is unclear whether a DUNS is HQ or branch, producers SHOULD assign it to an `organization` node.
 
+**Branch DUNS merge risk.** A branch DUNS number on an `organization` node will cause false-positive merges when two organizations share a physical plant (and thus share the branch DUNS). Validators SHOULD warn when a DUNS on an `organization` node is identified as a branch-level DUNS (L2-EID-09). Producers exporting from systems that store branch DUNS (e.g., SAP `LFA1-STCD1` in some configurations) SHOULD verify the DUNS level before assigning to `organization` nodes.
+
 #### `gln` -- Global Location Number
 
 - **Standard:** GS1 General Specifications
@@ -148,6 +150,8 @@ Conformant OMTSF validators MUST recognize the following schemes and enforce the
 - **`authority` field:** Required. ISO 3166-1 alpha-2 country code (e.g., `DE`, `GB`, `US`).
 - **Sensitivity:** Default sensitivity for `vat` identifiers is `restricted`. Producers SHOULD explicitly set sensitivity. Validators MUST NOT reject a file for omitting `vat` identifiers.
 
+**VAT number normalization.** The `value` field MUST include the country prefix for EU member states (e.g., `DE123456789`, not `123456789`). The `authority` field carries the ISO 3166-1 alpha-2 country code separately (e.g., `DE`). This means for a German VAT number, the canonical form is `vat:DE:DE123456789`. Producers that receive VAT numbers without the country prefix MUST prepend the country code from the `authority` field. This normalization is critical for merge identity: two files with `DE123456789` and `123456789` for the same entity will fail to merge without consistent normalization.
+
 **Privacy note:** Tax IDs may be protected in some jurisdictions. OMTSF files containing `vat` identifiers with `sensitivity: "confidential"` are subject to the selective disclosure rules in OMTSF-SPEC-004.
 
 #### `internal` -- System-Local Identifier
@@ -172,6 +176,8 @@ Conformant validators MAY recognize additional schemes. Extension scheme codes M
 | `org.iso.isin` | ISIN | 12-character alphanumeric, ISO 6166 |
 | `org.gs1.gtin` | Global Trade Item Number | 8, 12, 13, or 14 digits |
 | `org.sam.uei` | US Unique Entity Identifier | 12-character alphanumeric SAM.gov identifier. Replaced DUNS for US federal procurement. Value MUST match `^[A-Z0-9]{12}$`. |
+| `org.eu.eori` | EU EORI Number | Economic Operators Registration and Identification number. Format: 2-letter country code + up to 15 alphanumeric characters (e.g., `DE1234567890123`). Required for EU customs and CBAM reporting. |
+| `org.eu.cbam-installation` | CBAM Installation ID | Identifier assigned to installations under the EU Carbon Border Adjustment Mechanism (Regulation (EU) 2023/956). Used on `facility` nodes representing CBAM-registered installations. |
 
 Validators encountering an unrecognized scheme code MUST NOT reject the file. Unknown schemes are passed through without format validation.
 
@@ -223,6 +229,7 @@ These rules SHOULD be satisfied. Violations produce warnings, not errors.
 | L2-EID-06 | `lei` values with ANNULLED status SHOULD produce an error |
 | L2-EID-07 | Identifiers on schemes known to reassign values (`duns`, `gln`) SHOULD carry `valid_from` and `valid_to` to enable temporal merge safety (OMTSF-SPEC-003, Section 2) |
 | L2-EID-08 | Identifiers with `verification_status: "verified"` SHOULD also carry a `verification_date` |
+| L2-EID-09 | DUNS numbers on `organization` nodes SHOULD be verified as HQ-level DUNS, not branch DUNS. Branch DUNS numbers identify physical locations and SHOULD be assigned to `facility` nodes instead. A branch DUNS on an `organization` node can cause false-positive merges when two organizations share a physical plant. |
 
 ### 6.3 Level 3 -- Enrichment
 

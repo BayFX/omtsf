@@ -149,9 +149,31 @@ This design prevents enumeration attacks: an adversary cannot hash known LEIs to
 
 ---
 
-## 6. Validation Rules
+## 6. Attestation Integrity Binding
 
-### 6.1 Level 1 -- Structural Integrity
+For regulatory use cases where attestation provenance must be independently verifiable (e.g., EUDR due diligence statements submitted to TRACES, CBAM verification statements), OMTSF supports linking attestation nodes to cryptographically verifiable credentials.
+
+### 6.1 Linking to Verifiable Credentials
+
+Attestation nodes (OMTSF-SPEC-001, Section 4.5) MAY carry a `reference` field containing a URI that resolves to a W3C Verifiable Credential (VC) or Verifiable Presentation (VP). When present:
+
+- The `reference` URI SHOULD be a resolvable URL or DID URL pointing to the credential.
+- The credential's `credentialSubject` SHOULD identify the same entity as the OMTSF attestation's `attested_by` edge source.
+- Consumers MAY verify the credential independently using the VC issuer's public key.
+
+### 6.2 Content Hash Binding
+
+When a file declares `file_integrity.content_hash` (OMTSF-SPEC-007, Section 8.2), the hash provides tamper detection for the entire file content, including attestation nodes. This is not a substitute for per-attestation cryptographic signatures but provides file-level integrity assurance.
+
+### 6.3 Regulatory Evidence Limitations
+
+OMTSF files alone do not constitute regulatory evidence. Regulatory submissions (e.g., EUDR DDS to TRACES, CBAM declarations to the EU registry) require submission through official channels with authority-specific authentication. OMTSF can represent the data underlying such submissions and link to the official submission references, but the link between the OMTSF attestation node and the regulatory submission is informational, not cryptographically enforced, unless a Verifiable Credential binding (Section 6.1) is used.
+
+---
+
+## 7. Validation Rules
+
+### 7.1 Level 1 -- Structural Integrity
 
 These rules MUST pass for a file to be considered structurally valid.
 
@@ -159,6 +181,17 @@ These rules MUST pass for a file to be considered structurally valid.
 |------|-------------|
 | L1-SDI-01 | `boundary_ref` nodes MUST have exactly one identifier with `scheme: "opaque"` |
 | L1-SDI-02 | If `disclosure_scope` is declared, sensitivity constraints (Section 3) MUST be satisfied |
+
+### 7.2 Level 2 -- Completeness
+
+These rules SHOULD be satisfied. Violations produce warnings, not errors.
+
+| Rule | Description |
+|------|-------------|
+| L2-SDI-01 | Identifiers on `person` nodes with `sensitivity` explicitly set to `public` SHOULD produce a warning. Person node identifiers default to `confidential` (Section 5); overriding to `public` may violate GDPR data minimization requirements. Producers MUST have a documented legal basis for this override. |
+| L2-SDI-02 | In files with `disclosure_scope: "public"`, identifiers using unrecognized (extension) schemes SHOULD produce a warning if they do not carry an explicit `sensitivity` field. Unrecognized schemes default to `public` sensitivity, which may be inappropriate for schemes that carry sensitive data. |
+
+---
 
 ---
 

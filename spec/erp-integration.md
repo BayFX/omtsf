@@ -65,9 +65,11 @@ This convention enables downstream tooling to group and deduplicate identifiers 
 |-----------|-----------|---------------|
 | `EINA` / `EINE` (Purchasing Info Record) | Vendor-material relationship | `supplies` edge from vendor `organization` to buyer `organization`, with `commodity` from material group |
 | `EKKO` (PO Header) + `EKPO` (PO Item) | Purchase order | `supplies` edge (if no info record exists). Derive from `EKKO-LIFNR` (vendor) and `EKKO-BUKRS` (company code). |
-| `EKKO-BSART` (PO Type) | Document type `UB` = subcontracting | `subcontracts` edge (when PO type indicates subcontracting) |
+| `EKPO-PSTYP` (Item Category) | Item category `L` = subcontracting | `subcontracts` edge (when item category indicates subcontracting). Note: `BSART='UB'` indicates stock transport orders, not subcontracting. |
 | `MARA` / `MARC` (Material Master) | Material → `good` node | `good` node with `scheme: "internal"`, `authority: "{sap_system_id}"`, `value` from `MATNR` |
 | `RSEG` (Invoice Document) | Invoice line to vendor | Confirms `supplies` edge; provides volume/quantity data for edge properties |
+
+**Temporal bounding for PO-derived edges.** When deriving `supplies` edges from purchase orders (`EKKO`/`EKPO`), producers SHOULD apply a recency filter to avoid generating current supply relationships from stale data. A single purchase order from years ago does not indicate a current supply relationship. Recommended approach: only generate `supplies` edges from POs where `EKKO-BEDAT` (PO date) falls within a configurable lookback window (e.g., 24 months from `snapshot_date`). For relationships derived from older POs, producers SHOULD set `valid_to` to the last PO or invoice date rather than leaving it open-ended. This guidance applies equally to Oracle and D365 PO-derived edges (Sections 3.2 and 4.2).
 
 ### 2.3 Deduplication Note
 
@@ -142,13 +144,15 @@ Dynamics 365 Finance and Supply Chain Management expose data via OData v4 endpoi
 
 | D365 OData Entity | OData Path | Field | OMTSF Mapping |
 |-------------------|-----------|-------|---------------|
-| `VendorsV2` | `GET /data/VendorsV2` | `VendorAccountNumber` | `scheme: "internal"`, `authority: "{d365_instance}"` |
+| `VendorsV2` | `GET /data/VendorsV2` | `VendorAccountNumber` | `scheme: "internal"`, `authority: "d365-{tenant}-{company}"` (see note below) |
 | `VendorsV2` | `GET /data/VendorsV2` | `VendorOrganizationName` | Node `name` property |
 | `VendorsV2` | `GET /data/VendorsV2` | `VendorGroupId` | Useful for segmenting supplier types during export |
 | `DirPartyTable` (via `VendorsV2` navigation) | `$expand=DirPartyTable` | `Name` | Alternative name source (legal name from global address book) |
 | `DirPartyTable` | `GET /data/DirParties` | `DunsNumber` | `scheme: "duns"` |
 | `TaxRegistrationId` | `GET /data/TaxRegistrationIds` | `RegistrationNumber` | `scheme: "vat"`, `authority` from `CountryRegionId` |
 | `LogisticsPostalAddress` | `GET /data/LogisticsPostalAddresses` | `Street`, `City`, `State`, `ZipCode`, `CountryRegionId` | `facility` node `address` and `jurisdiction` properties |
+
+**Cross-company data isolation.** D365 `VendorsV2` is company-scoped by default. In multi-entity tenants, the same vendor may have different `VendorAccountNumber` values in different legal entities, or different vendors may share the same number across companies. The `authority` field MUST include both the tenant identifier and the company code (e.g., `d365-contoso-usop`, `d365-contoso-eumf`) to prevent colliding internal identifiers. The recommended format is `d365-{tenant}-{company}` where `{tenant}` is a short tenant identifier and `{company}` is the D365 legal entity (company) code.
 
 ### 4.2 Procurement Data
 

@@ -113,9 +113,28 @@ Conflict records are informational. Validators MUST NOT reject files containing 
 
 ### 4.1 Merge-Group Safety Limits
 
-Transitive closure (step 3) can amplify false-positive matches: a single erroneous identifier match cascades through the entire connected component. To mitigate this risk:
+Transitive closure (step 3) can amplify false-positive matches: a single erroneous identifier match cascades through the entire connected component. To mitigate this risk, implementations MUST apply the following merge-group size thresholds:
 
-When transitive closure produces an unexpectedly large merge group, implementations SHOULD emit a warning identifying the group and its bridging identifiers.
+| Group Size (excluding `same_as`-linked nodes) | Required Behavior |
+|-----------------------------------------------|-------------------|
+| 1--3 nodes | Normal merge; no warning required |
+| 4--9 nodes | Implementations MUST emit a warning identifying the group, its member nodes, and the bridging identifiers that caused each union. Merge proceeds. |
+| 10+ nodes | Implementations MUST emit a prominent warning. A merge group of 10 or more distinct nodes almost certainly indicates a data quality problem (e.g., a reassigned DUNS number, an erroneous identifier, or a "garbage" tax ID shared by many unrelated entities). Implementations SHOULD provide an option to split or reject oversized groups. |
+
+Nodes linked solely by `same_as` edges (OMTSF-SPEC-003, Section 7) are counted as group members for the purpose of this threshold but are excluded from the "excluding `same_as`" count used to determine the warning tier. This prevents advisory `same_as` edges from inflating the threshold.
+
+The thresholds above are defaults. Implementations MAY allow users to configure custom thresholds for specific use cases (e.g., conglomerate files where large groups are expected).
+
+### 4.2 `tier` Property Reconciliation
+
+The `tier` property on `supplies` edges (OMTSF-SPEC-001, Section 6.1) is perspective-dependent: it is defined relative to the file's `reporting_entity`. When merging files from different reporting entities, `tier` conflicts are structurally expected and MUST NOT be treated as data quality errors.
+
+When merging files with different `reporting_entity` values:
+
+1. If the merged file retains a `reporting_entity` (because one source's perspective is designated as primary), `tier` values from that source are retained. Conflicting `tier` values from other sources are recorded in `_conflicts` (Section 4) with their source file and reporting entity for context.
+2. If the merged file omits `reporting_entity` (because no single perspective is primary), all `tier` values are recorded in `_conflicts`. Consumers MUST NOT interpret `tier` values without knowing the reporting entity they are relative to.
+
+Implementations SHOULD include the `reporting_entity` from each source file in conflict records to enable downstream recomputation of perspective-relative tiers.
 
 5. **Rewrite** all edge source/target references to use the merged node IDs.
 6. **Identify** merge candidate edge pairs using the edge identity predicate (Section 3).
