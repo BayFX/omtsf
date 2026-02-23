@@ -28,9 +28,11 @@ const SHEET_NAME: &str = "Supplier List";
 /// Parsed data from a single supplier row.
 struct SupplierRow {
     supplier_name: String,
+    supplier_id: Option<String>,
     jurisdiction: Option<String>,
     tier: u32,
     parent_supplier: Option<String>,
+    business_unit: Option<String>,
     commodity: Option<String>,
     valid_from: Option<String>,
     annual_value: Option<f64>,
@@ -127,11 +129,16 @@ pub fn import_supplier_list<R: Read + Seek>(
         ..Default::default()
     };
 
-    let (supplier_nodes, org_id_map) = build_supplier_nodes(&rows, &reporting_entity_id)?;
-    let edges = build_edges(&rows, &org_id_map, &reporting_entity_id)?;
+    let supplier_result = build_supplier_nodes(&rows, &reporting_entity_id)?;
+    let edges = build_edges(
+        &rows,
+        &supplier_result.name_to_node_id,
+        &supplier_result.id_to_node_id,
+        &reporting_entity_id,
+    )?;
 
     let mut nodes = vec![reporting_entity_node];
-    nodes.extend(supplier_nodes);
+    nodes.extend(supplier_result.nodes);
 
     let omts_file = OmtsFile {
         omtsf_version,
@@ -224,9 +231,11 @@ fn parse_data_rows(
 
         result.push(SupplierRow {
             supplier_name,
+            supplier_id: non_empty(get_cell_str(row, headers, "supplier_id")),
             jurisdiction: non_empty(get_cell_str(row, headers, "jurisdiction")),
             tier,
             parent_supplier: non_empty(get_cell_str(row, headers, "parent_supplier")),
+            business_unit: non_empty(get_cell_str(row, headers, "business_unit")),
             commodity: non_empty(get_cell_str(row, headers, "commodity")),
             valid_from: non_empty(get_cell_str(row, headers, "valid_from")),
             annual_value,
@@ -266,25 +275,29 @@ fn non_empty(s: String) -> Option<String> {
 }
 
 /// Validates that all tier 2/3 rows have a `parent_supplier` that exists as a
-/// `supplier_name` in the file.
+/// `supplier_name` or `supplier_id` in the file.
 fn validate_parent_refs(rows: &[SupplierRow]) -> Result<(), ImportError> {
     let all_names: std::collections::HashSet<&str> =
         rows.iter().map(|r| r.supplier_name.as_str()).collect();
+    let all_ids: std::collections::HashSet<&str> = rows
+        .iter()
+        .filter_map(|r| r.supplier_id.as_deref())
+        .collect();
 
     for (i, row) in rows.iter().enumerate() {
         if row.tier >= 2 {
             match &row.parent_supplier {
                 None => {
                     return Err(ImportError::InvalidCell {
-                        cell_ref: format!("{SHEET_NAME}!D{}", i + 5),
+                        cell_ref: format!("{SHEET_NAME}!E{}", i + 5),
                         expected: "parent_supplier for tier 2/3 row".to_owned(),
                         got: String::new(),
                     });
                 }
                 Some(parent) => {
-                    if !all_names.contains(parent.as_str()) {
+                    if !all_names.contains(parent.as_str()) && !all_ids.contains(parent.as_str()) {
                         return Err(ImportError::UnresolvedReference {
-                            cell_ref: format!("{SHEET_NAME}!D{}", i + 5),
+                            cell_ref: format!("{SHEET_NAME}!E{}", i + 5),
                             node_id: parent.clone(),
                         });
                     }
@@ -295,39 +308,63 @@ fn validate_parent_refs(rows: &[SupplierRow]) -> Result<(), ImportError> {
     Ok(())
 }
 
-/// Builds a vec of supplier org nodes and a name → node ID map.
+/// Result of [`build_supplier_nodes`]: org nodes plus two lookup maps.
+struct SupplierNodeResult {
+    nodes: Vec<Node>,
+    name_to_node_id: HashMap<String, String>,
+    id_to_node_id: HashMap<String, String>,
+}
+
+/// Builds a vec of supplier org nodes and lookup maps.
 ///
-/// When the same `supplier_name` appears multiple times, identifiers and labels
-/// from all rows are merged onto one node. Each row still generates its own edge.
+/// When `supplier_id` is present, rows sharing the same `supplier_id` collapse
+/// to one node regardless of name. Otherwise, dedup falls back to
+/// `supplier_name` (preserving existing behaviour).
 fn build_supplier_nodes(
     rows: &[SupplierRow],
     reporting_entity_id: &str,
-) -> Result<(Vec<Node>, HashMap<String, String>), ImportError> {
-    let mut org_id_map: HashMap<String, String> = HashMap::new();
+) -> Result<SupplierNodeResult, ImportError> {
+    let mut name_to_node_id: HashMap<String, String> = HashMap::new();
+    let mut id_to_node_id: HashMap<String, String> = HashMap::new();
     let mut node_map: HashMap<String, Node> = HashMap::new();
     let mut counter = 1usize;
 
     for row in rows {
         let name = &row.supplier_name;
 
-        let node_id_str = org_id_map.entry(name.clone()).or_insert_with(|| {
-            let id = make_slug("org", name, counter);
-            counter += 1;
-            // Avoid collision with the reporting entity
-            if id == reporting_entity_id {
-                let fallback = format!("{id}-supplier");
-                fallback
-            } else {
+        let existing_node_id = if let Some(sid) = &row.supplier_id {
+            id_to_node_id.get(sid).cloned()
+        } else {
+            name_to_node_id.get(name).cloned()
+        };
+
+        let node_id_str = match existing_node_id {
+            Some(nid) => {
+                name_to_node_id.entry(name.clone()).or_insert(nid.clone());
+                nid
+            }
+            None => {
+                let id = make_slug("org", name, counter);
+                counter += 1;
+                let id = if id == reporting_entity_id {
+                    format!("{id}-supplier")
+                } else {
+                    id
+                };
+                name_to_node_id.insert(name.clone(), id.clone());
+                if let Some(sid) = &row.supplier_id {
+                    id_to_node_id.insert(sid.clone(), id.clone());
+                }
                 id
             }
-        });
+        };
 
         let node_id =
             NodeId::try_from(node_id_str.as_str()).map_err(|e| ImportError::ExcelRead {
                 detail: format!("invalid node id {node_id_str:?}: {e}"),
             })?;
 
-        let entry = node_map.entry(name.clone()).or_insert_with(|| {
+        let entry = node_map.entry(node_id_str).or_insert_with(|| {
             let jurisdiction = row
                 .jurisdiction
                 .as_deref()
@@ -342,11 +379,17 @@ fn build_supplier_nodes(
         });
 
         merge_identifiers(entry, row);
-        merge_labels(entry, row);
+        if let Some(sid) = &row.supplier_id {
+            merge_supplier_id_identifier(entry, sid);
+        }
     }
 
     let nodes = node_map.into_values().collect();
-    Ok((nodes, org_id_map))
+    Ok(SupplierNodeResult {
+        nodes,
+        name_to_node_id,
+        id_to_node_id,
+    })
 }
 
 /// Merges identifiers from a row onto an existing node (deduplicating by scheme+value).
@@ -384,47 +427,31 @@ fn merge_identifiers(node: &mut Node, row: &SupplierRow) {
     if let Some(vat) = &row.vat {
         add_id("vat", vat, row.vat_country.clone());
     }
-    // The supplier list template has no internal_system column, so internal_id
-    // cannot be stored as an `internal` identifier (authority is required by L1
-    // validation). The field is not present in SupplierRow for this reason.
-
     if existing.is_empty() {
         node.identifiers = None;
     }
 }
 
-/// Merges labels from a row onto an existing node (deduplicating by key+value).
-fn merge_labels(node: &mut Node, row: &SupplierRow) {
-    let existing = node.labels.get_or_insert_with(Vec::new);
-
-    let mut add_label = |key: &str, value: &str| {
-        if value.is_empty() {
-            return;
-        }
-        let already_present = existing
-            .iter()
-            .any(|l| l.key == key && l.value.as_deref() == Some(value));
-        if !already_present {
-            existing.push(Label {
-                key: key.to_owned(),
-                value: Some(value.to_owned()),
-                extra: BTreeMap::new(),
-            });
-        }
-    };
-
-    if let Some(rt) = &row.risk_tier {
-        add_label("risk_tier", rt);
-    }
-    if let Some(kq) = &row.kraljic_quadrant {
-        add_label("kraljic_quadrant", kq);
-    }
-    if let Some(ap) = &row.approval_status {
-        add_label("approval_status", ap);
-    }
-
-    if existing.is_empty() {
-        node.labels = None;
+/// Stores `supplier_id` as an `internal` identifier with authority `supplier-list`.
+fn merge_supplier_id_identifier(node: &mut Node, supplier_id: &str) {
+    let existing = node.identifiers.get_or_insert_with(Vec::new);
+    let already_present = existing.iter().any(|id| {
+        id.scheme == "internal"
+            && id.value == supplier_id
+            && id.authority.as_deref() == Some("supplier-list")
+    });
+    if !already_present {
+        existing.push(Identifier {
+            scheme: "internal".to_owned(),
+            value: supplier_id.to_owned(),
+            authority: Some("supplier-list".to_owned()),
+            valid_from: None,
+            valid_to: None,
+            sensitivity: None,
+            verification_status: None,
+            verification_date: None,
+            extra: BTreeMap::new(),
+        });
     }
 }
 
@@ -433,9 +460,13 @@ fn merge_labels(node: &mut Node, row: &SupplierRow) {
 /// Edge direction: `supplies` goes FROM supplier TO buyer.
 /// - Tier 1: supplier → reporting entity
 /// - Tier 2/3: supplier → parent supplier
+///
+/// Relationship-specific labels (`risk_tier`, `kraljic_quadrant`,
+/// `approval_status`, `business_unit`) are attached to edge properties.
 fn build_edges(
     rows: &[SupplierRow],
-    org_id_map: &HashMap<String, String>,
+    name_to_node_id: &HashMap<String, String>,
+    id_to_node_id: &HashMap<String, String>,
     reporting_entity_id: &str,
 ) -> Result<Vec<Edge>, ImportError> {
     let mut edges = Vec::new();
@@ -443,7 +474,7 @@ fn build_edges(
 
     for row in rows {
         let source_id_str =
-            org_id_map
+            name_to_node_id
                 .get(&row.supplier_name)
                 .ok_or_else(|| ImportError::ExcelRead {
                     detail: format!("supplier not in id map: {}", row.supplier_name),
@@ -461,8 +492,9 @@ fn build_edges(
                         row.tier, row.supplier_name
                     ),
                 })?;
-            org_id_map
+            id_to_node_id
                 .get(parent)
+                .or_else(|| name_to_node_id.get(parent))
                 .ok_or_else(|| ImportError::UnresolvedReference {
                     cell_ref: format!("{SHEET_NAME}!parent_supplier"),
                     node_id: parent.to_owned(),
@@ -491,6 +523,36 @@ fn build_edges(
             .as_deref()
             .and_then(|s| CalendarDate::try_from(s).ok());
 
+        let mut labels = Vec::new();
+        if let Some(rt) = &row.risk_tier {
+            labels.push(Label {
+                key: "risk_tier".to_owned(),
+                value: Some(rt.clone()),
+                extra: BTreeMap::new(),
+            });
+        }
+        if let Some(kq) = &row.kraljic_quadrant {
+            labels.push(Label {
+                key: "kraljic_quadrant".to_owned(),
+                value: Some(kq.clone()),
+                extra: BTreeMap::new(),
+            });
+        }
+        if let Some(ap) = &row.approval_status {
+            labels.push(Label {
+                key: "approval_status".to_owned(),
+                value: Some(ap.clone()),
+                extra: BTreeMap::new(),
+            });
+        }
+        if let Some(bu) = &row.business_unit {
+            labels.push(Label {
+                key: "business_unit".to_owned(),
+                value: Some(bu.clone()),
+                extra: BTreeMap::new(),
+            });
+        }
+
         let properties = EdgeProperties {
             commodity: row.commodity.clone(),
             valid_from,
@@ -498,6 +560,11 @@ fn build_edges(
             value_currency: row.value_currency.clone(),
             contract_ref: row.contract_ref.clone(),
             tier: Some(row.tier),
+            labels: if labels.is_empty() {
+                None
+            } else {
+                Some(labels)
+            },
             ..Default::default()
         };
 

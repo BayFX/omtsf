@@ -55,13 +55,16 @@ pub fn make_slug(prefix: &str, name: &str, counter: usize) -> String {
     format!("{prefix}-{truncated}")
 }
 
-/// Generates an edge slug from edge type and source/target IDs.
+/// Generates an edge slug from edge type, source/target IDs, and a counter.
+///
+/// The counter is always included to guarantee uniqueness when multiple edges
+/// connect the same pair of nodes (e.g. different business units).
 pub fn make_edge_slug(edge_type: &str, source: &str, target: &str, counter: usize) -> String {
     let src = source.trim_start_matches(|c: char| !c.is_ascii_alphanumeric());
     let tgt = target.trim_start_matches(|c: char| !c.is_ascii_alphanumeric());
     let short_src: String = src.chars().take(12).collect();
     let short_tgt: String = tgt.chars().take(12).collect();
-    let candidate = format!("edge-{edge_type}-{short_src}-{short_tgt}");
+    let candidate = format!("edge-{edge_type}-{short_src}-{short_tgt}-{counter}");
     if candidate.len() < 64 {
         candidate
     } else {

@@ -399,9 +399,10 @@ fn import_supplier_list_pipe_to_validate_exits_0() {
 fn import_supplier_list_node_counts() {
     // The example file has:
     //   1 reporting entity (Acme Manufacturing GmbH)
-    //   6 suppliers (Bolt Supplies Ltd, Nordic Fasteners AB, Shanghai Steel Components Co,
-    //                Yorkshire Steel Works, Baosteel Trading Co, Inner Mongolia Mining Corp)
-    //   6 supplies edges
+    //   6 unique suppliers (Bolt Supplies Ltd [rows 5+8 dedup via supplier_id],
+    //                       Nordic Fasteners AB, Shanghai Steel Components Co,
+    //                       Yorkshire Steel Works, Baosteel Trading Co, Inner Mongolia Mining Corp)
+    //   7 supplies edges (one per data row)
     let out = Command::new(omtsf_bin())
         .args([
             "import",
@@ -427,8 +428,8 @@ fn import_supplier_list_node_counts() {
     );
     assert_eq!(
         edges.len(),
-        6,
-        "expected 6 supplies edges, got {}",
+        7,
+        "expected 7 supplies edges (one per data row), got {}",
         edges.len()
     );
 }
@@ -463,7 +464,6 @@ fn import_supplier_list_tier_hierarchy() {
         .collect();
 
     // Find the tier-3 edge (Inner Mongolia Mining Corp → Baosteel Trading Co)
-    // Its target should be a tier-2 supplier (Baosteel)
     let t3_edge = edges.iter().find(|e| {
         let src = e["source"].as_str().unwrap_or("");
         id_to_name
@@ -484,7 +484,7 @@ fn import_supplier_list_tier_hierarchy() {
         "tier-3 edge target should be Baosteel Trading Co, got {t3_target_name:?}"
     );
 
-    // Find a tier-2 edge (Yorkshire Steel Works → Bolt Supplies Ltd)
+    // Find a tier-2 edge (Yorkshire Steel Works → Bolt Supplies Ltd via supplier_id)
     let t2_edge = edges.iter().find(|e| {
         let src = e["source"].as_str().unwrap_or("");
         id_to_name
@@ -502,12 +502,57 @@ fn import_supplier_list_tier_hierarchy() {
     let t2_target_name = id_to_name.get(t2_target).map(String::as_str).unwrap_or("");
     assert!(
         t2_target_name.contains("Bolt"),
-        "tier-2 edge target should be Bolt Supplies Ltd, got {t2_target_name:?}"
+        "tier-2 edge target should be Bolt Supplies Ltd (resolved via supplier_id), got {t2_target_name:?}"
     );
 }
 
 #[test]
-fn import_supplier_list_labels() {
+fn import_supplier_list_labels_on_edges() {
+    let out = Command::new(omtsf_bin())
+        .args([
+            "import",
+            excel_fixture("omts-supplier-list-example.xlsx")
+                .to_str()
+                .expect("path"),
+        ])
+        .output()
+        .expect("run omtsf import");
+    assert_eq!(out.status.code(), Some(0));
+
+    let stdout = String::from_utf8(out.stdout).expect("UTF-8 stdout");
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON");
+
+    let edges = parsed["edges"].as_array().expect("edges array");
+
+    let has_edge_label = |key: &str| -> bool {
+        edges.iter().any(|e| {
+            e["properties"]["labels"]
+                .as_array()
+                .map(|labels| labels.iter().any(|l| l["key"].as_str() == Some(key)))
+                .unwrap_or(false)
+        })
+    };
+
+    assert!(
+        has_edge_label("risk_tier"),
+        "at least one edge must have a risk_tier label"
+    );
+    assert!(
+        has_edge_label("kraljic_quadrant"),
+        "at least one edge must have a kraljic_quadrant label"
+    );
+    assert!(
+        has_edge_label("approval_status"),
+        "at least one edge must have an approval_status label"
+    );
+    assert!(
+        has_edge_label("business_unit"),
+        "at least one edge must have a business_unit label"
+    );
+}
+
+#[test]
+fn import_supplier_list_supplier_id_dedup() {
     let out = Command::new(omtsf_bin())
         .args([
             "import",
@@ -523,50 +568,37 @@ fn import_supplier_list_labels() {
     let parsed: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON");
 
     let nodes = parsed["nodes"].as_array().expect("nodes array");
+    let edges = parsed["edges"].as_array().expect("edges array");
 
-    let has_risk_tier = nodes.iter().any(|n| {
-        n["labels"]
-            .as_array()
-            .map(|labels| {
-                labels
-                    .iter()
-                    .any(|l| l["key"].as_str() == Some("risk_tier"))
-            })
-            .unwrap_or(false)
-    });
-    assert!(
-        has_risk_tier,
-        "at least one node must have a risk_tier label"
+    // "Bolt Supplies Ltd" appears in two rows with supplier_id=bolt-001.
+    // They should collapse to one node.
+    let bolt_nodes: Vec<_> = nodes
+        .iter()
+        .filter(|n| {
+            n["name"]
+                .as_str()
+                .map(|s| s.contains("Bolt"))
+                .unwrap_or(false)
+        })
+        .collect();
+    assert_eq!(
+        bolt_nodes.len(),
+        1,
+        "Bolt Supplies Ltd should be one node (dedup via supplier_id), got {}",
+        bolt_nodes.len()
     );
 
-    let has_kraljic = nodes.iter().any(|n| {
-        n["labels"]
-            .as_array()
-            .map(|labels| {
-                labels
-                    .iter()
-                    .any(|l| l["key"].as_str() == Some("kraljic_quadrant"))
-            })
-            .unwrap_or(false)
-    });
-    assert!(
-        has_kraljic,
-        "at least one node must have a kraljic_quadrant label"
-    );
-
-    let has_approval = nodes.iter().any(|n| {
-        n["labels"]
-            .as_array()
-            .map(|labels| {
-                labels
-                    .iter()
-                    .any(|l| l["key"].as_str() == Some("approval_status"))
-            })
-            .unwrap_or(false)
-    });
-    assert!(
-        has_approval,
-        "at least one node must have an approval_status label"
+    // But two edges should originate from that node (Procurement + Engineering BUs).
+    let bolt_id = bolt_nodes[0]["id"].as_str().expect("bolt node id");
+    let bolt_edges: Vec<_> = edges
+        .iter()
+        .filter(|e| e["source"].as_str() == Some(bolt_id))
+        .collect();
+    assert_eq!(
+        bolt_edges.len(),
+        2,
+        "Bolt should have 2 supply edges (two BUs), got {}",
+        bolt_edges.len()
     );
 }
 

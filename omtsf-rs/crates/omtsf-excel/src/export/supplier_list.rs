@@ -95,9 +95,11 @@ fn write_sheet(ws: &mut Worksheet, file: &OmtsFile) -> Result<(), ExportError> {
 
     let headers = [
         "supplier_name",
+        "supplier_id",
         "jurisdiction",
         "tier",
         "parent_supplier",
+        "business_unit",
         "commodity",
         "valid_from",
         "annual_value",
@@ -141,29 +143,32 @@ fn write_sheet(ws: &mut Worksheet, file: &OmtsFile) -> Result<(), ExportError> {
         a.tier
             .cmp(&b.tier)
             .then(a.supplier_name.cmp(&b.supplier_name))
+            .then(a.business_unit.cmp(&b.business_unit))
     });
 
     for (i, row) in rows.iter().enumerate() {
         let excel_row = (4 + i) as u32;
         ws_write(ws, excel_row, 0, &row.supplier_name)?;
-        ws_write(ws, excel_row, 1, &row.jurisdiction)?;
-        ws_write_u32(ws, excel_row, 2, row.tier)?;
-        ws_write(ws, excel_row, 3, &row.parent_supplier)?;
-        ws_write(ws, excel_row, 4, &row.commodity)?;
-        ws_write(ws, excel_row, 5, &row.valid_from)?;
+        ws_write(ws, excel_row, 1, &row.supplier_id)?;
+        ws_write(ws, excel_row, 2, &row.jurisdiction)?;
+        ws_write_u32(ws, excel_row, 3, row.tier)?;
+        ws_write(ws, excel_row, 4, &row.parent_supplier)?;
+        ws_write(ws, excel_row, 5, &row.business_unit)?;
+        ws_write(ws, excel_row, 6, &row.commodity)?;
+        ws_write(ws, excel_row, 7, &row.valid_from)?;
         if let Some(av) = row.annual_value {
-            ws_write_f64(ws, excel_row, 6, av)?;
+            ws_write_f64(ws, excel_row, 8, av)?;
         }
-        ws_write(ws, excel_row, 7, &row.value_currency)?;
-        ws_write(ws, excel_row, 8, &row.contract_ref)?;
-        ws_write(ws, excel_row, 9, &row.lei)?;
-        ws_write(ws, excel_row, 10, &row.duns)?;
-        ws_write(ws, excel_row, 11, &row.vat)?;
-        ws_write(ws, excel_row, 12, &row.vat_country)?;
-        ws_write(ws, excel_row, 13, &row.internal_id)?;
-        ws_write(ws, excel_row, 14, &row.risk_tier)?;
-        ws_write(ws, excel_row, 15, &row.kraljic_quadrant)?;
-        ws_write(ws, excel_row, 16, &row.approval_status)?;
+        ws_write(ws, excel_row, 9, &row.value_currency)?;
+        ws_write(ws, excel_row, 10, &row.contract_ref)?;
+        ws_write(ws, excel_row, 11, &row.lei)?;
+        ws_write(ws, excel_row, 12, &row.duns)?;
+        ws_write(ws, excel_row, 13, &row.vat)?;
+        ws_write(ws, excel_row, 14, &row.vat_country)?;
+        ws_write(ws, excel_row, 15, &row.internal_id)?;
+        ws_write(ws, excel_row, 16, &row.risk_tier)?;
+        ws_write(ws, excel_row, 17, &row.kraljic_quadrant)?;
+        ws_write(ws, excel_row, 18, &row.approval_status)?;
     }
 
     Ok(())
@@ -171,9 +176,11 @@ fn write_sheet(ws: &mut Worksheet, file: &OmtsFile) -> Result<(), ExportError> {
 
 struct ExportRow {
     supplier_name: String,
+    supplier_id: String,
     jurisdiction: String,
     tier: u32,
     parent_supplier: String,
+    business_unit: String,
     commodity: String,
     valid_from: String,
     annual_value: Option<f64>,
@@ -242,8 +249,10 @@ fn build_parent_map<'a>(_suppliers: &[&'a Node], edges: &[&'a Edge]) -> HashMap<
 
 /// Builds export rows from supplier nodes and their supply edges.
 ///
-/// A supplier may appear in multiple edges (different commodities). Each edge
-/// generates one row.
+/// A supplier may appear in multiple edges (different commodities or business
+/// units). Each edge generates one row. Relationship-specific labels
+/// (`risk_tier`, `kraljic_quadrant`, `approval_status`, `business_unit`) are
+/// read from edge properties.
 fn build_rows<'a>(
     suppliers: &[&'a Node],
     edges: &[&'a Edge],
@@ -260,12 +269,18 @@ fn build_rows<'a>(
         let node_id = node.id.to_string();
         let tier = *tier_map.get(&node_id).unwrap_or(&1);
 
-        let parent_name = parent_map
+        let parent_supplier = parent_map
             .get(&node_id)
             .and_then(|pid| node_by_id.get(pid))
-            .and_then(|pn| pn.name.as_deref())
-            .unwrap_or("")
-            .to_owned();
+            .map(|pn| {
+                let parent_sid = find_supplier_id(pn);
+                if parent_sid.is_empty() {
+                    pn.name.as_deref().unwrap_or("").to_owned()
+                } else {
+                    parent_sid
+                }
+            })
+            .unwrap_or_default();
 
         let node_edges: Vec<&&Edge> = edges
             .iter()
@@ -278,23 +293,22 @@ fn build_rows<'a>(
             .map(ToString::to_string)
             .unwrap_or_default();
 
+        let supplier_id = find_supplier_id(node);
         let lei = find_identifier(node, "lei");
         let duns = find_identifier(node, "duns");
         let vat_id = find_identifier_with_authority(node, "vat");
         let vat = vat_id.0;
         let vat_country = vat_id.1;
-        let internal_id = find_identifier(node, "internal");
-
-        let risk_tier = find_label(node, "risk_tier");
-        let kraljic_quadrant = find_label(node, "kraljic_quadrant");
-        let approval_status = find_label(node, "approval_status");
+        let internal_id = find_internal_id(node);
 
         if node_edges.is_empty() {
             rows.push(ExportRow {
                 supplier_name: node.name.as_deref().unwrap_or("").to_owned(),
+                supplier_id: supplier_id.clone(),
                 jurisdiction: jurisdiction.clone(),
                 tier,
-                parent_supplier: parent_name.clone(),
+                parent_supplier: parent_supplier.clone(),
+                business_unit: String::new(),
                 commodity: String::new(),
                 valid_from: String::new(),
                 annual_value: None,
@@ -305,18 +319,25 @@ fn build_rows<'a>(
                 vat: vat.clone(),
                 vat_country: vat_country.clone(),
                 internal_id: internal_id.clone(),
-                risk_tier: risk_tier.clone(),
-                kraljic_quadrant: kraljic_quadrant.clone(),
-                approval_status: approval_status.clone(),
+                risk_tier: String::new(),
+                kraljic_quadrant: String::new(),
+                approval_status: String::new(),
             });
         } else {
             for edge in &node_edges {
                 let props = &edge.properties;
+                let risk_tier = find_edge_label(edge, "risk_tier");
+                let kraljic_quadrant = find_edge_label(edge, "kraljic_quadrant");
+                let approval_status = find_edge_label(edge, "approval_status");
+                let business_unit = find_edge_label(edge, "business_unit");
+
                 rows.push(ExportRow {
                     supplier_name: node.name.as_deref().unwrap_or("").to_owned(),
+                    supplier_id: supplier_id.clone(),
                     jurisdiction: jurisdiction.clone(),
                     tier,
-                    parent_supplier: parent_name.clone(),
+                    parent_supplier: parent_supplier.clone(),
+                    business_unit,
                     commodity: props.commodity.as_deref().unwrap_or("").to_owned(),
                     valid_from: props
                         .valid_from
@@ -331,9 +352,9 @@ fn build_rows<'a>(
                     vat: vat.clone(),
                     vat_country: vat_country.clone(),
                     internal_id: internal_id.clone(),
-                    risk_tier: risk_tier.clone(),
-                    kraljic_quadrant: kraljic_quadrant.clone(),
-                    approval_status: approval_status.clone(),
+                    risk_tier,
+                    kraljic_quadrant,
+                    approval_status,
                 });
             }
         }
@@ -365,11 +386,42 @@ fn find_identifier_with_authority(node: &Node, scheme: &str) -> (String, String)
     }
 }
 
-fn find_label(node: &Node, key: &str) -> String {
-    node.labels
+/// Extracts a label value from an edge's properties.
+fn find_edge_label(edge: &Edge, key: &str) -> String {
+    edge.properties
+        .labels
         .as_deref()
         .and_then(|labels| labels.iter().find(|l| l.key == key))
         .and_then(|l| l.value.as_deref())
+        .unwrap_or("")
+        .to_owned()
+}
+
+/// Extracts the `supplier_id` from a node's identifiers (scheme=`internal`,
+/// authority=`supplier-list`).
+fn find_supplier_id(node: &Node) -> String {
+    node.identifiers
+        .as_deref()
+        .and_then(|ids| {
+            ids.iter().find(|id| {
+                id.scheme == "internal" && id.authority.as_deref() == Some("supplier-list")
+            })
+        })
+        .map(|id| id.value.as_str())
+        .unwrap_or("")
+        .to_owned()
+}
+
+/// Extracts a generic `internal` identifier, excluding `supplier-list` ones.
+fn find_internal_id(node: &Node) -> String {
+    node.identifiers
+        .as_deref()
+        .and_then(|ids| {
+            ids.iter().find(|id| {
+                id.scheme == "internal" && id.authority.as_deref() != Some("supplier-list")
+            })
+        })
+        .map(|id| id.value.as_str())
         .unwrap_or("")
         .to_owned()
 }

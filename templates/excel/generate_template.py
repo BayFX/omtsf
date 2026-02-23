@@ -720,23 +720,25 @@ def create_supplier_list_workbook():
 
     headers = [
         "supplier_name",        # A  REQUIRED
-        "jurisdiction",         # B  ISO 3166-1 alpha-2
-        "tier",                 # C  1, 2, or 3 (default: 1)
-        "parent_supplier",      # D  name of tier N-1 supplier (tier 2/3)
-        "commodity",            # E  what they supply
-        "valid_from",           # F  relationship start (YYYY-MM-DD)
-        "annual_value",         # G
-        "value_currency",       # H  ISO 4217
-        "contract_ref",         # I
-        "lei",                  # J
-        "duns",                 # K
-        "vat",                  # L
-        "vat_country",          # M  ISO 3166-1 alpha-2
-        "internal_id",          # N
-        "risk_tier",            # O  label
-        "kraljic_quadrant",     # P  label
-        "approval_status",      # Q  label
-        "notes",                # R  free text (not imported into graph)
+        "supplier_id",          # B  optional dedup key
+        "jurisdiction",         # C  ISO 3166-1 alpha-2
+        "tier",                 # D  1, 2, or 3 (default: 1)
+        "parent_supplier",      # E  name or supplier_id of tier N-1 supplier (tier 2/3)
+        "business_unit",        # F  optional BU context
+        "commodity",            # G  what they supply
+        "valid_from",           # H  relationship start (YYYY-MM-DD)
+        "annual_value",         # I
+        "value_currency",       # J  ISO 4217
+        "contract_ref",         # K
+        "lei",                  # L
+        "duns",                 # M
+        "vat",                  # N
+        "vat_country",          # O  ISO 3166-1 alpha-2
+        "internal_id",          # P
+        "risk_tier",            # Q  label (stored on edge)
+        "kraljic_quadrant",     # R  label (stored on edge)
+        "approval_status",      # S  label (stored on edge)
+        "notes",                # T  free text (not imported into graph)
     ]
 
     HEADER_ROW = 4
@@ -748,7 +750,7 @@ def create_supplier_list_workbook():
         cell.border = THIN_BORDER
 
     ws.row_dimensions[HEADER_ROW].height = 30
-    ws.auto_filter.ref = f"A{HEADER_ROW}:R{HEADER_ROW}"
+    ws.auto_filter.ref = f"A{HEADER_ROW}:T{HEADER_ROW}"
 
     # ── Data validations ────────────────────────────────────────────────────
 
@@ -758,7 +760,7 @@ def create_supplier_list_workbook():
     dv_tier.showInputMessage = True
     dv_tier.showErrorMessage = True
     ws.add_data_validation(dv_tier)
-    dv_tier.add("C5:C10000")
+    dv_tier.add("D5:D10000")
 
     dv_risk = DataValidation(
         type="list", formula1='"critical,high,medium,low"', allow_blank=True
@@ -767,7 +769,7 @@ def create_supplier_list_workbook():
     dv_risk.prompt = "General risk classification"
     dv_risk.showInputMessage = True
     ws.add_data_validation(dv_risk)
-    dv_risk.add("O5:O10000")
+    dv_risk.add("Q5:Q10000")
 
     dv_kraljic = DataValidation(
         type="list",
@@ -778,7 +780,7 @@ def create_supplier_list_workbook():
     dv_kraljic.prompt = "Kraljic portfolio classification"
     dv_kraljic.showInputMessage = True
     ws.add_data_validation(dv_kraljic)
-    dv_kraljic.add("P5:P10000")
+    dv_kraljic.add("R5:R10000")
 
     dv_approval = DataValidation(
         type="list",
@@ -789,24 +791,29 @@ def create_supplier_list_workbook():
     dv_approval.prompt = "Supplier approval status"
     dv_approval.showInputMessage = True
     ws.add_data_validation(dv_approval)
-    dv_approval.add("Q5:Q10000")
+    dv_approval.add("S5:S10000")
 
     # ── Column widths ───────────────────────────────────────────────────────
 
     set_col_widths(ws, {
-        "A": 30, "B": 14, "C": 8, "D": 30, "E": 20, "F": 14,
-        "G": 14, "H": 14, "I": 16, "J": 24, "K": 14, "L": 20,
-        "M": 14, "N": 16, "O": 12, "P": 18, "Q": 16, "R": 30,
+        "A": 30, "B": 14, "C": 14, "D": 8, "E": 30, "F": 18,
+        "G": 20, "H": 14, "I": 14, "J": 14, "K": 16, "L": 24,
+        "M": 14, "N": 20, "O": 14, "P": 16, "Q": 12, "R": 18,
+        "S": 16, "T": 30,
     })
 
     return wb
 
 
 def populate_supplier_list_example(wb):
-    """Populate the supplier list with a realistic procurement scenario.
+    """Populate the supplier list with a multi-BU procurement scenario.
 
     Scenario: Acme Manufacturing's direct and tier-2/3 supplier list for
-    steel fastener procurement.
+    steel fastener procurement across Procurement and Engineering BUs.
+
+    Rows 5 and 8 share supplier_id=bolt-001, demonstrating dedup: one org
+    node, two supply edges with different business units and risk profiles.
+    Row 9 uses parent_supplier=bolt-001 (resolving by supplier_id).
     """
     ws = wb["Supplier List"]
 
@@ -815,76 +822,94 @@ def populate_supplier_list_example(wb):
     ws["D1"] = "2026-02-22"
     ws["B2"] = "partner"
 
-    # Row 5: Tier 1 — direct supplier
+    # Row 5: Tier 1 — Bolt Supplies via Procurement BU
     ws["A5"] = "Bolt Supplies Ltd"
-    ws["B5"] = "GB"
-    ws["C5"] = 1
-    ws["E5"] = "7318.15"
-    ws["F5"] = "2023-01-15"
-    ws["G5"] = 450000
-    ws["H5"] = "EUR"
-    ws["I5"] = "MSA-2023-001"
-    ws["K5"] = "234567890"
-    ws["O5"] = "low"
-    ws["P5"] = "strategic"
-    ws["Q5"] = "approved"
+    ws["B5"] = "bolt-001"
+    ws["C5"] = "GB"
+    ws["D5"] = 1
+    ws["F5"] = "Procurement"
+    ws["G5"] = "7318.15"
+    ws["H5"] = "2023-01-15"
+    ws["I5"] = 450000
+    ws["J5"] = "EUR"
+    ws["K5"] = "MSA-2023-001"
+    ws["M5"] = "234567890"
+    ws["Q5"] = "low"
+    ws["R5"] = "strategic"
+    ws["S5"] = "approved"
 
-    # Row 6: Tier 1 — direct supplier
+    # Row 6: Tier 1 — Nordic Fasteners via Procurement BU
     ws["A6"] = "Nordic Fasteners AB"
-    ws["B6"] = "SE"
-    ws["C6"] = 1
-    ws["E6"] = "7318.15"
-    ws["F6"] = "2024-06-01"
-    ws["G6"] = 120000
-    ws["H6"] = "EUR"
-    # LEI column J6 intentionally left blank for Nordic Fasteners (no valid LEI available)
-    ws["O6"] = "medium"
-    ws["P6"] = "leverage"
-    ws["Q6"] = "conditional"
-    ws["R6"] = "Under evaluation; trial order in progress"
+    ws["C6"] = "SE"
+    ws["D6"] = 1
+    ws["F6"] = "Procurement"
+    ws["G6"] = "7318.15"
+    ws["H6"] = "2024-06-01"
+    ws["I6"] = 120000
+    ws["J6"] = "EUR"
+    ws["Q6"] = "medium"
+    ws["R6"] = "leverage"
+    ws["S6"] = "conditional"
+    ws["T6"] = "Under evaluation; trial order in progress"
 
-    # Row 7: Tier 1 — direct supplier
+    # Row 7: Tier 1 — Shanghai Steel via Procurement BU
     ws["A7"] = "Shanghai Steel Components Co"
-    ws["B7"] = "CN"
-    ws["C7"] = 1
-    ws["E7"] = "7228.70"
-    ws["F7"] = "2022-03-01"
-    ws["G7"] = 800000
-    ws["H7"] = "USD"
-    ws["I7"] = "FWA-2022-008"
-    ws["N7"] = "V-200891"
-    ws["O7"] = "high"
-    ws["P7"] = "bottleneck"
-    ws["Q7"] = "approved"
+    ws["B7"] = "shan-001"
+    ws["C7"] = "CN"
+    ws["D7"] = 1
+    ws["F7"] = "Procurement"
+    ws["G7"] = "7228.70"
+    ws["H7"] = "2022-03-01"
+    ws["I7"] = 800000
+    ws["J7"] = "USD"
+    ws["K7"] = "FWA-2022-008"
+    ws["P7"] = "V-200891"
+    ws["Q7"] = "high"
+    ws["R7"] = "bottleneck"
+    ws["S7"] = "approved"
 
-    # Row 8: Tier 2 — sub-supplier of Bolt Supplies
-    ws["A8"] = "Yorkshire Steel Works"
-    ws["B8"] = "GB"
-    ws["C8"] = 2
-    ws["D8"] = "Bolt Supplies Ltd"
-    ws["E8"] = "7208.10"
-    ws["F8"] = "2021-09-01"
-    ws["O8"] = "low"
-    ws["Q8"] = "approved"
+    # Row 8: Tier 1 — Bolt Supplies again, via Engineering BU (same supplier_id → dedup)
+    ws["A8"] = "Bolt Supplies Ltd"
+    ws["B8"] = "bolt-001"
+    ws["C8"] = "GB"
+    ws["D8"] = 1
+    ws["F8"] = "Engineering"
+    ws["G8"] = "7318.16"
+    ws["H8"] = "2024-01-01"
+    ws["I8"] = 180000
+    ws["J8"] = "EUR"
+    ws["Q8"] = "medium"
+    ws["R8"] = "non-critical"
+    ws["S8"] = "approved"
 
-    # Row 9: Tier 2 — sub-supplier of Shanghai Steel
-    ws["A9"] = "Baosteel Trading Co"
-    ws["B9"] = "CN"
-    ws["C9"] = 2
-    ws["D9"] = "Shanghai Steel Components Co"
-    ws["E9"] = "7207.11"
-    ws["F9"] = "2020-01-15"
-    ws["O9"] = "high"
-    ws["R9"] = "Primary raw material supplier for Shanghai Steel"
+    # Row 9: Tier 2 — sub-supplier of Bolt (referencing parent by supplier_id)
+    ws["A9"] = "Yorkshire Steel Works"
+    ws["C9"] = "GB"
+    ws["D9"] = 2
+    ws["E9"] = "bolt-001"
+    ws["G9"] = "7208.10"
+    ws["H9"] = "2021-09-01"
+    ws["Q9"] = "low"
+    ws["S9"] = "approved"
 
-    # Row 10: Tier 3 — sub-supplier of Baosteel
-    ws["A10"] = "Inner Mongolia Mining Corp"
-    ws["B10"] = "CN"
-    ws["C10"] = 3
-    ws["D10"] = "Baosteel Trading Co"
-    ws["E10"] = "2601.11"
-    ws["O10"] = "critical"
-    ws["R10"] = "Iron ore source; LKSG high-risk region"
+    # Row 10: Tier 2 — sub-supplier of Shanghai Steel (referencing by supplier_id)
+    ws["A10"] = "Baosteel Trading Co"
+    ws["C10"] = "CN"
+    ws["D10"] = 2
+    ws["E10"] = "shan-001"
+    ws["G10"] = "7207.11"
+    ws["H10"] = "2020-01-15"
+    ws["Q10"] = "high"
+    ws["T10"] = "Primary raw material supplier for Shanghai Steel"
+
+    # Row 11: Tier 3 — sub-supplier of Baosteel (referencing by name, no supplier_id)
+    ws["A11"] = "Inner Mongolia Mining Corp"
+    ws["C11"] = "CN"
+    ws["D11"] = 3
+    ws["E11"] = "Baosteel Trading Co"
+    ws["G11"] = "2601.11"
+    ws["Q11"] = "critical"
+    ws["T11"] = "Iron ore source; LKSG high-risk region"
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
