@@ -534,20 +534,20 @@ fn import_supplier_list_labels_on_edges() {
     };
 
     assert!(
-        has_edge_label("risk_tier"),
-        "at least one edge must have a risk_tier label"
+        has_edge_label("risk-tier"),
+        "at least one edge must have a risk-tier label"
     );
     assert!(
-        has_edge_label("kraljic_quadrant"),
-        "at least one edge must have a kraljic_quadrant label"
+        has_edge_label("kraljic-quadrant"),
+        "at least one edge must have a kraljic-quadrant label"
     );
     assert!(
-        has_edge_label("approval_status"),
-        "at least one edge must have an approval_status label"
+        has_edge_label("approval-status"),
+        "at least one edge must have an approval-status label"
     );
     assert!(
-        has_edge_label("business_unit"),
-        "at least one edge must have a business_unit label"
+        has_edge_label("business-unit"),
+        "at least one edge must have a business-unit label"
     );
 }
 

@@ -461,8 +461,8 @@ fn merge_supplier_id_identifier(node: &mut Node, supplier_id: &str) {
 /// - Tier 1: supplier → reporting entity
 /// - Tier 2/3: supplier → parent supplier
 ///
-/// Relationship-specific labels (`risk_tier`, `kraljic_quadrant`,
-/// `approval_status`, `business_unit`) are attached to edge properties.
+/// Relationship-specific labels (`risk-tier`, `kraljic-quadrant`,
+/// `approval-status`, `business-unit`) are attached to edge properties.
 fn build_edges(
     rows: &[SupplierRow],
     name_to_node_id: &HashMap<String, String>,
@@ -526,28 +526,28 @@ fn build_edges(
         let mut labels = Vec::new();
         if let Some(rt) = &row.risk_tier {
             labels.push(Label {
-                key: "risk_tier".to_owned(),
+                key: "risk-tier".to_owned(),
                 value: Some(rt.clone()),
                 extra: BTreeMap::new(),
             });
         }
         if let Some(kq) = &row.kraljic_quadrant {
             labels.push(Label {
-                key: "kraljic_quadrant".to_owned(),
+                key: "kraljic-quadrant".to_owned(),
                 value: Some(kq.clone()),
                 extra: BTreeMap::new(),
             });
         }
         if let Some(ap) = &row.approval_status {
             labels.push(Label {
-                key: "approval_status".to_owned(),
+                key: "approval-status".to_owned(),
                 value: Some(ap.clone()),
                 extra: BTreeMap::new(),
             });
         }
         if let Some(bu) = &row.business_unit {
             labels.push(Label {
-                key: "business_unit".to_owned(),
+                key: "business-unit".to_owned(),
                 value: Some(bu.clone()),
                 extra: BTreeMap::new(),
             });

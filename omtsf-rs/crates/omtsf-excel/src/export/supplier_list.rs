@@ -251,7 +251,7 @@ fn build_parent_map<'a>(_suppliers: &[&'a Node], edges: &[&'a Edge]) -> HashMap<
 ///
 /// A supplier may appear in multiple edges (different commodities or business
 /// units). Each edge generates one row. Relationship-specific labels
-/// (`risk_tier`, `kraljic_quadrant`, `approval_status`, `business_unit`) are
+/// (`risk-tier`, `kraljic-quadrant`, `approval-status`, `business-unit`) are
 /// read from edge properties.
 fn build_rows<'a>(
     suppliers: &[&'a Node],
@@ -326,10 +326,10 @@ fn build_rows<'a>(
         } else {
             for edge in &node_edges {
                 let props = &edge.properties;
-                let risk_tier = find_edge_label(edge, "risk_tier");
-                let kraljic_quadrant = find_edge_label(edge, "kraljic_quadrant");
-                let approval_status = find_edge_label(edge, "approval_status");
-                let business_unit = find_edge_label(edge, "business_unit");
+                let risk_tier = find_edge_label(edge, "risk-tier");
+                let kraljic_quadrant = find_edge_label(edge, "kraljic-quadrant");
+                let approval_status = find_edge_label(edge, "approval-status");
+                let business_unit = find_edge_label(edge, "business-unit");
 
                 rows.push(ExportRow {
                     supplier_name: node.name.as_deref().unwrap_or("").to_owned(),
