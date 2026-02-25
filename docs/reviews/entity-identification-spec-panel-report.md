@@ -1,4 +1,4 @@
-# Expert Panel Report: Entity Identification Specification (OMTSF-SPEC-001)
+# Expert Panel Report: Entity Identification Specification (OMTS-SPEC-001)
 
 **Date:** 2026-02-17
 **Document Reviewed:** `docs/specs/entity-identification.md`
@@ -8,7 +8,7 @@
 
 ## Panel Chair Summary
 
-The OMTSF Entity Identification Specification represents a substantial and technically mature response to the single most critical gap identified in the vision document review: the absence of an entity identification strategy. All eleven panelists acknowledge that the spec directly addresses the P0-1 recommendation that nine of them flagged during the vision review. The composite identifier model -- treating LEI, DUNS, GLN, national registry numbers, VAT numbers, and internal ERP codes as co-equal peers in a scheme-qualified array -- received universal endorsement as the correct architectural choice. The separation of graph-local identity from external identity, the tiered validation levels, the sensitivity classification with scheme defaults, and the corporate hierarchy edge types were cited as strengths by a majority of panelists.
+The OMTS Entity Identification Specification represents a substantial and technically mature response to the single most critical gap identified in the vision document review: the absence of an entity identification strategy. All eleven panelists acknowledge that the spec directly addresses the P0-1 recommendation that nine of them flagged during the vision review. The composite identifier model -- treating LEI, DUNS, GLN, national registry numbers, VAT numbers, and internal ERP codes as co-equal peers in a scheme-qualified array -- received universal endorsement as the correct architectural choice. The separation of graph-local identity from external identity, the tiered validation levels, the sensitivity classification with scheme defaults, and the corporate hierarchy edge types were cited as strengths by a majority of panelists.
 
 However, the panel identified two classes of remaining gaps. First, **the spec's own constructs require tighter specification**: the boundary reference hash construction has a collision vulnerability for entities with only restricted identifiers (Security & Privacy Expert, Entity Identification Expert, Data Format Expert, Graph Modeling Expert), the canonical string format for identifiers remains an open question that blocks hashing interoperability (Systems Engineering Expert, Data Format Expert, Standards Expert, Entity Identification Expert), and the merge operation lacks formal algebraic properties -- commutativity, associativity, and transitivity decisions (Graph Modeling Expert). Second, **the spec's scope needs expansion in specific directions**: no supply relationship edge type taxonomy exists alongside the well-specified corporate hierarchy edges (Supply Chain Expert), no attestation or certification model supports regulatory compliance workflows (Regulatory Compliance Expert), no beneficial ownership representation handles natural persons required by CSDDD and AMLD (Regulatory Compliance Expert), no intra-file deduplication guidance helps ERP producers (Enterprise Integration Expert), and no BOM decomposition supports material-to-material traceability (Enterprise Integration Expert, Supply Chain Expert).
 
@@ -69,7 +69,7 @@ Issues rated **[Critical]** by at least one expert.
 | C9 | **SAP mapping omits purchasing info records and edge derivation** | Enterprise Integration Expert | Section 11 covers vendor master headers but not the tables (`EINA`/`EINE`, `EKKO`/`EKPO`) that populate supply edges. |
 | C10 | **Canonical encoding for boundary reference hashing is underspecified** | Data Format Expert | Sort order, delimiter, salt encoding, and normalization rules are ambiguous. Two implementations will produce divergent hashes. |
 | C11 | **No governance process for identifier scheme registry** | Open Source Strategy Expert | No process for adding, promoting, or deprecating schemes. Vocabulary either ossifies or fragments. |
-| C12 | **Hard dependency on GLEIF RA list with no fallback** | Open Source Strategy Expert | If GLEIF changes the list, all validators are affected. Needs versioned OMTSF-maintained snapshot. |
+| C12 | **Hard dependency on GLEIF RA list with no fallback** | Open Source Strategy Expert | If GLEIF changes the list, all validators are affected. Needs versioned OMTS-maintained snapshot. |
 | C13 | **No DUNS branch/HQ disambiguation guidance** | Entity Identification Expert | D&B assigns separate DUNS to HQ vs. branches of the same entity. Two files may contain the same entity under different DUNS numbers. |
 | C14 | **No LEI lifecycle status handling** | Entity Identification Expert | LAPSED, MERGED, and ANNULLED LEIs need explicit guidance for merge and validation behavior. |
 | C15 | **No identifier enrichment workflow guidance** | Procurement Expert | No conceptual model for how files progress from internal-only to fully enriched identifiers. |
@@ -162,7 +162,7 @@ Issues rated **[Critical]** by at least one expert.
 | P0-10 | **Publish versioned GLEIF RA list snapshot.** Decouple validation from GLEIF publication timing. | Open Source Strategy Expert |
 | P0-11 | **Define governance process for scheme vocabulary.** RFC process for additions, promotions, and deprecations. | Open Source Strategy Expert |
 | P0-12 | **Separate spec and code licensing.** CC-BY-4.0 for spec, Apache 2.0 for code, adopt DCO. | Open Source Strategy Expert |
-| P0-13 | **Add DUNS branch/HQ disambiguation guidance.** Document D&B family tree model and mapping to OMTSF node types. | Entity Identification Expert |
+| P0-13 | **Add DUNS branch/HQ disambiguation guidance.** Document D&B family tree model and mapping to OMTS node types. | Entity Identification Expert |
 | P0-14 | **Define LEI lifecycle status handling.** LAPSED = still valid for merge; MERGED = generate `former_identity` edge; ANNULLED = L2 warning. | Entity Identification Expert |
 
 ### P1 -- Before v1

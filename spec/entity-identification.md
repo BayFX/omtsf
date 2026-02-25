@@ -1,6 +1,6 @@
-# OMTSF Specification: Entity Identification
+# OMTS Specification: Entity Identification
 
-**Spec:** OMTSF-SPEC-002
+**Spec:** OMTS-SPEC-002
 **Status:** Draft
 **Date:** 2026-02-18
 **Revision:** 3 (decomposed from monolithic spec)
@@ -11,9 +11,9 @@
 
 | Spec | Relationship |
 |------|-------------|
-| OMTSF-SPEC-001 (Graph Data Model) | **Prerequisite.** Defines the node types, edge types, and file structure that carry the identifiers defined here. |
-| OMTSF-SPEC-003 (Merge Semantics) | Uses external identifiers defined here as the basis for cross-file merge identity predicates. |
-| OMTSF-SPEC-004 (Selective Disclosure) | Defines sensitivity levels and redaction behavior for the `sensitivity` field on identifier records. |
+| OMTS-SPEC-001 (Graph Data Model) | **Prerequisite.** Defines the node types, edge types, and file structure that carry the identifiers defined here. |
+| OMTS-SPEC-003 (Merge Semantics) | Uses external identifiers defined here as the basis for cross-file merge identity predicates. |
+| OMTS-SPEC-004 (Selective Disclosure) | Defines sensitivity levels and redaction behavior for the `sensitivity` field on identifier records. |
 
 ---
 
@@ -21,7 +21,7 @@
 
 No single global business identifier exists. LEI, DUNS, GLN, national registry numbers, and tax IDs each have limited coverage, incompatible formats, or privacy constraints. Any specification that mandates a single scheme excludes the majority of supply chain participants.
 
-OMTSF uses a composite identifier model that treats all schemes as peers. Cross-file merge depends on this: if two parties export files using different identifiers for the same legal entity, merge produces duplicates instead of a unified graph.
+OMTS uses a composite identifier model that treats all schemes as peers. Cross-file merge depends on this: if two parties export files using different identifiers for the same legal entity, merge produces duplicates instead of a unified graph.
 
 ---
 
@@ -31,13 +31,13 @@ OMTSF uses a composite identifier model that treats all schemes as peers. Cross-
 
 **Composite identity.** Every entity node carries an array of zero or more external identifiers from multiple schemes. The more identifiers an entity carries, the higher the probability of successful cross-file merge.
 
-**Graph-local vs. external identity.** File-local IDs (used for edge source/target references within a single file, defined in OMTSF-SPEC-001, Section 3) are structurally distinct from external identifiers (used for cross-file merge). They serve different purposes and MUST NOT be conflated.
+**Graph-local vs. external identity.** File-local IDs (used for edge source/target references within a single file, defined in OMTS-SPEC-001, Section 3) are structurally distinct from external identifiers (used for cross-file merge). They serve different purposes and MUST NOT be conflated.
 
 **Scheme-qualified identifiers.** Every identifier declares its scheme. A bare number is meaningless; `duns:081466849` is unambiguous.
 
 **Internal identifiers are first-class.** ERP vendor numbers, buyer-assigned supplier codes, and other system-local IDs are the most common identifiers in practice. They MUST be representable without requiring translation to a global scheme.
 
-**Sensitivity-aware.** Some identifiers (tax IDs, internal codes) carry privacy or confidentiality constraints. The identifier model supports sensitivity classification to enable selective redaction (see OMTSF-SPEC-004).
+**Sensitivity-aware.** Some identifiers (tax IDs, internal codes) carry privacy or confidentiality constraints. The identifier model supports sensitivity classification to enable selective redaction (see OMTS-SPEC-004).
 
 **Temporally valid.** Identifiers change over time. Companies re-register, merge, acquire new LEIs, or lose DUNS numbers. The model supports temporal validity on every identifier.
 
@@ -45,7 +45,7 @@ OMTSF uses a composite identifier model that treats all schemes as peers. Cross-
 
 ## 3. External Identifier Structure
 
-Each node (defined in OMTSF-SPEC-001) carries an optional `identifiers` array. Each entry is an **identifier record** with the following fields:
+Each node (defined in OMTS-SPEC-001) carries an optional `identifiers` array. Each entry is an **identifier record** with the following fields:
 
 | Field | Required | Type | Description |
 |-------|----------|------|-------------|
@@ -54,11 +54,11 @@ Each node (defined in OMTSF-SPEC-001) carries an optional `identifiers` array. E
 | `authority` | Conditional | string | Issuing authority or jurisdiction qualifier. Required for `nat-reg`, `vat`, and `internal` schemes. |
 | `valid_from` | No | string (ISO 8601 date) | Date this identifier became effective for this entity |
 | `valid_to` | No | string (ISO 8601 date) | Date this identifier ceased to be valid for this entity. `null` means currently valid. |
-| `sensitivity` | No | enum | One of `public`, `restricted`, `confidential`. Default: `public`. See OMTSF-SPEC-004. |
+| `sensitivity` | No | enum | One of `public`, `restricted`, `confidential`. Default: `public`. See OMTS-SPEC-004. |
 | `verification_status` | No | enum | One of `verified`, `reported`, `inferred`, `unverified`. Default: `reported`. |
 | `verification_date` | No | string (ISO 8601 date) | Date the identifier was last verified against an authoritative source. |
 
-**Authority naming convention.** For `internal` scheme identifiers, the `authority` field SHOULD follow the naming convention defined in OMTSF-SPEC-005, Section 1.1: `{system_type}-{instance_id}[-{client}]` (e.g., `sap-prod-100`, `oracle-scm-us`). Consistent authority naming enables downstream tooling to group identifiers by source system and supports deduplication across multi-system landscapes.
+**Authority naming convention.** For `internal` scheme identifiers, the `authority` field SHOULD follow the naming convention defined in OMTS-SPEC-005, Section 1.1: `{system_type}-{instance_id}[-{client}]` (e.g., `sap-prod-100`, `oracle-scm-us`). Consistent authority naming enables downstream tooling to group identifiers by source system and supports deduplication across multi-system landscapes.
 
 **Unknown fields:** Conformant parsers MUST preserve unknown fields in identifier records during round-trip serialization. Unknown fields MUST NOT cause validation failure at any level. This ensures forward compatibility when future spec versions add fields (e.g., future extensions).
 
@@ -86,7 +86,7 @@ Examples:
 - If an `authority` or `value` contains a newline (`U+000A`), it MUST be percent-encoded as `%0A`
 - If an `authority` or `value` contains a carriage return (`U+000D`), it MUST be percent-encoded as `%0D`
 
-This canonical form is used in boundary reference hashing (OMTSF-SPEC-004, Section 4) and merge identity comparison (OMTSF-SPEC-003, Section 2).
+This canonical form is used in boundary reference hashing (OMTS-SPEC-004, Section 4) and merge identity comparison (OMTS-SPEC-003, Section 2).
 
 ---
 
@@ -94,7 +94,7 @@ This canonical form is used in boundary reference hashing (OMTSF-SPEC-004, Secti
 
 ### 5.1 Core Schemes
 
-Conformant OMTSF validators MUST recognize the following schemes and enforce their format validation rules.
+Conformant OMTS validators MUST recognize the following schemes and enforce their format validation rules.
 
 #### `lei` -- Legal Entity Identifier
 
@@ -106,12 +106,12 @@ Conformant OMTSF validators MUST recognize the following schemes and enforce the
 
 **LEI Registration Status:**
 
-| LEI Status | Meaning | OMTSF Merge Behavior | Validation |
+| LEI Status | Meaning | OMTS Merge Behavior | Validation |
 |------------|---------|---------------------|------------|
 | `ISSUED` | Active, annually renewed | Normal merge candidate | -- |
 | `LAPSED` | Failed to renew; entity still exists | Still valid for merge | L2 warning |
 | `RETIRED` | Voluntarily retired by the entity | Still valid for merge. Producers SHOULD set `valid_to` on the identifier. | L2 warning |
-| `MERGED` | Entity merged into another; successor LEI exists | Still valid for merge. Producers SHOULD create a `former_identity` edge (OMTSF-SPEC-001, Section 5.4). | L2 warning |
+| `MERGED` | Entity merged into another; successor LEI exists | Still valid for merge. Producers SHOULD create a `former_identity` edge (OMTS-SPEC-001, Section 5.4). | L2 warning |
 | `ANNULLED` | Issued in error or fraudulently | MUST NOT be used for merge. Treat as invalid. | L2 error |
 
 #### `duns` -- DUNS Number
@@ -131,13 +131,13 @@ Conformant OMTSF validators MUST recognize the following schemes and enforce the
 - **Format:** 13-digit numeric string.
 - **Validation:** MUST match `^[0-9]{13}$`. MUST pass GS1 mod-10 check digit (last digit).
 - **`authority` field:** Not required. The GS1 Company Prefix embedded in the GLN identifies the issuing MO.
-- **Note:** GLN can identify legal entities, functional entities, or physical locations. OMTSF disambiguates via node type (`organization` vs. `facility`), not via the identifier scheme.
+- **Note:** GLN can identify legal entities, functional entities, or physical locations. OMTS disambiguates via node type (`organization` vs. `facility`), not via the identifier scheme.
 
 #### `nat-reg` -- National Company Registry
 
 - **Authority:** Government company registries (e.g., UK Companies House, German Handelsregister, French RCS)
 - **Format:** Varies by jurisdiction.
-- **Validation:** `authority` field is REQUIRED and MUST contain a valid GLEIF Registration Authority (RA) code from the OMTSF-maintained RA list snapshot (see Section 5.3). `value` format validation is authority-specific and MAY be deferred to Level 2 validation.
+- **Validation:** `authority` field is REQUIRED and MUST contain a valid GLEIF Registration Authority (RA) code from the OMTS-maintained RA list snapshot (see Section 5.3). `value` format validation is authority-specific and MAY be deferred to Level 2 validation.
 - **`authority` field:** Required. Contains the GLEIF RA code (e.g., `RA000585` for UK Companies House, `RA000548` for German Handelsregister). The full GLEIF RA list (700+ registration authorities) is available at `https://www.gleif.org/en/about-lei/code-lists/gleif-registration-authorities-list`.
 
 **Sensitivity:** Default sensitivity for `nat-reg` identifiers is `restricted` because they may contain personal data in some jurisdictions. Producers who know an entity is a large corporation MAY explicitly override to `public`.
@@ -152,7 +152,7 @@ Conformant OMTSF validators MUST recognize the following schemes and enforce the
 
 **VAT number normalization.** The `value` field MUST include the country prefix for EU member states (e.g., `DE123456789`, not `123456789`). The `authority` field carries the ISO 3166-1 alpha-2 country code separately (e.g., `DE`). This means for a German VAT number, the canonical form is `vat:DE:DE123456789`. Producers that receive VAT numbers without the country prefix MUST prepend the country code from the `authority` field. This normalization is critical for merge identity: two files with `DE123456789` and `123456789` for the same entity will fail to merge without consistent normalization.
 
-**Privacy note:** Tax IDs may be protected in some jurisdictions. OMTSF files containing `vat` identifiers with `sensitivity: "confidential"` are subject to the selective disclosure rules in OMTSF-SPEC-004.
+**Privacy note:** Tax IDs may be protected in some jurisdictions. OMTS files containing `vat` identifiers with `sensitivity: "confidential"` are subject to the selective disclosure rules in OMTS-SPEC-004.
 
 #### `internal` -- System-Local Identifier
 
@@ -160,7 +160,7 @@ Conformant OMTSF validators MUST recognize the following schemes and enforce the
 - **Format:** Opaque string. No format constraints beyond non-empty.
 - **Validation:** `authority` field is REQUIRED and MUST be a non-empty string identifying the issuing system.
 - **`authority` field:** Required. Free-form string identifying the source system. Recommended convention: `{system-type}-{instance-id}` (e.g., `sap-mm-prod`, `oracle-scm-us`, `ariba-network`).
-- **Merge behavior:** `internal` identifiers NEVER trigger cross-file merge. They are scoped to their issuing system and are meaningful only within that context. See OMTSF-SPEC-003, Section 2 for merge identity rules.
+- **Merge behavior:** `internal` identifiers NEVER trigger cross-file merge. They are scoped to their issuing system and are meaningful only within that context. See OMTS-SPEC-003, Section 2 for merge identity rules.
 
 ### 5.2 Extension Schemes
 
@@ -183,9 +183,9 @@ Validators encountering an unrecognized scheme code MUST NOT reject the file. Un
 
 ### 5.3 GLEIF RA List Versioning
 
-The `nat-reg` scheme depends on the GLEIF Registration Authority code list, which is maintained by GLEIF and updated periodically. To decouple OMTSF validation from GLEIF's publication timing:
+The `nat-reg` scheme depends on the GLEIF Registration Authority code list, which is maintained by GLEIF and updated periodically. To decouple OMTS validation from GLEIF's publication timing:
 
-1. The OMTSF project MUST maintain a versioned snapshot of the GLEIF RA list in the repository (e.g., `data/gleif-ra-list-2026Q1.csv`).
+1. The OMTS project MUST maintain a versioned snapshot of the GLEIF RA list in the repository (e.g., `data/gleif-ra-list-2026Q1.csv`).
 2. Each spec revision MUST reference a specific snapshot version (e.g., "based on GLEIF RA list retrieved 2026-01-15").
 3. Snapshots SHOULD be updated quarterly, aligned with GLEIF's publication cadence.
 4. **Validator behavior for unknown RA codes:** Validators encountering an `authority` value not present in the referenced snapshot SHOULD emit a warning but MUST NOT reject the file. This ensures that newly added RA codes do not break validation between snapshot updates.
@@ -199,7 +199,7 @@ The `nat-reg` scheme depends on the GLEIF Registration Authority code list, whic
 
 ### 6.1 Level 1 -- Structural Integrity
 
-These rules MUST pass for a file to be considered structurally valid. See also OMTSF-SPEC-001, Section 9 for graph-structural rules.
+These rules MUST pass for a file to be considered structurally valid. See also OMTS-SPEC-001, Section 9 for graph-structural rules.
 
 | Rule | Description |
 |------|-------------|
@@ -227,7 +227,7 @@ These rules SHOULD be satisfied. Violations produce warnings, not errors.
 | L2-EID-04 | `vat` authority values SHOULD be valid ISO 3166-1 alpha-2 country codes |
 | L2-EID-05 | `lei` values with LAPSED, RETIRED, or MERGED status (when detectable) SHOULD produce a warning |
 | L2-EID-06 | `lei` values with ANNULLED status SHOULD produce an error |
-| L2-EID-07 | Identifiers on schemes known to reassign values (`duns`, `gln`) SHOULD carry `valid_from` and `valid_to` to enable temporal merge safety (OMTSF-SPEC-003, Section 2) |
+| L2-EID-07 | Identifiers on schemes known to reassign values (`duns`, `gln`) SHOULD carry `valid_from` and `valid_to` to enable temporal merge safety (OMTS-SPEC-003, Section 2) |
 | L2-EID-08 | Identifiers with `verification_status: "verified"` SHOULD also carry a `verification_date` |
 | L2-EID-09 | DUNS numbers on `organization` nodes SHOULD be verified as HQ-level DUNS, not branch DUNS. Branch DUNS numbers identify physical locations and SHOULD be assigned to `facility` nodes instead. A branch DUNS on an `organization` node can cause false-positive merges when two organizations share a physical plant. |
 

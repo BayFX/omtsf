@@ -1,4 +1,4 @@
-# Contributing to OMTSF
+# Contributing to OMTS
 
 Thank you for your interest in contributing to the Open Multi-Tier Supply-chain Format.
 

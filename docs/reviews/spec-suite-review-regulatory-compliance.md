@@ -1,14 +1,14 @@
-# Expert Review: OMTSF Specification Suite (Regulatory Compliance)
+# Expert Review: OMTS Specification Suite (Regulatory Compliance)
 
 **Reviewer:** Regulatory Compliance Expert, Supply Chain Regulatory Compliance Advisor
-**Specs Reviewed:** OMTSF-SPEC-001 through OMTSF-SPEC-006 (all Draft, Revision 1, 2026-02-18)
+**Specs Reviewed:** OMTS-SPEC-001 through OMTS-SPEC-006 (all Draft, Revision 1, 2026-02-18)
 **Review Date:** 2026-02-18
 
 ---
 
 ## Assessment
 
-From a regulatory compliance perspective, OMTSF demonstrates a remarkably well-informed mapping to the current European and international due diligence regulatory landscape. The specification suite addresses the structural data requirements of the EU Corporate Sustainability Due Diligence Directive (CSDDD), the EU Deforestation Regulation (EUDR), the German Supply Chain Due Diligence Act (LkSG), CBAM, and AMLD 5/6 with a degree of specificity that is rare in open data format proposals. The graph model captures the core regulatory entities -- organizations with jurisdiction, facilities with geolocation, goods with commodity codes, persons as beneficial owners, and attestations covering certifications and due diligence statements -- and the edge types explicitly encode the relationship categories that trigger regulatory obligations. The inline regulatory relevance annotations (e.g., `supplies` = "direct business relationship" under CSDDD Article 3(e); `subcontracts` triggering LkSG Section 9 obligations) are valuable for implementers who need to understand why specific data elements exist.
+From a regulatory compliance perspective, OMTS demonstrates a remarkably well-informed mapping to the current European and international due diligence regulatory landscape. The specification suite addresses the structural data requirements of the EU Corporate Sustainability Due Diligence Directive (CSDDD), the EU Deforestation Regulation (EUDR), the German Supply Chain Due Diligence Act (LkSG), CBAM, and AMLD 5/6 with a degree of specificity that is rare in open data format proposals. The graph model captures the core regulatory entities -- organizations with jurisdiction, facilities with geolocation, goods with commodity codes, persons as beneficial owners, and attestations covering certifications and due diligence statements -- and the edge types explicitly encode the relationship categories that trigger regulatory obligations. The inline regulatory relevance annotations (e.g., `supplies` = "direct business relationship" under CSDDD Article 3(e); `subcontracts` triggering LkSG Section 9 obligations) are valuable for implementers who need to understand why specific data elements exist.
 
 The EUDR coverage is particularly strong. The `consignment` node type with `lot_id` and `origin_country`, combined with `facility` nodes carrying WGS 84 coordinates or GeoJSON polygon boundaries, directly addresses Article 9 due diligence statement requirements, including the geolocation-to-plot traceability that will apply to large operators from 30 December 2026 under the revised regulation (EU 2025/2650). The `attestation` node type with `attestation_type: "due_diligence_statement"` and `standard: "EUDR-DDS"` provides a clean mechanism for referencing DDS submissions. However, the spec should be aware that the EUDR's December 2025 revision introduces simplified requirements and a Commission simplification review due by 30 April 2026, which may alter geolocation precision requirements for certain commodity categories.
 
@@ -29,7 +29,7 @@ The most significant regulatory gap is the absence of a temporal audit trail mec
 
 ## Concerns
 
-- **[Critical] No embedded emissions data model for CBAM.** CBAM entered its definitive (financial) phase on 1 January 2026. Importers must declare embedded emissions per installation and surrender certificates. SPEC-001's `consignment` node lacks fields for direct emissions, indirect emissions, emission factor source, or installation-specific production route. The `composed_of` edge notes CBAM relevance but provides no mechanism for carrying the actual emissions data. Without this, OMTSF cannot serve as a data carrier for CBAM Article 7 declarations.
+- **[Critical] No embedded emissions data model for CBAM.** CBAM entered its definitive (financial) phase on 1 January 2026. Importers must declare embedded emissions per installation and surrender certificates. SPEC-001's `consignment` node lacks fields for direct emissions, indirect emissions, emission factor source, or installation-specific production route. The `composed_of` edge notes CBAM relevance but provides no mechanism for carrying the actual emissions data. Without this, OMTS cannot serve as a data carrier for CBAM Article 7 declarations.
 
 - **[Major] No temporal linkage between successive graph snapshots.** CSDDD (Article 11) and LkSG (Section 4(4)) require continuous monitoring, not one-time mapping. A supervisory authority reviewing compliance needs to see how a company's supply chain graph evolved over time: when a high-risk supplier was identified, what mitigation was taken, when it was re-assessed. The current `snapshot_date` captures a point in time, but there is no normative mechanism for versioning, delta encoding, or linking successive snapshots into an auditable timeline.
 
@@ -63,7 +63,7 @@ The most significant regulatory gap is the absence of a temporal audit trail mec
 
 ## Cross-Expert Notes
 
-- **Enterprise Integration Expert:** The CBAM emissions gap directly affects ERP integration. SAP S/4HANA's CBAM module (available since 2024) and Oracle's sustainability reporting tools already track installation-level embedded emissions. The ERP integration guide (SPEC-005) should include mappings from these CBAM-specific ERP data structures to OMTSF.
+- **Enterprise Integration Expert:** The CBAM emissions gap directly affects ERP integration. SAP S/4HANA's CBAM module (available since 2024) and Oracle's sustainability reporting tools already track installation-level embedded emissions. The ERP integration guide (SPEC-005) should include mappings from these CBAM-specific ERP data structures to OMTS.
 
 - **Security & Privacy Expert:** The temporal audit trail recommendation (snapshot versioning) has integrity implications. A chain of snapshot references needs tamper-evident linking (e.g., each snapshot referencing the hash of its predecessor) to be credible as a regulatory audit trail. Without integrity, a company could retroactively alter earlier snapshots.
 

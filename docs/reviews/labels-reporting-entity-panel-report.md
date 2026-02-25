@@ -8,7 +8,7 @@
 
 ## Panel Chair Summary
 
-All five experts agree that the implementation of both P0 recommendations -- the `labels` array (R1) and the `reporting_entity` file header field (R2) -- is architecturally sound and directly addresses the concerns raised by the original segmentation panel. No expert rated any concern as Critical, and the Graph Modeling Expert (whose original proposal of separate `labels` + `annotations` arrays was simplified to a unified design) explicitly accepted the tradeoff, noting that OMTSF is a serialization format and need not mirror graph database indexing structures. The unified `{key, value}` model with optional `value` for boolean flags was praised across the panel for its simplicity and adoption-friendliness.
+All five experts agree that the implementation of both P0 recommendations -- the `labels` array (R1) and the `reporting_entity` file header field (R2) -- is architecturally sound and directly addresses the concerns raised by the original segmentation panel. No expert rated any concern as Critical, and the Graph Modeling Expert (whose original proposal of separate `labels` + `annotations` arrays was simplified to a unified design) explicitly accepted the tradeoff, noting that OMTS is a serialization format and need not mirror graph database indexing structures. The unified `{key, value}` model with optional `value` for boolean flags was praised across the panel for its simplicity and adoption-friendliness.
 
 The strongest consensus finding is that the labels mechanism, while structurally complete, needs **recommended key vocabularies** to achieve its interoperability goals. The Procurement Expert and Regulatory Compliance Expert both rated this as a Major concern: without standard key names for common classifications (Kraljic quadrant, regulatory scope, approval status, supplier diversity), every adopter will invent their own conventions, fragmenting the very interoperability the mechanism is designed to enable. This was original panel recommendation R3 and remains the most important follow-up work.
 
@@ -111,7 +111,7 @@ No P0 recommendations. The implementation is sound as delivered.
 
 | # | Recommendation | Originating Expert(s) |
 |---|---------------|----------------------|
-| R1 | **Publish recommended label keys** in an informative appendix or SPEC-006 for common classifications: Kraljic quadrant, approval status, supplier diversity, regulatory scope (LkSG, CSDDD, EUDR, UFLPA, CBAM), UNSPSC commodity code, business unit. Use OMTSF-reserved (dotless) keys. | Procurement Expert, Supply Chain Expert, Regulatory Compliance Expert |
+| R1 | **Publish recommended label keys** in an informative appendix or SPEC-006 for common classifications: Kraljic quadrant, approval status, supplier diversity, regulatory scope (LkSG, CSDDD, EUDR, UFLPA, CBAM), UNSPSC commodity code, business unit. Use OMTS-reserved (dotless) keys. | Procurement Expert, Supply Chain Expert, Regulatory Compliance Expert |
 | R2 | **Add concrete ERP-to-labels mapping examples in SPEC-005** for SAP vendor groups, Oracle business classifications, D365 `VendorGroupId`, Coupa supplier tags. | Procurement Expert, Enterprise Integration Expert, Regulatory Compliance Expert |
 | R3 | **Extend `tier` property to `subcontracts`, `tolls`, `distributes`, `brokers` edge types.** Regulatory frameworks do not distinguish relationship types when counting tiers. | Supply Chain Expert, Procurement Expert, Regulatory Compliance Expert |
 | R4 | **Add L2 validation rule against duplicate `{key, value}` pairs** within a single node/edge. Catches producer bugs without blocking files. | Graph Modeling Expert |
@@ -141,7 +141,7 @@ Three experts converged on the same conclusion from different angles: without re
 The Regulatory Compliance Expert's Major rating for temporal validity is grounded in specific statutory requirements (LkSG Section 5(4) annual risk review, EUDR Article 29(2) periodic country risk reclassification). The Supply Chain Expert and Enterprise Integration Expert acknowledged the same gap but accepted the snapshot-based workaround. The design allows adding temporal fields in a future minor version without breaking compatibility.
 
 ### Multi-org classification requires a documented pattern (ERP <-> Procurement)
-The Enterprise Integration Expert flagged that SAP `EKORG`-scoped and Oracle `ProcurementBUId`-scoped classifications need a consistent encoding convention. The Procurement Expert's concern about ERP mapping guidance is directly related -- without a multi-org pattern, the SAP-to-OMTSF mapping in SPEC-005 will be incomplete.
+The Enterprise Integration Expert flagged that SAP `EKORG`-scoped and Oracle `ProcurementBUId`-scoped classifications need a consistent encoding convention. The Procurement Expert's concern about ERP mapping guidance is directly related -- without a multi-org pattern, the SAP-to-OMTS mapping in SPEC-005 will be incomplete.
 
 ### GQL alignment is sufficient for a serialization format (Graph <-> All)
 The Graph Modeling Expert explicitly acknowledged that the unified `labels` array (vs separate labels + annotations) is a pragmatic choice for a file format. Conformant consumers can load the data into graph databases using either label-promotion or property-indexing strategies. This removes the GQL alignment concern from the original panel review.

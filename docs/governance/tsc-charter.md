@@ -1,4 +1,4 @@
-# OMTSF Technical Steering Committee (TSC) Charter
+# OMTS Technical Steering Committee (TSC) Charter
 
 **Status:** Draft
 **Date:** 2026-02-18
@@ -8,17 +8,17 @@
 
 ## 1. Purpose
 
-The Technical Steering Committee (TSC) governs the technical direction of the OMTSF project, including normative specifications, controlled vocabularies, validation rules, and merge semantics.
+The Technical Steering Committee (TSC) governs the technical direction of the OMTS project, including normative specifications, controlled vocabularies, validation rules, and merge semantics.
 
 ## 2. Scope of Authority
 
 The TSC has decision-making authority over:
 
-- **Identifier scheme vocabulary** (OMTSF-SPEC-002, Section 5.3): additions, promotions, and deprecations of core schemes
-- **Node and edge type registries** (OMTSF-SPEC-001): additions of core node and edge types
-- **Merge semantics** (OMTSF-SPEC-003): changes to identity predicates, algebraic properties, or transitive closure behavior (stability-critical — requires major version increment)
+- **Identifier scheme vocabulary** (OMTS-SPEC-002, Section 5.3): additions, promotions, and deprecations of core schemes
+- **Node and edge type registries** (OMTS-SPEC-001): additions of core node and edge types
+- **Merge semantics** (OMTS-SPEC-003): changes to identity predicates, algebraic properties, or transitive closure behavior (stability-critical — requires major version increment)
 - **Validation rules**: additions, modifications, or removals of L1/L2/L3 rules across all specs
-- **GLEIF RA list snapshots** (OMTSF-SPEC-002, Section 5.4): snapshot updates follow the standard PR workflow and do NOT require TSC approval
+- **GLEIF RA list snapshots** (OMTS-SPEC-002, Section 5.4): snapshot updates follow the standard PR workflow and do NOT require TSC approval
 - **Specification versioning**: major and minor version number assignments
 
 ## 3. Membership
@@ -49,7 +49,7 @@ A TSC member may be removed for sustained inactivity (missing 3 consecutive meet
 The default decision-making process is **lazy consensus**: a proposal is approved if no TSC member objects within the review period.
 
 - Standard review period: **30 days** for scheme additions, edge/node type additions, and validation rule changes.
-- Extended review period: **90 days** for scheme deprecations and changes to merge semantics (Section 9 of OMTSF-SPEC-003).
+- Extended review period: **90 days** for scheme deprecations and changes to merge semantics (Section 9 of OMTS-SPEC-003).
 - The review period begins when the proposal PR is opened and the TSC mailing list is notified.
 
 ### 4.2 Contested Decisions
@@ -94,7 +94,7 @@ Until the TSC is formally constituted:
 
 ### 8.1 Contribution Licensing
 
-All contributions to the OMTSF project are made under the **Developer Certificate of Origin (DCO)** v1.1. Contributors certify, by adding a `Signed-off-by` trailer to each commit, that they have the right to submit the contribution under the project's licenses:
+All contributions to the OMTS project are made under the **Developer Certificate of Origin (DCO)** v1.1. Contributors certify, by adding a `Signed-off-by` trailer to each commit, that they have the right to submit the contribution under the project's licenses:
 
 - **Specifications** (`spec/`): Licensed under CC-BY-4.0.
 - **Code, schemas, and tooling**: Licensed under Apache License 2.0.
@@ -105,7 +105,7 @@ No Contributor License Agreement (CLA) is required. The DCO is sufficient for th
 
 Each Contributor, by submitting a Contribution to the project, hereby grants to all recipients of the Work a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable patent license to make, have made, use, offer to sell, sell, import, and otherwise transfer the Work, where such license applies only to those patent claims licensable by such Contributor that are necessarily infringed by their Contribution(s) alone or by combination of their Contribution(s) with the Work to which such Contribution(s) was submitted.
 
-This grant is consistent with the Apache License 2.0 patent grant (Section 3) and ensures that the OMTSF specification and its implementations remain freely implementable without patent risk from contributors.
+This grant is consistent with the Apache License 2.0 patent grant (Section 3) and ensures that the OMTS specification and its implementations remain freely implementable without patent risk from contributors.
 
 ### 8.3 No CLA Required
 

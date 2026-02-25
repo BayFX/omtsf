@@ -1,6 +1,6 @@
-# Expert Panel Report: OMTSF Entity Identification Specification (Revision 2)
+# Expert Panel Report: OMTS Entity Identification Specification (Revision 2)
 
-**Spec Reviewed:** OMTSF-SPEC-001 — Entity Identification (Draft, Revision 2, 2026-02-17)
+**Spec Reviewed:** OMTS-SPEC-001 — Entity Identification (Draft, Revision 2, 2026-02-17)
 **Panel Date:** 2026-02-18
 **Panel Chair:** Automated synthesis of 9 independent expert reviews
 

@@ -1,6 +1,6 @@
-# OMTSF Specification: Selective Disclosure
+# OMTS Specification: Selective Disclosure
 
-**Spec:** OMTSF-SPEC-004
+**Spec:** OMTS-SPEC-004
 **Status:** Draft
 **Date:** 2026-02-18
 **Revision:** 1
@@ -11,20 +11,20 @@
 
 | Spec | Relationship |
 |------|-------------|
-| OMTSF-SPEC-001 (Graph Data Model) | **Prerequisite.** Defines the node types (including `boundary_ref` and `person`) and file header fields (`file_salt`, `disclosure_scope`) governed by this spec. |
-| OMTSF-SPEC-002 (Entity Identification) | **Prerequisite.** Defines the `sensitivity` field on identifier records and the canonical string format used for boundary reference hashing. |
+| OMTS-SPEC-001 (Graph Data Model) | **Prerequisite.** Defines the node types (including `boundary_ref` and `person`) and file header fields (`file_salt`, `disclosure_scope`) governed by this spec. |
+| OMTS-SPEC-002 (Entity Identification) | **Prerequisite.** Defines the `sensitivity` field on identifier records and the canonical string format used for boundary reference hashing. |
 
 ---
 
 ## 1. Overview
 
-Supply chain graphs contain competitively sensitive information. This specification defines the privacy and selective disclosure model for OMTSF files: how individual identifiers are classified by sensitivity, how files declare their intended audience, how nodes are redacted via boundary references, and the privacy constraints on `person` nodes.
+Supply chain graphs contain competitively sensitive information. This specification defines the privacy and selective disclosure model for OMTS files: how individual identifiers are classified by sensitivity, how files declare their intended audience, how nodes are redacted via boundary references, and the privacy constraints on `person` nodes.
 
 ---
 
 ## 2. Identifier Sensitivity Levels
 
-Each identifier record (defined in OMTSF-SPEC-002, Section 3) carries an optional `sensitivity` field.
+Each identifier record (defined in OMTS-SPEC-002, Section 3) carries an optional `sensitivity` field.
 
 | Level | Meaning | Behavior in Subgraph Projection |
 |-------|---------|-------------------------------|
@@ -44,7 +44,7 @@ Producers MAY override defaults by setting `sensitivity` explicitly on any ident
 
 ### 2.1 Edge Property Sensitivity
 
-Edge properties (defined in OMTSF-SPEC-001, Sections 5--7) carry sensitivity classifications analogous to identifier sensitivity. The following default sensitivity levels apply to edge properties that contain competitively sensitive information:
+Edge properties (defined in OMTS-SPEC-001, Sections 5--7) carry sensitivity classifications analogous to identifier sensitivity. The following default sensitivity levels apply to edge properties that contain competitively sensitive information:
 
 | Edge Property | Default Sensitivity | Rationale |
 |--------------|-------------------|-----------|
@@ -71,7 +71,7 @@ Producers MAY override default sensitivity on any edge property by including a `
 }
 ```
 
-The `_property_sensitivity` structure above is shown in JSON. In CBOR encoding, the same logical map structure applies; see OMTSF-SPEC-007 for serialization rules.
+The `_property_sensitivity` structure above is shown in JSON. In CBOR encoding, the same logical map structure applies; see OMTS-SPEC-007 for serialization rules.
 
 When generating files with `disclosure_scope: "public"`, edges MUST omit properties with sensitivity `restricted` or `confidential`. When generating files with `disclosure_scope: "partner"`, edges MUST omit properties with sensitivity `confidential`. The `_property_sensitivity` object itself MUST be omitted from files with `disclosure_scope: "public"`.
 
@@ -79,7 +79,7 @@ When generating files with `disclosure_scope: "public"`, edges MUST omit propert
 
 ## 3. Disclosure Scope
 
-Files MAY declare a `disclosure_scope` in the file header (defined in OMTSF-SPEC-001, Section 2) to indicate the intended audience:
+Files MAY declare a `disclosure_scope` in the file header (defined in OMTS-SPEC-001, Section 2) to indicate the intended audience:
 
 | Scope | Meaning |
 |-------|---------|
@@ -107,7 +107,7 @@ A boundary reference node:
 **Hash computation:**
 
 1. Collect all `public` identifiers on the original node.
-2. Compute the canonical string form of each identifier (OMTSF-SPEC-002, Section 4).
+2. Compute the canonical string form of each identifier (OMTS-SPEC-002, Section 4).
 3. Sort the canonical strings lexicographically by UTF-8 byte order.
 4. Join the sorted strings with a newline delimiter (`0x0A`).
 5. If the resulting string is **non-empty**: `value` = hex-encoded `SHA-256(joined_string_bytes || file_salt_bytes)`
@@ -140,34 +140,34 @@ This design prevents enumeration attacks: an adversary cannot hash known LEIs to
 
 ## 5. Person Node Privacy Rules
 
-`person` nodes (defined in OMTSF-SPEC-001, Section 4.4) are subject to additional privacy constraints reflecting GDPR data minimization requirements:
+`person` nodes (defined in OMTS-SPEC-001, Section 4.4) are subject to additional privacy constraints reflecting GDPR data minimization requirements:
 
 - All identifiers on `person` nodes default to `sensitivity: "confidential"` regardless of scheme-level defaults. Producers MAY override to `restricted` where legally permitted.
 - `person` nodes MUST be omitted entirely (not replaced with boundary references) when generating files with `disclosure_scope: "public"`. This reflects GDPR data minimization requirements.
 - Producers MUST assess whether including `person` nodes complies with applicable data protection law (GDPR, CCPA, etc.) before generating files.
-- `beneficial_ownership` edges (OMTSF-SPEC-001, Section 5.5) inherit the sensitivity constraints of `person` nodes. They default to `sensitivity: "confidential"` and MUST be omitted from files with `disclosure_scope: "public"`.
+- `beneficial_ownership` edges (OMTS-SPEC-001, Section 5.5) inherit the sensitivity constraints of `person` nodes. They default to `sensitivity: "confidential"` and MUST be omitted from files with `disclosure_scope: "public"`.
 
 ---
 
 ## 6. Attestation Integrity Binding
 
-For regulatory use cases where attestation provenance must be independently verifiable (e.g., EUDR due diligence statements submitted to TRACES, CBAM verification statements), OMTSF supports linking attestation nodes to cryptographically verifiable credentials.
+For regulatory use cases where attestation provenance must be independently verifiable (e.g., EUDR due diligence statements submitted to TRACES, CBAM verification statements), OMTS supports linking attestation nodes to cryptographically verifiable credentials.
 
 ### 6.1 Linking to Verifiable Credentials
 
-Attestation nodes (OMTSF-SPEC-001, Section 4.5) MAY carry a `reference` field containing a URI that resolves to a W3C Verifiable Credential (VC) or Verifiable Presentation (VP). When present:
+Attestation nodes (OMTS-SPEC-001, Section 4.5) MAY carry a `reference` field containing a URI that resolves to a W3C Verifiable Credential (VC) or Verifiable Presentation (VP). When present:
 
 - The `reference` URI SHOULD be a resolvable URL or DID URL pointing to the credential.
-- The credential's `credentialSubject` SHOULD identify the same entity as the OMTSF attestation's `attested_by` edge source.
+- The credential's `credentialSubject` SHOULD identify the same entity as the OMTS attestation's `attested_by` edge source.
 - Consumers MAY verify the credential independently using the VC issuer's public key.
 
 ### 6.2 Content Hash Binding
 
-When a file declares `file_integrity.content_hash` (OMTSF-SPEC-007, Section 8.2), the hash provides tamper detection for the entire file content, including attestation nodes. This is not a substitute for per-attestation cryptographic signatures but provides file-level integrity assurance.
+When a file declares `file_integrity.content_hash` (OMTS-SPEC-007, Section 8.2), the hash provides tamper detection for the entire file content, including attestation nodes. This is not a substitute for per-attestation cryptographic signatures but provides file-level integrity assurance.
 
 ### 6.3 Regulatory Evidence Limitations
 
-OMTSF files alone do not constitute regulatory evidence. Regulatory submissions (e.g., EUDR DDS to TRACES, CBAM declarations to the EU registry) require submission through official channels with authority-specific authentication. OMTSF can represent the data underlying such submissions and link to the official submission references, but the link between the OMTSF attestation node and the regulatory submission is informational, not cryptographically enforced, unless a Verifiable Credential binding (Section 6.1) is used.
+OMTS files alone do not constitute regulatory evidence. Regulatory submissions (e.g., EUDR DDS to TRACES, CBAM declarations to the EU registry) require submission through official channels with authority-specific authentication. OMTS can represent the data underlying such submissions and link to the official submission references, but the link between the OMTS attestation node and the regulatory submission is informational, not cryptographically enforced, unless a Verifiable Credential binding (Section 6.1) is used.
 
 ---
 
@@ -212,7 +212,7 @@ Given identifiers:
 **Test vector 3: Identifier requiring percent-encoding**
 
 Given identifiers:
-- `nat-reg:RA000548:HRB%3A86891` (public — a registry number containing a literal colon, percent-encoded per OMTSF-SPEC-002, Section 4)
+- `nat-reg:RA000548:HRB%3A86891` (public — a registry number containing a literal colon, percent-encoded per OMTS-SPEC-002, Section 4)
 
 1. Public canonical strings: `nat-reg:RA000548:HRB%3A86891`
 2. Joined: `nat-reg:RA000548:HRB%3A86891`

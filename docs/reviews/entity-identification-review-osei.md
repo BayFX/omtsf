@@ -1,14 +1,14 @@
-# Expert Review: OMTSF Entity Identification Specification
+# Expert Review: OMTS Entity Identification Specification
 
 **Reviewer:** Supply Chain Expert, Supply Chain Visibility & Risk Analyst
-**Spec Reviewed:** OMTSF-SPEC-001 -- Entity Identification (Draft, 2026-02-17)
+**Spec Reviewed:** OMTS-SPEC-001 -- Entity Identification (Draft, 2026-02-17)
 **Date:** 2026-02-17
 
 ---
 
 ## Assessment
 
-This specification represents a substantial and well-reasoned response to what the vision review panel unanimously identified as the single most critical gap in the OMTSF architecture. The composite identifier model -- treating LEI, DUNS, GLN, national registry numbers, tax IDs, and internal ERP codes as co-equal peers in a scheme-qualified array -- is the correct design for the realities of global supply chain data. In eighteen years of multi-tier supply chain mapping across automotive, electronics, and FMCG, I have never encountered a supplier base where a single identifier scheme covered even 60% of entities. The decision to make `internal` identifiers first-class (Section 4.1, `internal` scheme) while explicitly excluding them from cross-file merge is precisely the right tradeoff: it preserves ERP export fidelity without polluting the entity resolution logic.
+This specification represents a substantial and well-reasoned response to what the vision review panel unanimously identified as the single most critical gap in the OMTS architecture. The composite identifier model -- treating LEI, DUNS, GLN, national registry numbers, tax IDs, and internal ERP codes as co-equal peers in a scheme-qualified array -- is the correct design for the realities of global supply chain data. In eighteen years of multi-tier supply chain mapping across automotive, electronics, and FMCG, I have never encountered a supplier base where a single identifier scheme covered even 60% of entities. The decision to make `internal` identifiers first-class (Section 4.1, `internal` scheme) while explicitly excluding them from cross-file merge is precisely the right tradeoff: it preserves ERP export fidelity without polluting the entity resolution logic.
 
 The specification also makes strong architectural choices in areas I flagged as critical during the vision review. The three-type entity taxonomy (`organization`, `facility`, `good`) with geolocation on facilities directly addresses EUDR traceability requirements. The corporate hierarchy edge types (`ownership`, `operational_control`, `legal_parentage`, `former_identity`) with temporal validity cover the structural relationships required by the EU CSDDD and German LkSG. The tiered validation model (Level 1 structural, Level 2 completeness, Level 3 enrichment) resolves the tension between strict validation and real-world data quality that procurement and enterprise panelists rightly raised.
 
@@ -57,7 +57,7 @@ However, from a supply chain visibility and risk analysis perspective, I see mea
 
 - **For Prof. Graph Modeling Expert (Graph Modeling):** The absence of a supply edge type taxonomy means the formal graph model is only half-specified. Corporate hierarchy edges are well-defined, but the commercial/operational edges that constitute the actual supply network remain informal. The merge semantics for edges (Section 7.2) depend on edge `type` equality, but if types are uncontrolled strings, merge correctness is implementation-dependent.
 
-- **For Enterprise Integration Expert (Enterprise Systems):** The ERP integration mappings in Section 11 are excellent for entity data, but supply relationship edges also need ERP mapping guidance. SAP's purchasing info records (table `EINA`/`EINE`), scheduling agreements, and source lists all carry relationship data that should map to typed supply edges in OMTSF. Without this, the ERP export produces nodes without meaningful edges.
+- **For Enterprise Integration Expert (Enterprise Systems):** The ERP integration mappings in Section 11 are excellent for entity data, but supply relationship edges also need ERP mapping guidance. SAP's purchasing info records (table `EINA`/`EINE`), scheduling agreements, and source lists all carry relationship data that should map to typed supply edges in OMTS. Without this, the ERP export produces nodes without meaningful edges.
 
 - **For Dr. Regulatory Compliance Expert (Regulatory Compliance):** The regulatory alignment table in Section 10.3 correctly identifies the regulations but understates the data granularity required. EUDR demands lot-level linkage to geolocated production plots, not just facility-level coordinates. CSDDD requires risk assessment results and remediation actions, not just network topology. The spec should either define extension points for regulatory-specific data or acknowledge that additional specs are needed.
 

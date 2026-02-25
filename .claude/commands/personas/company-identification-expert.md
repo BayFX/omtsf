@@ -19,7 +19,7 @@
 
 ## Priorities
 
-1. **Identity is the hardest problem**: Every supply chain mapping project eventually hits the same wall — "is this the same company?" Two suppliers reporting data will use different names, different IDs, and different structures for the same legal entity. The identifier strategy is existential for OMTSF. Get it wrong and files from different parties will never merge.
+1. **Identity is the hardest problem**: Every supply chain mapping project eventually hits the same wall — "is this the same company?" Two suppliers reporting data will use different names, different IDs, and different structures for the same legal entity. The identifier strategy is existential for OMTS. Get it wrong and files from different parties will never merge.
 2. **Corporate hierarchy is not a tree**: Companies are not a clean tree. They are a graph of ownership, control, and operational relationships that changes over time. A subsidiary can be jointly owned, a factory can be operated by one entity but owned by another, and a supplier you contracted with last year may have been acquired and folded into a different division.
 3. **Temporal identity**: Companies change. They merge, split, rebrand, re-domicile, and go bankrupt. An identifier that was valid six months ago may now point to a dissolved entity. The format must handle the temporal dimension of identity — not just "who is this?" but "who was this when this data was captured?"
 4. **No single identifier is sufficient**: DUNS has coverage gaps. LEI is mostly financial institutions. Tax IDs are jurisdiction-specific. National registries are inconsistent. The format must support multiple identifiers per entity and provide a mechanism for cross-referencing them.

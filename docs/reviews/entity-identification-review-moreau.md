@@ -1,7 +1,7 @@
-# Expert Review: OMTSF Entity Identification Specification (Revision 2)
+# Expert Review: OMTS Entity Identification Specification (Revision 2)
 
 **Reviewer:** Regulatory Compliance Expert, Supply Chain Regulatory Compliance Advisor
-**Spec Reviewed:** OMTSF-SPEC-001 -- Entity Identification (Draft, Revision 2, 2026-02-17)
+**Spec Reviewed:** OMTS-SPEC-001 -- Entity Identification (Draft, Revision 2, 2026-02-17)
 **Date:** 2026-02-18
 **Review Type:** Post-panel follow-up (assessing P0 remediation)
 
@@ -17,7 +17,7 @@ The attestation model (Section 8) is fit for purpose. The `attestation` node typ
 
 The supply relationship edge taxonomy (Section 7) now formally defines `supplies`, `subcontracts`, `tolls`, `distributes`, `brokers`, `operates`, and `produces` with regulatory relevance annotations. The explicit note that a `supplies` edge constitutes a "direct business relationship" under CSDDD Article 3(e) and a "direct supplier" under LkSG Section 2(7) is exactly the kind of regulatory mapping that compliance teams need. The `subcontracts` edge correctly notes that LkSG Section 9 triggers due diligence obligations upon substantiated knowledge of violations at a subcontractor -- this distinction between direct and delegated production is load-bearing for regulatory compliance.
 
-The regulatory alignment table (Section 12.3) has been expanded to include AMLD 5/6 coverage via `person` nodes and `beneficial_ownership` edges, and attestation coverage for EUDR and LkSG. This table is now a credible quick-reference for compliance officers evaluating OMTSF adoption.
+The regulatory alignment table (Section 12.3) has been expanded to include AMLD 5/6 coverage via `person` nodes and `beneficial_ownership` edges, and attestation coverage for EUDR and LkSG. This table is now a credible quick-reference for compliance officers evaluating OMTS adoption.
 
 ## Strengths
 

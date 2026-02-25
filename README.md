@@ -9,7 +9,7 @@ OMTS is designed for tier-n supply chain visibility: store a complete supplier g
 
 ### Example
 
-An `.omts` file is a self-contained JSON document. Nodes are entities, edges are relationships:
+An `.omts` file is a self-contained, JSON-compatible document (also serializable as CBOR). Nodes are entities, edges are relationships:
 
 ```json
 {

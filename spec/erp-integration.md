@@ -1,6 +1,6 @@
-# OMTSF Specification: ERP Integration Guide
+# OMTS Specification: ERP Integration Guide
 
-**Spec:** OMTSF-SPEC-005
+**Spec:** OMTS-SPEC-005
 **Status:** Draft
 **Date:** 2026-02-18
 **Revision:** 1
@@ -14,17 +14,17 @@
 
 | Spec | Relationship |
 |------|-------------|
-| OMTSF-SPEC-001 (Graph Data Model) | Defines the node types and edge types that ERP data maps to. |
-| OMTSF-SPEC-002 (Entity Identification) | Defines the identifier schemes (`internal`, `vat`, `duns`, etc.) used in ERP mappings. |
-| OMTSF-SPEC-003 (Merge Semantics) | Defines intra-file deduplication guidance relevant to ERP duplicate vendor records (OMTSF-SPEC-003, Section 8). |
-| OMTSF-SPEC-001, Section 8.4 (Labels) | Defines the `labels` array that ERP classification fields map to. See Section 5 of this document. |
-| OMTSF-SPEC-001, Appendix B (Recommended Label Keys) | Defines recommended label keys for common classifications. ERP-specific keys use reverse-domain notation. |
+| OMTS-SPEC-001 (Graph Data Model) | Defines the node types and edge types that ERP data maps to. |
+| OMTS-SPEC-002 (Entity Identification) | Defines the identifier schemes (`internal`, `vat`, `duns`, etc.) used in ERP mappings. |
+| OMTS-SPEC-003 (Merge Semantics) | Defines intra-file deduplication guidance relevant to ERP duplicate vendor records (OMTS-SPEC-003, Section 8). |
+| OMTS-SPEC-001, Section 8.4 (Labels) | Defines the `labels` array that ERP classification fields map to. See Section 5 of this document. |
+| OMTS-SPEC-001, Appendix B (Recommended Label Keys) | Defines recommended label keys for common classifications. ERP-specific keys use reverse-domain notation. |
 
 ---
 
 ## 1. Overview
 
-This guide provides reference mappings for how entity identifiers and relationships in common ERP systems correspond to OMTSF node types, identifier records, and edge types. These mappings are informative and intended to assist producers building OMTSF export tooling. Field names and API endpoints are approximate and should be verified against actual system documentation for the version in use.
+This guide provides reference mappings for how entity identifiers and relationships in common ERP systems correspond to OMTS node types, identifier records, and edge types. These mappings are informative and intended to assist producers building OMTS export tooling. Field names and API endpoints are approximate and should be verified against actual system documentation for the version in use.
 
 ### 1.1 Authority Naming Convention
 
@@ -49,7 +49,7 @@ This convention enables downstream tooling to group and deduplicate identifiers 
 
 ### 2.1 Node Derivation (Vendor Master)
 
-| SAP Field | Table/Structure | OMTSF Mapping |
+| SAP Field | Table/Structure | OMTS Mapping |
 |-----------|----------------|---------------|
 | `LIFNR` (Vendor Number) | `LFA1` | `scheme: "internal"`, `authority: "{sap_system_id}"` |
 | `STCD1` (Tax Number 1) | `LFA1` | `scheme: "vat"`, `authority` from `LAND1` (country key) |
@@ -61,7 +61,7 @@ This convention enables downstream tooling to group and deduplicate identifiers 
 
 ### 2.2 Edge Derivation (Supply Relationships)
 
-| SAP Table | Structure | OMTSF Mapping |
+| SAP Table | Structure | OMTS Mapping |
 |-----------|-----------|---------------|
 | `EINA` / `EINE` (Purchasing Info Record) | Vendor-material relationship | `supplies` edge from vendor `organization` to buyer `organization`, with `commodity` from material group |
 | `EKKO` (PO Header) + `EKPO` (PO Item) | Purchase order | `supplies` edge (if no info record exists). Derive from `EKKO-LIFNR` (vendor) and `EKKO-BUKRS` (company code). |
@@ -73,24 +73,24 @@ This convention enables downstream tooling to group and deduplicate identifiers 
 
 ### 2.3 Deduplication Note
 
-In multi-client SAP landscapes, the same legal entity may appear as different `LIFNR` values across clients. The `authority` field on `internal` identifiers should include the client number (e.g., `sap-prod-100`, `sap-prod-200`) to distinguish these. See OMTSF-SPEC-003, Section 8 for intra-file deduplication guidance.
+In multi-client SAP landscapes, the same legal entity may appear as different `LIFNR` values across clients. The `authority` field on `internal` identifiers should include the client number (e.g., `sap-prod-100`, `sap-prod-200`) to distinguish these. See OMTS-SPEC-003, Section 8 for intra-file deduplication guidance.
 
 ### 2.4 SAP Business Partner Model (S/4HANA)
 
 SAP S/4HANA's Business Partner model (`BUT000`/`BUT0ID`) replaces the legacy vendor master (`LFA1`) as the primary entity data store. New S/4HANA implementations use the Business Partner model exclusively; legacy migrations retain parallel data in both structures.
 
-| SAP Field | Table | OMTSF Mapping |
+| SAP Field | Table | OMTS Mapping |
 |-----------|-------|---------------|
 | `PARTNER` (BP Number) | `BUT000` | `scheme: "internal"`, `authority: "{sap_system_id}-bp"` |
 | `BU_SORT1` (Search Term 1) | `BUT000` | May assist fuzzy deduplication |
 | `TYPE` (BP Category) | `BUT000` | `1` = Organization → `organization` node; `2` = Person → `person` node |
 | `IDNUMBER` (ID Number) | `BUT0ID` | `scheme` depends on `IDTYPE`: see mapping below |
-| `IDTYPE` (ID Type) | `BUT0ID` | Maps to OMTSF scheme: `DUNS` → `duns`, `LEI` → `lei`, `HRNR` → `nat-reg`, `UST1` → `vat` |
+| `IDTYPE` (ID Type) | `BUT0ID` | Maps to OMTS scheme: `DUNS` → `duns`, `LEI` → `lei`, `HRNR` → `nat-reg`, `UST1` → `vat` |
 | `INSTITUTE` (Issuing Institute) | `BUT0ID` | Maps to `authority` field for `nat-reg` and `vat` schemes |
 
-**`BUT0ID` to OMTSF scheme mapping:**
+**`BUT0ID` to OMTS scheme mapping:**
 
-| SAP `IDTYPE` | OMTSF Scheme | Notes |
+| SAP `IDTYPE` | OMTS Scheme | Notes |
 |-------------|-------------|-------|
 | `DUNS` | `duns` | Direct mapping |
 | `LEI` | `lei` | Direct mapping |
@@ -113,7 +113,7 @@ SAP's `STCD1` and `STCD2` fields in `LFA1` store different types of tax identifi
 
 Oracle SCM Cloud exposes supplier data via the Fusion REST API. The base URL pattern is `https://{host}/fscmRestApi/resources/11.13.18.05/`.
 
-| Oracle REST Endpoint | OData Entity | Field | OMTSF Mapping |
+| Oracle REST Endpoint | OData Entity | Field | OMTS Mapping |
 |---------------------|-------------|-------|---------------|
 | `GET /suppliers` | `PrcPozSuppliersVO` | `SupplierId` | `scheme: "internal"`, `authority: "{oracle_instance}"` |
 | `GET /suppliers` | `PrcPozSuppliersVO` | `SupplierNumber` | Alternative `internal` identifier (user-visible number) |
@@ -126,7 +126,7 @@ Oracle SCM Cloud exposes supplier data via the Fusion REST API. The base URL pat
 
 ### 3.2 Procurement Data
 
-| Oracle REST Endpoint | OData Entity | Field | OMTSF Mapping |
+| Oracle REST Endpoint | OData Entity | Field | OMTS Mapping |
 |---------------------|-------------|-------|---------------|
 | `GET /purchaseOrders` | `PurchaseOrdersAllVO` | `POHeaderId`, `OrderNumber` | Derive `supplies` edge from vendor → buying org |
 | `GET /purchaseOrders/{id}/child/lines` | `PurchaseOrderLineVO` | `ItemDescription`, `CategoryName` | `supplies` edge `commodity` property |
@@ -142,7 +142,7 @@ Dynamics 365 Finance and Supply Chain Management expose data via OData v4 endpoi
 
 ### 4.1 Vendor Data
 
-| D365 OData Entity | OData Path | Field | OMTSF Mapping |
+| D365 OData Entity | OData Path | Field | OMTS Mapping |
 |-------------------|-----------|-------|---------------|
 | `VendorsV2` | `GET /data/VendorsV2` | `VendorAccountNumber` | `scheme: "internal"`, `authority: "d365-{tenant}-{company}"` (see note below) |
 | `VendorsV2` | `GET /data/VendorsV2` | `VendorOrganizationName` | Node `name` property |
@@ -156,7 +156,7 @@ Dynamics 365 Finance and Supply Chain Management expose data via OData v4 endpoi
 
 ### 4.2 Procurement Data
 
-| D365 OData Entity | OData Path | Field | OMTSF Mapping |
+| D365 OData Entity | OData Path | Field | OMTS Mapping |
 |-------------------|-----------|-------|---------------|
 | `PurchaseOrderHeadersV2` | `GET /data/PurchaseOrderHeadersV2` | `OrderVendorAccountNumber` | Derive `supplies` edge (vendor → buying legal entity) |
 | `PurchaseOrderHeadersV2` | `GET /data/PurchaseOrderHeadersV2` | `InvoiceVendorAccountNumber` | Identifies invoice party (may differ from order vendor) |
@@ -168,16 +168,16 @@ Dynamics 365 Finance and Supply Chain Management expose data via OData v4 endpoi
 
 ## 5. Label Mapping
 
-This section provides reference mappings for how ERP classification fields map to the OMTSF `labels` array (OMTSF-SPEC-001, Section 8.4). The recommended label keys defined in OMTSF-SPEC-001, Appendix B should be used where the semantics match. ERP-specific classifications that do not map to a recommended key should use reverse-domain notation.
+This section provides reference mappings for how ERP classification fields map to the OMTS `labels` array (OMTS-SPEC-001, Section 8.4). The recommended label keys defined in OMTS-SPEC-001, Appendix B should be used where the semantics match. ERP-specific classifications that do not map to a recommended key should use reverse-domain notation.
 
 ### 5.1 SAP S/4HANA
 
-| SAP Field | Table/Structure | OMTSF Label Mapping |
+| SAP Field | Table/Structure | OMTS Label Mapping |
 |-----------|----------------|---------------------|
 | `EKGRP` (Vendor Group) | `LFM1` | `{ "key": "com.sap.vendor-group", "value": "{EKGRP}" }` |
 | Purchasing block indicator | `LFM1` (`SPERM`) | `{ "key": "com.sap.purchasing-blocked" }` (boolean flag) |
 | Vendor classification (scope item 19E) | `BUT000` classification tab | Use recommended keys where applicable (e.g., `kraljic-quadrant`, `risk-tier`). Map other classifications to `com.sap.{classification-type}`. |
-| `EKORG` (Purchasing Organization) | `LFM1` | Embed in label key when classifications vary by purchasing org (see organizational scope guidance in OMTSF-SPEC-001, Section 8.4). |
+| `EKORG` (Purchasing Organization) | `LFM1` | Embed in label key when classifications vary by purchasing org (see organizational scope guidance in OMTS-SPEC-001, Section 8.4). |
 
 **Example: SAP vendor with group and org-scoped classification:**
 
@@ -192,7 +192,7 @@ This section provides reference mappings for how ERP classification fields map t
 
 ### 5.2 Oracle SCM Cloud
 
-| Oracle Field | Source | OMTSF Label Mapping |
+| Oracle Field | Source | OMTS Label Mapping |
 |-------------|--------|---------------------|
 | `ClassificationCode` | `POZ_SUPPLIER_BUSINESS_CLASSIFICATIONS` | `{ "key": "com.oracle.business-classification", "value": "{ClassificationCode}" }` |
 | `SupplierType` | `PrcPozSuppliersVO` | `{ "key": "com.oracle.supplier-type", "value": "{SupplierType}" }` |
@@ -211,7 +211,7 @@ This section provides reference mappings for how ERP classification fields map t
 
 ### 5.3 Microsoft Dynamics 365
 
-| D365 Field | Source | OMTSF Label Mapping |
+| D365 Field | Source | OMTS Label Mapping |
 |-----------|--------|---------------------|
 | `VendorGroupId` | `VendorsV2` | `{ "key": "com.microsoft.d365.vendor-group", "value": "{VendorGroupId}" }` |
 | `VendorOnHoldStatus` | `VendorsV2` | `{ "key": "com.microsoft.d365.on-hold" }` (boolean flag when on hold) |
@@ -229,7 +229,7 @@ This section provides reference mappings for how ERP classification fields map t
 
 ### 5.4 Cross-ERP Mapping Summary
 
-| Classification Concept | SAP | Oracle | D365 | Recommended OMTSF Key |
+| Classification Concept | SAP | Oracle | D365 | Recommended OMTS Key |
 |----------------------|-----|--------|------|-----------------------|
 | Vendor grouping | `EKGRP` | `SupplierType` | `VendorGroupId` | ERP-specific (`com.sap.*`, `com.oracle.*`, `com.microsoft.d365.*`) |
 | Purchasing block | `SPERM` | `SupplierEnabledFlag` | `VendorOnHoldStatus` | `approval-status` with value `blocked` |
@@ -255,9 +255,9 @@ Files typically begin with minimal identifiers (internal ERP codes only) and are
 1. **Export:** Producer generates an `.omts` file from ERP data. Nodes carry `internal` identifiers and whatever external identifiers the ERP already holds (typically `vat` and sometimes `duns`).
 2. **Match:** An enrichment tool takes the internal-only nodes and attempts to resolve them to external identifiers using available data sources (GLEIF, OpenCorporates, D&B, national registries).
 3. **Augment:** The enrichment tool adds external identifiers to the nodes, preserving the original `internal` identifiers.
-4. **Re-export:** The enriched file is written. It now passes Level 2 completeness checks (OMTSF-SPEC-002, L2-EID-01).
+4. **Re-export:** The enriched file is written. It now passes Level 2 completeness checks (OMTS-SPEC-002, L2-EID-01).
 
-**Merge interaction:** See OMTSF-SPEC-003, Section 9 for guidance on how enrichment affects merge groups.
+**Merge interaction:** See OMTS-SPEC-003, Section 9 for guidance on how enrichment affects merge groups.
 
 **Important:** Enrichment should not remove or modify existing identifiers. It is an additive process. The original `internal` identifiers are preserved for reconciliation with the source system.
 
@@ -271,11 +271,11 @@ Files typically begin with minimal identifiers (internal ERP codes only) and are
 
 ## 7. EDI Coexistence
 
-OMTSF is not a replacement for EDI (EDIFACT, ANSI X12) or B2B messaging standards (PEPPOL BIS, cXML). EDI handles transactional document exchange (purchase orders, invoices, advance ship notices); OMTSF handles supply chain graph representation (who supplies whom, ownership, attestation).
+OMTS is not a replacement for EDI (EDIFACT, ANSI X12) or B2B messaging standards (PEPPOL BIS, cXML). EDI handles transactional document exchange (purchase orders, invoices, advance ship notices); OMTS handles supply chain graph representation (who supplies whom, ownership, attestation).
 
 In a typical deployment:
 - EDI continues to handle day-to-day procurement transactions.
-- OMTSF captures the structural supply chain graph derived from aggregated EDI transaction data, ERP master data, and external enrichment.
-- An OMTSF export tool reads ERP master data (informed by EDI-updated fields like vendor status, last PO date) and produces `.omts` files.
+- OMTS captures the structural supply chain graph derived from aggregated EDI transaction data, ERP master data, and external enrichment.
+- An OMTS export tool reads ERP master data (informed by EDI-updated fields like vendor status, last PO date) and produces `.omts` files.
 
-OMTSF files may reference EDI identifiers. For example, a PEPPOL Participant Identifier can be stored as an extension scheme identifier: `scheme: "org.peppol.participant"`, `value: "0088:5790000436057"`, where `0088` is the ISO 6523 ICD for EAN.UCC (GS1).
+OMTS files may reference EDI identifiers. For example, a PEPPOL Participant Identifier can be stored as an extension scheme identifier: `scheme: "org.peppol.participant"`, `value: "0088:5790000436057"`, where `0088` is the ISO 6523 ICD for EAN.UCC (GS1).

@@ -1,7 +1,7 @@
-# Expert Review: OMTSF Entity Identification Specification (Revision 2)
+# Expert Review: OMTS Entity Identification Specification (Revision 2)
 
 **Reviewer:** Entity Identification Expert, Entity Identification & Corporate Hierarchy Specialist
-**Spec Reviewed:** OMTSF-SPEC-001 -- Entity Identification (Draft, Revision 2, 2026-02-17)
+**Spec Reviewed:** OMTS-SPEC-001 -- Entity Identification (Draft, Revision 2, 2026-02-17)
 **Date:** 2026-02-18
 **Review Type:** Post-panel follow-up (assessing P0 remediation)
 
@@ -11,7 +11,7 @@
 
 Revision 2 addresses both of my P0 critical findings with a level of specificity that reflects genuine operational understanding of the D&B and GLEIF ecosystems. After 17 years resolving entity identity ambiguities across these systems, I can say this spec has moved from theoretically sound to practically implementable for the entity identification problem.
 
-The DUNS branch/HQ disambiguation (P0-13, Section 4.1 under `duns`) maps the full D&B Family Tree model -- Global Ultimate, Domestic Ultimate, Parent, Headquarters, Branch -- to OMTSF node types and edge types. The critical distinction is stated correctly: a branch DUNS identifies a physical location, not a separate legal entity, and belongs on a `facility` node. The HQ DUNS is the canonical identifier for the legal entity itself. The guidance that an ambiguous DUNS (the common case in ERP systems, which rarely store the HQ/branch flag) should default to an `organization` node with noted ambiguity is pragmatic and avoids false precision. The L3 validation rule (L3-ID-07) that DUNS on `organization` nodes SHOULD be HQ-level is the right enforcement tier -- you cannot validate this without querying D&B's Family Tree, which is a premium product.
+The DUNS branch/HQ disambiguation (P0-13, Section 4.1 under `duns`) maps the full D&B Family Tree model -- Global Ultimate, Domestic Ultimate, Parent, Headquarters, Branch -- to OMTS node types and edge types. The critical distinction is stated correctly: a branch DUNS identifies a physical location, not a separate legal entity, and belongs on a `facility` node. The HQ DUNS is the canonical identifier for the legal entity itself. The guidance that an ambiguous DUNS (the common case in ERP systems, which rarely store the HQ/branch flag) should default to an `organization` node with noted ambiguity is pragmatic and avoids false precision. The L3 validation rule (L3-ID-07) that DUNS on `organization` nodes SHOULD be HQ-level is the right enforcement tier -- you cannot validate this without querying D&B's Family Tree, which is a premium product.
 
 The LEI lifecycle status handling (P0-14, Section 4.1 under `lei`) is thorough and correct. The five-status model (ISSUED, LAPSED, RETIRED, MERGED, ANNULLED) with differentiated merge behavior is exactly what I recommended. The crucial distinction: LAPSED LEIs are still valid for merge because the entity is unchanged -- only the registration fee is unpaid. This is a subtlety that most implementations get wrong by treating LAPSED as invalid. ANNULLED LEIs correctly receive the strongest treatment: MUST NOT be used for merge, treated as invalid, L2 error. The recommendation that MERGED LEIs generate `former_identity` edges with `event_type: "merger"`, and that tooling should retrieve GLEIF `SuccessorEntity` data for automatic edge generation, demonstrates understanding of the GLEIF Level 2 data model.
 
@@ -21,7 +21,7 @@ The merge transitive closure requirement (P0-3, Section 9.3 step 3) resolves the
 
 ## Strengths
 
-- **D&B Family Tree mapping is operationally accurate.** The five-level model (Global Ultimate through Branch) with correct OMTSF node type assignments reflects how D&B actually structures its data. The spec avoids the common mistake of treating all DUNS numbers as equivalent.
+- **D&B Family Tree mapping is operationally accurate.** The five-level model (Global Ultimate through Branch) with correct OMTS node type assignments reflects how D&B actually structures its data. The spec avoids the common mistake of treating all DUNS numbers as equivalent.
 - **LEI lifecycle granularity exceeds most implementations.** Distinguishing LAPSED from RETIRED from MERGED, with appropriate merge behavior for each, is more nuanced than what most commercial entity resolution platforms provide. The ANNULLED status receiving the strongest prohibition is correct -- these LEIs were issued in error and must never anchor a merge.
 - **Ambiguity handling is pragmatic.** The guidance for unknown HQ/branch status ("assign to `organization` and note the ambiguity") accepts the reality that most ERP systems store a single DUNS without the D&B relationship context. This avoids forcing producers into incorrect classifications.
 - **`former_identity` edge for MERGED LEIs is well-designed.** The direction convention (predecessor to successor), the `event_type` enum covering merger, acquisition, rename, demerger, and spin-off, and the temporal `effective_date` property create a complete identity transformation model. This maps directly to what GLEIF provides in its Level 2 relationship data.

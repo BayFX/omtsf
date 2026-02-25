@@ -1,16 +1,16 @@
-# Expert Panel Report: Supply Chain Segmentation Support in OMTSF
+# Expert Panel Report: Supply Chain Segmentation Support in OMTS
 
 **Date:** 2026-02-18
 **Panel Chair:** Expert Panel Review Process
-**Topic:** Whether the OMTSF graph data model supports typical supply chain segmentation patterns (tier, geography, risk level, commodity type, business unit, compliance status) or whether an additional concept like tags, labels, or classification properties is required.
+**Topic:** Whether the OMTS graph data model supports typical supply chain segmentation patterns (tier, geography, risk level, commodity type, business unit, compliance status) or whether an additional concept like tags, labels, or classification properties is required.
 
 ---
 
 ## Panel Chair Summary
 
-All five experts independently reached the same core conclusion: **the OMTSF graph data model lacks a general-purpose classification mechanism on nodes and edges, and one is required before v1.** The model embeds several segmentation dimensions directly into its type system -- `tier` on `supplies` edges, `jurisdiction` on organizations, `geo` on facilities, `commodity` on supply edges, and risk severity/likelihood on attestation nodes -- but these fixed properties cover only a subset of how customers actually segment their supply chains. The dimensions that are missing -- Kraljic quadrant, business unit assignment, regulatory scope, compliance status, supplier diversity, approval status -- are the ones that drive day-to-day procurement operations and regulatory reporting workflows.
+All five experts independently reached the same core conclusion: **the OMTS graph data model lacks a general-purpose classification mechanism on nodes and edges, and one is required before v1.** The model embeds several segmentation dimensions directly into its type system -- `tier` on `supplies` edges, `jurisdiction` on organizations, `geo` on facilities, `commodity` on supply edges, and risk severity/likelihood on attestation nodes -- but these fixed properties cover only a subset of how customers actually segment their supply chains. The dimensions that are missing -- Kraljic quadrant, business unit assignment, regulatory scope, compliance status, supplier diversity, approval status -- are the ones that drive day-to-day procurement operations and regulatory reporting workflows.
 
-The panel converged strongly on the need for a lightweight, namespaced annotation mechanism (variously called "tags", "labels", "classifications", or "annotations" by different panelists). All five experts explicitly recommended this as a P0 or P1 addition. The Graph Modeling Expert made the most architecturally precise proposal: distinguish between **labels** (set-membership flags for fast graph traversal filtering, aligned with the GQL/ISO 39075 property graph model) and **annotations** (key-value pairs for structured classifications like Kraljic scores or risk tiers). The Supply Chain Expert and Procurement Expert converged on a `{key, value}` pair model with namespacing. The Enterprise Integration Expert grounded the need in specific ERP fields (`VendorGroupId`, `EKORG`, `ProcurementBUId`) that SPEC-005 acknowledges but cannot map to any OMTSF property.
+The panel converged strongly on the need for a lightweight, namespaced annotation mechanism (variously called "tags", "labels", "classifications", or "annotations" by different panelists). All five experts explicitly recommended this as a P0 or P1 addition. The Graph Modeling Expert made the most architecturally precise proposal: distinguish between **labels** (set-membership flags for fast graph traversal filtering, aligned with the GQL/ISO 39075 property graph model) and **annotations** (key-value pairs for structured classifications like Kraljic scores or risk tiers). The Supply Chain Expert and Procurement Expert converged on a `{key, value}` pair model with namespacing. The Enterprise Integration Expert grounded the need in specific ERP fields (`VendorGroupId`, `EKORG`, `ProcurementBUId`) that SPEC-005 acknowledges but cannot map to any OMTS property.
 
 A strong secondary consensus emerged around the **reporting entity gap**: the `tier` property on `supplies` edges is defined as "relative to the reporting entity" but no file header field identifies which entity the tiers are relative to. Three experts (Supply Chain, Graph Modeling, Regulatory Compliance) independently flagged this as a P0 issue that makes `tier` values semantically incomplete after merge. A third consensus finding concerns the **`tier` property scope**: it exists only on `supplies` edges, but LkSG and CSDDD due diligence obligations apply equally to subcontracting, tolling, and brokering relationships. Two experts (Procurement, Regulatory Compliance) recommended extending `tier` to all supply relationship edge types.
 
@@ -80,7 +80,7 @@ Multi-division enterprises classify the same supplier differently by division. S
 **Flagged by:** Enterprise Integration Expert, Procurement Expert
 **Severity:** Major
 
-SPEC-005 Section 4.1 notes D365 `VendorGroupId` as "useful for segmenting supplier types during export" and mentions SAP `EKORG` and Oracle `ProcurementBUId`, but provides no OMTSF property to carry them.
+SPEC-005 Section 4.1 notes D365 `VendorGroupId` as "useful for segmenting supplier types during export" and mentions SAP `EKORG` and Oracle `ProcurementBUId`, but provides no OMTS property to carry them.
 
 ### M5. Commodity classification limited to HS codes
 **Flagged by:** Procurement Expert
@@ -195,7 +195,7 @@ The Procurement Expert's UNSPSC recommendation and the Regulatory Compliance Exp
 
 ### Procurement Expert (Chief Procurement Officer)
 
-**Assessment:** The model works well for the structural graph (who supplies whom, who owns whom) but does not support the operational classification layer that procurement teams need. SAP S/4HANA, Coupa, and Jaggaer all provide multi-dimensional supplier classification as core functionality. Without a standard classification mechanism, every company's OMTSF export will be incompatible with another's procurement analytics.
+**Assessment:** The model works well for the structural graph (who supplies whom, who owns whom) but does not support the operational classification layer that procurement teams need. SAP S/4HANA, Coupa, and Jaggaer all provide multi-dimensional supplier classification as core functionality. Without a standard classification mechanism, every company's OMTS export will be incompatible with another's procurement analytics.
 
 **Key Concerns:**
 - [Major] No standard classification/tagging mechanism for Kraljic, approval status, diversity, business unit

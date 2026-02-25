@@ -1,6 +1,6 @@
-# OMTSF Specification: Merge Semantics
+# OMTS Specification: Merge Semantics
 
-**Spec:** OMTSF-SPEC-003
+**Spec:** OMTS-SPEC-003
 **Status:** Draft
 **Date:** 2026-02-18
 **Revision:** 1
@@ -11,8 +11,8 @@
 
 | Spec | Relationship |
 |------|-------------|
-| OMTSF-SPEC-001 (Graph Data Model) | **Prerequisite.** Defines the graph structure (nodes, edges, types) that this spec operates on. |
-| OMTSF-SPEC-002 (Entity Identification) | **Prerequisite.** Defines the external identifiers used by the merge identity predicates in this spec. The canonical string format (OMTSF-SPEC-002, Section 4) is used for deterministic comparison. |
+| OMTS-SPEC-001 (Graph Data Model) | **Prerequisite.** Defines the graph structure (nodes, edges, types) that this spec operates on. |
+| OMTS-SPEC-002 (Entity Identification) | **Prerequisite.** Defines the external identifiers used by the merge identity predicates in this spec. The canonical string format (OMTS-SPEC-002, Section 4) is used for deterministic comparison. |
 
 ---
 
@@ -24,7 +24,7 @@ Merge is the operation of combining two or more `.omts` files that describe over
 
 ## 2. Identity Predicate for Nodes
 
-Two nodes from different files are **merge candidates** if and only if they share at least one external identifier record (as defined in OMTSF-SPEC-002, Section 3) where all of the following hold:
+Two nodes from different files are **merge candidates** if and only if they share at least one external identifier record (as defined in OMTS-SPEC-002, Section 3) where all of the following hold:
 
 1. `scheme` values are equal (case-sensitive string comparison)
 2. `value` values are equal (case-sensitive string comparison after normalization: leading/trailing whitespace trimmed, for numeric-only schemes leading zeros are significant)
@@ -84,11 +84,11 @@ Given files A and B:
 3. **Compute transitive closure** of merge candidates. If node X is a merge candidate with node Y (via identifier I1), and node Y is a merge candidate with node Z (via identifier I2), then X, Y, and Z are all merged into a single node. This is required because the same real-world entity may carry different identifiers in different files (e.g., LEI in file A, DUNS in file B, both LEI and DUNS in file C).
 4. **Merge** each candidate group:
    - The merged node retains the **union** of all identifier records from all sources.
-   - After merge, the `identifiers` array MUST be sorted by the canonical string form (OMTSF-SPEC-002, Section 4) in lexicographic UTF-8 byte order. This ensures deterministic output regardless of merge order, supporting the commutativity property.
+   - After merge, the `identifiers` array MUST be sorted by the canonical string form (OMTS-SPEC-002, Section 4) in lexicographic UTF-8 byte order. This ensures deterministic output regardless of merge order, supporting the commutativity property.
    - For each property present in multiple source nodes:
      - If values are equal: retain the value.
      - If values differ: the merger MUST record both values with their provenance (source file, reporting entity). Conflict resolution is a tooling concern.
-   - **Labels** (OMTSF-SPEC-001, Section 8.4): compute the set union of `{key, value}` pairs from all source nodes. After merge, sort the `labels` array by `key` (lexicographic), then by `value` (lexicographic, absent values sort before present values). Labels do not produce conflicts — they are purely additive.
+   - **Labels** (OMTS-SPEC-001, Section 8.4): compute the set union of `{key, value}` pairs from all source nodes. After merge, sort the `labels` array by `key` (lexicographic), then by `value` (lexicographic, absent values sort before present values). Labels do not produce conflicts — they are purely additive.
    - The merged node's graph-local `id` is assigned by the merger (it is an arbitrary file-local string).
 
 **Conflict record structure.** When property values differ across source nodes, the merger SHOULD record conflicts in a `_conflicts` array on the merged node (serialized at the top level for nodes, inside `properties` for edges):
@@ -107,7 +107,7 @@ Given files A and B:
 }
 ```
 
-The `_conflicts` structure above is shown in JSON. In CBOR encoding, the same logical map structure applies; see OMTSF-SPEC-007 for serialization rules.
+The `_conflicts` structure above is shown in JSON. In CBOR encoding, the same logical map structure applies; see OMTS-SPEC-007 for serialization rules.
 
 Conflict records are informational. Validators MUST NOT reject files containing `_conflicts`. Tooling SHOULD present conflicts to users for resolution.
 
@@ -121,13 +121,13 @@ Transitive closure (step 3) can amplify false-positive matches: a single erroneo
 | 4--9 nodes | Implementations MUST emit a warning identifying the group, its member nodes, and the bridging identifiers that caused each union. Merge proceeds. |
 | 10+ nodes | Implementations MUST emit a prominent warning. A merge group of 10 or more distinct nodes almost certainly indicates a data quality problem (e.g., a reassigned DUNS number, an erroneous identifier, or a "garbage" tax ID shared by many unrelated entities). Implementations SHOULD provide an option to split or reject oversized groups. |
 
-Nodes linked solely by `same_as` edges (OMTSF-SPEC-003, Section 7) are counted as group members for the purpose of this threshold but are excluded from the "excluding `same_as`" count used to determine the warning tier. This prevents advisory `same_as` edges from inflating the threshold.
+Nodes linked solely by `same_as` edges (OMTS-SPEC-003, Section 7) are counted as group members for the purpose of this threshold but are excluded from the "excluding `same_as`" count used to determine the warning tier. This prevents advisory `same_as` edges from inflating the threshold.
 
 The thresholds above are defaults. Implementations MAY allow users to configure custom thresholds for specific use cases (e.g., conglomerate files where large groups are expected).
 
 ### 4.2 `tier` Property Reconciliation
 
-The `tier` property on `supplies` edges (OMTSF-SPEC-001, Section 6.1) is perspective-dependent: it is defined relative to the file's `reporting_entity`. When merging files from different reporting entities, `tier` conflicts are structurally expected and MUST NOT be treated as data quality errors.
+The `tier` property on `supplies` edges (OMTS-SPEC-001, Section 6.1) is perspective-dependent: it is defined relative to the file's `reporting_entity`. When merging files from different reporting entities, `tier` conflicts are structurally expected and MUST NOT be treated as data quality errors.
 
 When merging files with different `reporting_entity` values:
 
@@ -157,7 +157,7 @@ For the decentralized merge model to work -- where different parties independent
 
 After merge completes, the merged file MUST satisfy the same structural validation rules as any other `.omts` file:
 
-- All L1 rules from OMTSF-SPEC-001 and OMTSF-SPEC-002 MUST hold on the merged output.
+- All L1 rules from OMTS-SPEC-001 and OMTS-SPEC-002 MUST hold on the merged output.
 - If any L1 rule fails after merge (e.g., duplicate node IDs from ID assignment, broken edge references), the merge implementation MUST correct the violation or report a merge failure. Implementations MUST NOT produce output that fails L1 validation.
 - L2 and L3 rules SHOULD be re-evaluated on the merged output. Merge may resolve some L2 warnings (e.g., a node that lacked external identifiers in one file may gain them from the other).
 
@@ -242,7 +242,7 @@ ERP systems frequently contain duplicate records for the same real-world entity.
 
 ## 9. Enrichment and Merge Interaction
 
-Enrichment (adding external identifiers to nodes, as described in OMTSF-SPEC-005, Section 5) is not purely additive with respect to the merge graph. Adding an external identifier to a node may:
+Enrichment (adding external identifiers to nodes, as described in OMTS-SPEC-005, Section 5) is not purely additive with respect to the merge graph. Adding an external identifier to a node may:
 
 1. **Create new merge candidates.** If enrichment adds a DUNS number to node A, and node B in another file already carries that DUNS, nodes A and B become merge candidates that were not previously linkable.
 

@@ -3,7 +3,7 @@
 **Reviewer:** Regulatory Compliance Expert (Supply Chain Regulatory Compliance Advisor)
 **Date:** 2026-02-18
 **Topic:** Review of Section 8.4 Labels and `reporting_entity` field (P0 recommendations R1, R2)
-**Specs Reviewed:** OMTSF-SPEC-001 (Graph Data Model) Section 8.4, Section 2 (file header), Section 9; OMTSF-SPEC-003 (Merge Semantics) Section 4, Section 6
+**Specs Reviewed:** OMTS-SPEC-001 (Graph Data Model) Section 8.4, Section 2 (file header), Section 9; OMTS-SPEC-003 (Merge Semantics) Section 4, Section 6
 
 ---
 
@@ -37,7 +37,7 @@ That said, I recognize this is a design tradeoff favoring simplicity, and the ex
 
 - **[Major] No temporal validity on labels.** EUDR country risk classifications change through periodic Commission review (Article 29(2)). LkSG requires annual risk analysis updates (Section 5(4)). UFLPA entity list additions occur on a rolling basis. A label asserting `{"key": "eu.eudr.country-risk", "value": "low"}` without `valid_from`/`valid_to` cannot express that this classification was valid as of April 2025 but may be revised in the 2026 review cycle. Workaround exists via `snapshot_date` and `data_quality.last_verified`, but these are file-level and node-level signals respectively, not label-level. When a node carries 5 labels from 3 different regulatory regimes, each with its own review cycle, a single `last_verified` date is insufficient.
 
-- **[Minor] No guidance on OMTSF-reserved key prefixes for regulatory classifications.** The spec reserves dotless keys for "future OMTSF-defined vocabularies" but does not signal intent to standardize regulatory classification keys. Absent guidance, early adopters will use inconsistent keys (`eu.eudr.scope` vs. `eu.eudr.commodity-scope` vs. `eudr.in-scope`). This is addressed by panel recommendation R3 (P1), but a brief forward reference in Section 8.4 would reduce early fragmentation.
+- **[Minor] No guidance on OMTS-reserved key prefixes for regulatory classifications.** The spec reserves dotless keys for "future OMTS-defined vocabularies" but does not signal intent to standardize regulatory classification keys. Absent guidance, early adopters will use inconsistent keys (`eu.eudr.scope` vs. `eu.eudr.commodity-scope` vs. `eudr.in-scope`). This is addressed by panel recommendation R3 (P1), but a brief forward reference in Section 8.4 would reduce early fragmentation.
 
 - **[Minor] `value` field is string-only.** EUDR country risk uses a three-level enum (`low`, `standard`, `high`). LkSG risk analysis uses severity and likelihood matrices. These are representable as strings, but without type guidance, producers may use `"high"`, `"HIGH"`, `"3"`, or `"High Risk"` interchangeably. The spec's recommendation of lowercase kebab-case for keys does not extend to values.
 

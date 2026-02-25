@@ -19,7 +19,7 @@
 
 1. **ERP export/import feasibility**: Can this format be realistically exported from SAP, Oracle, or Dynamics? What master data is needed? What transactions feed it?
 2. **Master data alignment**: Supply chain data in ERPs is scattered across vendor masters, material masters, BOMs, purchasing info records, and source lists. The format must map to these structures.
-3. **EDI coexistence**: Companies already exchange supply chain data via EDI. OMTSF must coexist with EDI, not compete with it. The value is in the network graph, not in replacing transactional messaging.
+3. **EDI coexistence**: Companies already exchange supply chain data via EDI. OMTS must coexist with EDI, not compete with it. The value is in the network graph, not in replacing transactional messaging.
 4. **Data quality reality**: ERP data is messy. Duplicate vendors, inconsistent naming, missing fields, legacy records. The format must tolerate imperfect data while still being validatable.
 5. **Batch vs. incremental**: Enterprises will not regenerate their entire supply network file on every change. The format or tooling must support incremental updates and delta files.
 
