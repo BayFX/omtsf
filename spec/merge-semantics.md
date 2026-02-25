@@ -2,8 +2,8 @@
 
 **Spec:** OMTS-SPEC-003
 **Status:** Draft
-**Date:** 2026-02-18
-**Revision:** 1
+**Date:** 2026-02-25
+**Revision:** 2
 **License:** [CC-BY-4.0](LICENSE)
 ---
 
@@ -18,7 +18,13 @@
 
 ## 1. Overview
 
-Merge is the operation of combining two or more `.omts` files that describe overlapping portions of a supply network into a single coherent graph. The vision describes this as "concatenating and deduplicating lists." This specification defines what deduplication means, the formal identity predicates, and the algebraic properties that ensure deterministic results.
+This specification defines two distinct operations for combining `.omts` files:
+
+1. **Merge** (Sections 2--8): Combines files from potentially different origins using external identifiers. Designed for the multi-party case where two organizations contribute overlapping portions of a supply network. Merge is commutative, associative, and idempotent.
+
+2. **Same-Origin Update** (Section 11): Reconciles a new version of a file against its own prior version from the same source system, using `internal` identifiers scoped to a shared `authority` value. Designed for the re-import case where one party updates their own data. Same-origin update is directional (not commutative) — the new file takes precedence.
+
+Applying general merge to two versions of the same internal-only file will produce duplicate nodes. For that use case, use same-origin update instead.
 
 ---
 
@@ -33,7 +39,7 @@ Two nodes from different files are **merge candidates** if and only if they shar
    - If both records have `valid_to` and the earlier `valid_to` is before the later `valid_from`, the identifiers are NOT temporally compatible and do NOT satisfy the identity predicate.
    - If either record lacks `valid_from` and `valid_to`, temporal compatibility is assumed (backward-compatible with files that omit temporal fields).
 
-The `internal` scheme is explicitly excluded: `internal` identifiers NEVER satisfy the identity predicate across files, because they are scoped to their issuing system.
+The `internal` scheme is explicitly excluded: `internal` identifiers NEVER satisfy the merge identity predicate across files, because they are scoped to their issuing system. For reconciling successive exports from the same source system (where `internal` identifiers are semantically stable), use the same-origin update operation (Section 11) instead.
 
 ---
 
@@ -266,4 +272,86 @@ These rules require external data or cross-file context and are intended for enr
 |------|-------------|
 | L3-MRG-01 | The sum of inbound `ownership` `percentage` values to any single node (for overlapping validity periods) SHOULD NOT exceed 100 |
 | L3-MRG-02 | `legal_parentage` edges SHOULD form a forest (no cycles in the parentage subgraph) |
+
+---
+
+## 11. Same-Origin Update
+
+The merge operation (Sections 2--8) combines files from different origins using external identifiers. It is not designed for reconciling successive exports from the same source system. Applying merge to two versions of the same internal-only file produces duplicate nodes because `internal` identifiers do not satisfy the merge identity predicate.
+
+Same-origin update is a separate operation that reconciles a **new file** against a **base file** when both originate from the same source. It uses `internal` identifiers scoped to a shared `authority` value as the matching key.
+
+### 11.1 Preconditions
+
+Same-origin update applies when:
+
+1. Both files contain nodes with `internal` identifiers sharing the same `authority` value.
+2. The shared `authority` value is stable and unique to the producing data source (see OMTS-SPEC-002, Section 5 and OMTS-SPEC-005, Section 1.1 for naming conventions).
+
+Implementations MUST require explicit invocation of same-origin update. It MUST NOT be applied automatically during a general merge operation.
+
+**Authority stability requirement.** The `authority` value used for same-origin matching MUST be stable across exports from the same source and unique to that source. Generic values (e.g., `"supplier-list"`) are insufficient — they could collide across unrelated data sources. Recommended patterns:
+
+- ERP exports: `{system_type}-{instance_id}[-{client}]` (e.g., `sap-prod-100`)
+- Excel imports: `{organization_id}:{list_scope}` (e.g., `acme-corp:approved-suppliers`)
+- Procurement platforms: `{platform}-{tenant}` (e.g., `ariba-acme-network`)
+
+### 11.2 Node Identity Predicate
+
+A node in the new file and a node in the base file are **update candidates** if they share at least one `internal` identifier record where all of the following hold:
+
+1. `scheme` values are both `"internal"`
+2. `authority` values are equal (case-insensitive string comparison)
+3. `value` values are equal (case-sensitive string comparison)
+
+This predicate does NOT apply transitively. Each node in the new file matches at most one node in the base file. If multiple base-file nodes match (due to duplicate `internal` identifiers), the implementation MUST emit a warning and skip the ambiguous match.
+
+### 11.3 Update Procedure
+
+Given a base file B and a new file N:
+
+1. **Match** each node in N against nodes in B using the identity predicate (Section 11.2).
+2. **For matched nodes** (update):
+   - **Properties:** Values from N replace values from B (last-write-wins). The replaced value from B is recorded in `_conflicts` (Section 4) with source provenance.
+   - **Identifiers:** Compute the union of identifier arrays from B and N. Identifiers present in B but not in N are preserved — this ensures that external identifiers added by enrichment (OMTS-SPEC-005, Section 6) survive re-import. After union, sort by canonical string form (OMTS-SPEC-002, Section 4).
+   - **Labels:** Compute the set union of `{key, value}` pairs from B and N (same as merge, Section 4).
+   - The updated node retains the graph-local `id` from B.
+3. **For unmatched nodes in N** (insert): Add to the output as new nodes.
+4. **For unmatched nodes in B** (unmatched base nodes): Apply the configured `unmatched_node_policy`:
+   - `retain` (default): Preserve the node and its edges unchanged.
+   - `flag`: Preserve the node and add a label `{ "key": "omts.update.unmatched" }` for review.
+   - `expire`: Set `valid_to` on the node (and its outbound edges that lack `valid_to`) to the new file's `snapshot_date`.
+5. **Rewrite** edge source/target references: matched nodes keep their base-file IDs; new nodes receive IDs assigned by the implementation.
+6. **Deduplicate edges** using the same logic as merge (Sections 3 and 4, steps 5--8), applied to the combined edge set.
+
+### 11.4 Algebraic Properties
+
+Same-origin update has different algebraic properties than merge:
+
+- **NOT commutative:** `update(B, N) ≠ update(N, B)`. The new file takes precedence over the base file. This is by design — same-origin update is directional.
+- **Idempotent:** `update(B, B) = B`. Applying the same file as both base and new produces an equivalent graph.
+- **Sequential composition:** `update(update(B, N1), N2)` produces the same result as `update(B, N2)` when N2 is a complete re-export (all nodes present). When N2 is a partial export, sequential composition is meaningful: only nodes present in N2 are updated.
+
+### 11.5 Provenance
+
+The output file SHOULD include `merge_metadata` (Section 6) recording:
+
+- Operation type: `"same_origin_update"`
+- The `authority` value matched on
+- Base file identifier (hash or filename)
+- New file identifier (hash or filename)
+- Count of nodes: updated, inserted, retained (unmatched base)
+- Update timestamp
+
+### 11.6 Interaction with Enrichment
+
+Same-origin update and enrichment (OMTS-SPEC-005, Section 6) form a complementary pipeline:
+
+1. **Export** from source system → `.omts` file with `internal` identifiers only.
+2. **Enrich** → add external identifiers (`lei`, `duns`, `nat-reg`, `vat`) to nodes.
+3. **Re-export** from same source system → new `.omts` file with updated properties.
+4. **Same-origin update** → reconcile re-export against enriched base. External identifiers added in step 2 are preserved (Section 11.3, step 2).
+5. The updated file now carries both current properties from the source system and external identifiers from enrichment. It can participate in cross-file merge (Sections 2--8).
+
+**Invariant:** Same-origin update MUST NOT discard identifiers present in the base file. The identifier union in step 2 of Section 11.3 is always additive.
 

@@ -1526,3 +1526,90 @@ and spec alignment. These tasks address the critical issues identified. Full rep
   - Delta application is deterministic: `apply(snapshot, delta) = new_snapshot`
   - Design accounts for ERP-native delta sources (SAP change documents, Oracle audit columns, D365 change tracking)
   - Validator can check delta structural validity (e.g., removed IDs must exist in referenced base)
+
+---
+
+## Phase 16: Same-Origin Update (SPEC-003 Section 11)
+
+### T-102 -- Replace hardcoded `authority: "supplier-list"` with configurable authority
+
+- **Source:** Re-import workflow gap panel R2 (Critical C2)
+- **Dependencies:** None
+- **Complexity:** M
+- **Crate:** omts-excel, omts-cli
+- **Issue:** The supplier list import hardcodes `authority: "supplier-list"` on all `internal` identifiers derived from `supplier_id`. This generic constant would cause false matches between unrelated teams' supplier lists in any same-origin update mechanism. SPEC-003 Section 11.1 explicitly calls this out as insufficient.
+- **Acceptance Criteria:**
+  - `omts import` accepts `--authority <VALUE>` CLI flag (optional)
+  - When `--authority` is omitted, derive a default from the reporting entity name using pattern `supplier-list:{slug(reporting_entity_name)}` (e.g., `supplier-list:acme-corp`)
+  - `import_excel()` and `import_supplier_list()` accept an `authority: Option<&str>` parameter
+  - `merge_supplier_id_identifier()` uses the provided authority instead of `"supplier-list"`
+  - Export functions (`find_supplier_id`, `find_internal_id`) match `internal` identifiers with any authority that starts with `"supplier-list"` for backward compatibility
+  - Existing tests updated; new test verifying custom authority flows through to identifiers
+  - `just pre-commit` passes
+
+### T-103 -- Implement `omts update` CLI subcommand (same-origin update)
+
+- **Source:** Re-import workflow gap panel R1 (Critical C1), SPEC-003 Section 11
+- **Dependencies:** T-102
+- **Complexity:** L
+- **Crate:** omts-core, omts-cli
+- **Issue:** SPEC-003 Section 11 defines same-origin update as a named operation but no CLI command or core library function implements it. Without this, the most common early-adoption workflow (re-importing updated supplier data) produces duplicate nodes.
+- **Acceptance Criteria:**
+  - New `omts update` subcommand: `omts update <BASE> <NEW> [--authority <VALUE>] [--unmatched-node-policy retain|flag|expire] [--to json|cbor] [--compress]`
+  - Core function `same_origin_update(base: &OmtsFile, new: &OmtsFile, authority: &str, policy: UnmatchedNodePolicy) -> Result<OmtsFile, UpdateError>`
+  - Implements the full procedure from SPEC-003 Section 11.3: match, update matched (last-write-wins + `_conflicts`), insert unmatched new, apply unmatched base policy, rewrite edges, dedup edges
+  - Identity predicate per Section 11.2: `scheme == "internal"` AND `authority` equal (case-insensitive) AND `value` equal (case-sensitive)
+  - Ambiguous matches (multiple base nodes match one new node) emit a warning and skip
+  - Identifier union preserves enriched identifiers from base (Section 11.3 step 2)
+  - Output includes `merge_metadata` per Section 11.5
+  - Integration tests covering: update with matched nodes, insert new nodes, retain/flag/expire unmatched base nodes, enrichment preservation, idempotency (`update(B, B) = B`)
+
+### T-104 -- Add L2 validation warning for re-import duplicate risk
+
+- **Source:** Re-import workflow gap panel R6 (Major M4)
+- **Dependencies:** None
+- **Complexity:** S
+- **Crate:** omts-core
+- **Issue:** When a file contains nodes with only `internal` identifiers, there is no diagnostic warning that re-importing via merge will produce duplicates. Users silently lose data integrity.
+- **Acceptance Criteria:**
+  - New L2 rule: when a file contains N nodes with only `internal` identifiers (no external schemes), emit warning: "N nodes have only internal identifiers. Re-importing via merge will produce duplicates; use same-origin update instead."
+  - Rule ID: `L2-EID-10` (or next available in SPEC-002)
+  - Rule fires only when N > 0
+  - Tests for files with mixed identifier coverage (some internal-only, some with external)
+
+### T-105 -- Make `authority` stability normative in SPEC-002
+
+- **Source:** Re-import workflow gap panel R4
+- **Dependencies:** None (spec change)
+- **Complexity:** S
+- **Crate:** N/A (spec)
+- **Issue:** SPEC-002 documents the `authority` naming convention as SHOULD (informative). For same-origin update to work reliably, `authority` values on `internal` identifiers in files intended for re-import MUST be stable across exports and unique to the producing source.
+- **Acceptance Criteria:**
+  - SPEC-002 Section 4 or 5 adds normative requirement: `authority` values on `internal` identifiers MUST be stable across exports and unique to the producing source when same-origin update is intended
+  - Good/bad examples provided (e.g., good: `sap-prod-100`, bad: `supplier-list`)
+  - Cross-reference to SPEC-003 Section 11.1
+
+### T-106 -- Update SPEC-005 enrichment lifecycle for re-import workflow
+
+- **Source:** Re-import workflow gap panel R5
+- **Dependencies:** None (spec change)
+- **Complexity:** S
+- **Crate:** N/A (spec)
+- **Issue:** SPEC-005 Section 6 assumes human-assisted enrichment before re-import. Enterprise integration pipelines run as unattended batch jobs. The enrichment level table does not mention same-origin update availability at internal-only level.
+- **Acceptance Criteria:**
+  - SPEC-005 enrichment level table updated: at "Internal-only" level, same-origin update is available for re-import
+  - New subsection documenting the recurring export and re-import workflow with a concrete example (e.g., monthly SAP vendor master export)
+  - Cross-reference to SPEC-003 Section 11.6
+
+### T-107 -- Extend `merge_metadata` schema for same-origin update statistics
+
+- **Source:** Re-import workflow gap panel R10
+- **Dependencies:** T-103
+- **Complexity:** S
+- **Crate:** omts-core
+- **Issue:** `merge_metadata` has no fields to record whether internal-scheme matching was used or how many nodes were matched/inserted/retained during same-origin update.
+- **Acceptance Criteria:**
+  - `merge_metadata` extended with: `operation` (`"merge"` or `"same_origin_update"`), `authority_matched` (string), `nodes_updated` (u32), `nodes_inserted` (u32), `nodes_retained` (u32)
+  - `same_origin_update` populates these fields in output
+  - Existing merge continues to populate `operation: "merge"`
+  - JSON schema updated to include new fields

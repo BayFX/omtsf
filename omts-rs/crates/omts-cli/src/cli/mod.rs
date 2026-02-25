@@ -300,6 +300,14 @@ pub enum Command {
         /// Write output to this file instead of stdout.
         #[arg(long, short = 'o', value_name = "OUTPUT")]
         output: Option<PathBuf>,
+        /// Authority value for internal identifiers (e.g. `acme-corp:approved-suppliers`).
+        ///
+        /// Used as the `authority` field on `internal` scheme identifiers derived
+        /// from `supplier_id` in supplier list imports. A stable, source-specific
+        /// value enables same-origin update (OMTS-SPEC-003, Section 11).
+        /// When omitted, derived from the reporting entity name.
+        #[arg(long)]
+        authority: Option<String>,
     },
 
     /// Export a supply-chain graph to an external format (e.g. Excel).
